@@ -1,4 +1,4 @@
-# BRIEFING — 2026-07-23T14:05:29Z
+# BRIEFING — 2026-07-23T14:07:15Z
 
 ## Mission
 Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx and src-tauri/src/diagnostics/mod.rs.
@@ -17,7 +17,7 @@ Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx an
 
 ## Current Parent
 - Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Updated: 2026-07-23T14:05:29Z
+- Updated: 2026-07-23T14:07:15Z
 
 ## Task Summary
 - **What to build**: Update string action keys in DiagnosticsView.tsx and expand pattern match arms in src-tauri/src/diagnostics/mod.rs.
@@ -30,7 +30,10 @@ Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx an
 - **Code layout**: PROJECT.md
 
 ## Key Decisions Made
-- Initializing remediation task environment.
+- Updated action string literals passed in `DiagnosticsView.tsx` from `'dism_restore_health'` and `'network_reset'` to `'dism_restorehealth'` and `'reset_tcpip'`.
+- Updated activeAction state check matching in `DiagnosticsView.tsx`.
+- Expanded match arms in `src-tauri/src/diagnostics/mod.rs` to support `"dism_restorehealth" | "dism_restore_health" | "dism"` and `"reset_tcpip" | "network_reset" | "network" | "tcpip"`.
+- Added unit test `test_run_diagnostics_action_aliases` in `src-tauri/src/diagnostics/mod.rs` testing all action aliases.
 
 ## Artifact Index
 - ORIGINAL_REQUEST.md — Initial user prompt backup
@@ -39,14 +42,16 @@ Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx an
 - handoff.md — Handoff report for parent agent
 
 ## Change Tracker
-- **Files modified**: None yet
-- **Build status**: Not run yet
+- **Files modified**:
+  - `src/components/DiagnosticsView.tsx`: Action key updates for DISM Repair and Network Stack Reset.
+  - `src-tauri/src/diagnostics/mod.rs`: Expanded match arms for DISM and Network Reset actions + alias test suite.
+- **Build status**: PASS (tsc, vite build, cargo check, cargo test)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: Not run yet
-- **Lint status**: Not run yet
-- **Tests added/modified**: TBD
+- **Build/test result**: All 85 Rust unit and integration tests passing; TypeScript and Vite builds clean.
+- **Lint status**: Clean
+- **Tests added/modified**: `test_run_diagnostics_action_aliases` added to `src-tauri/src/diagnostics/mod.rs`.
 
 ## Loaded Skills
 - None

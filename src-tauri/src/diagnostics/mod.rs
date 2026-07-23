@@ -29,12 +29,12 @@ pub fn run_diagnostics(
             title: "System File Checker (sfc /scannow)".to_string(),
             command: "sfc /scannow".to_string(),
         }],
-        "dism_restorehealth" | "dism" => vec![DiagnosticStep {
+        "dism_restorehealth" | "dism_restore_health" | "dism" => vec![DiagnosticStep {
             id: "dism_restorehealth".to_string(),
             title: "DISM Image Cleanup & RestoreHealth".to_string(),
             command: "DISM.exe /Online /Cleanup-Image /RestoreHealth".to_string(),
         }],
-        "reset_tcpip" | "tcpip" | "network" => vec![DiagnosticStep {
+        "reset_tcpip" | "network_reset" | "network" | "tcpip" => vec![DiagnosticStep {
             id: "reset_tcpip".to_string(),
             title: "Reset TCP/IP Network Stack".to_string(),
             command: "netsh int ip reset; netsh winsock reset".to_string(),
@@ -239,4 +239,20 @@ mod tests {
             panic!("Expected AppError::InvalidConfig");
         }
     }
+
+    #[test]
+    fn test_run_diagnostics_action_aliases() {
+        let runner = DryRunRunner::new();
+
+        for dism_alias in &["dism_restorehealth", "dism_restore_health", "dism"] {
+            let summary = run_diagnostics(None, &runner, dism_alias, true).unwrap();
+            assert_eq!(summary.executed_actions[0].id, "dism_restorehealth");
+        }
+
+        for net_alias in &["reset_tcpip", "network_reset", "network", "tcpip"] {
+            let summary = run_diagnostics(None, &runner, net_alias, true).unwrap();
+            assert_eq!(summary.executed_actions[0].id, "reset_tcpip");
+        }
+    }
 }
+

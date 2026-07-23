@@ -1,84 +1,31 @@
-# Handoff Report — Milestone 3 Remediation
+# Handoff Report — Worker M3 Remediation
 
 ## 1. Observation
-
-### Code Inspection
-- `src-tauri/src/runner/mod.rs`: Structs `ExecutionSummary`, `ExecutedAction`, `CommandOutput`, and `RecordedCommand` lacked `#[serde(rename_all = "camelCase")]` attributes. Without serde rename rules, Rust's default snake_case serialization produced keys such as `executed_actions`, `total_duration_ms`, `is_dry_run`, `exit_code`.
-- `src-tauri/src/odt/mod.rs`: `execute_odt_install` formatted PowerShell script strings with raw `setup_exe_path` interpolation inside double quotes (`$setupPath = "{}"`), creating potential shell injection vulnerabilities and path escaping issues when paths contained spaces, quotes, or special characters. Furthermore, `generate_odt_xml` did not guard against an empty `config.products` vector.
-- `src-tauri/src/mas.rs`: `get_activation_script_command` used `irm https://get.activated.win | iex /<Method>`, which triggers PowerShell error `A positional parameter cannot be found that accepts argument '/<Method>'` because `iex` (Invoke-Expression) treats positional arguments after piped input as unhandled parameters.
-- `src-tauri/src/commands/mod.rs`: `get_system_info` used synchronous `std::thread::sleep` on the async runtime thread.
-
-### Cargo Test Output
-Executing `cargo test` in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`:
-
-```
-   Compiling wiscripts_windows v0.1.0 (C:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.38s
-     Running unittests src\lib.rs (target\debug\deps\wiscripts_windows_lib-64fe54900677c537.exe)
-
-running 21 tests
-test mas::tests::test_activation_script_commands ... ok
-test mas::tests::test_execute_activation_dry_run_hwid ... ok
-test mas::tests::test_execute_activation_dry_run_ohook ... ok
-test mas::tests::test_execute_activation_dry_run_kms38 ... ok
-test odt::tests::test_escape_powershell_literal ... ok
-test odt::tests::test_execute_odt_install_dry_run_contains_setup_configure ... ok
-test odt::tests::test_execute_odt_install_dry_run_custom_path ... ok
-test odt::tests::test_generate_odt_xml_multiple_products_and_excluded_apps ... ok
-test odt::tests::test_execute_odt_install_path_escaping_with_special_characters ... ok
-test odt::tests::test_generate_odt_xml_various_channels_and_arch ... ok
-test optimization::tests::test_execute_optimizations_dry_run_exact_commands ... ok
-test odt::tests::test_generate_odt_xml_empty_products_fallback ... ok
-test optimization::tests::test_rule_catalog_contains_at_least_15_rules ... ok
-test optimization::tests::test_preview_optimizations ... ok
-test commands::tests::test_execute_odt_install_ipc_dry_run ... ok
-test commands::tests::test_execute_optimizations_ipc_dry_run ... ok
-test commands::tests::test_execute_activation_ipc_dry_run ... ok
-test runner::tests::test_dry_run_runner_records_powershell_and_cmd ... ok
-test optimization::tests::test_rule_catalog_covers_all_6_categories ... ok
-test runner::tests::test_execution_summary_camel_case_serialization ... ok
-test commands::tests::test_get_system_info_ipc ... ok
-
-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
-
-     Running unittests src\main.rs (target\debug\deps\wiscripts_windows-199b2cfd31ef7ce5.exe)
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-   Doc-tests wiscripts_windows_lib
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-```
+- In `src/components/DiagnosticsView.tsx` (lines 174 & 178), the DISM card previously passed `'dism_restore_health'` to `handleRunDiagnostic` and checked `activeAction === 'dism_restore_health'`.
+- In `src/components/DiagnosticsView.tsx` (lines 211 & 215), the Network Reset card previously passed `'network_reset'` to `handleRunDiagnostic` and checked `activeAction === 'network_reset'`.
+- In `src-tauri/src/diagnostics/mod.rs` (line 32), the DISM pattern match arm previously matched `"dism_restorehealth" | "dism"`.
+- In `src-tauri/src/diagnostics/mod.rs` (line 37), the Network Reset pattern match arm previously matched `"reset_tcpip" | "tcpip" | "network"`.
+- Execution of commands verified:
+  - `npx tsc --noEmit` returned exit code 0 with 0 errors.
+  - `npm run build` returned exit code 0 (`✓ built in 2.85s`).
+  - `cargo check` returned exit code 0 (`Finished dev profile [unoptimized + debuginfo]`).
+  - `cargo test` returned exit code 0 across 85 tests (65 lib unit tests, 5 empirical integration tests, 15 challenger integration tests).
 
 ## 2. Logic Chain
-
-1. **Serde Serialization**: Adding `#[serde(rename_all = "camelCase")]` to `ExecutionSummary`, `ExecutedAction`, `CommandOutput`, and `RecordedCommand` instructs `serde` to serialize struct field names into camelCase JSON keys (`executedActions`, `totalDurationMs`, `isDryRun`, `exitCode`, `stdout`, `stderr`). This ensures TypeScript frontend contracts are respected.
-2. **PowerShell Escaping**: `escape_powershell_literal` encloses any path or string literal in single quotes `'...'` and replaces internal `'` with `''`. In PowerShell, single-quoted string literals do not expand variables (`$`), subexpressions (`$()`), or command separators. Using `Test-Path -LiteralPath` prevents wildcard bracket expansion in path checking.
-3. **MAS Invocations**: Replacing `irm ... | iex /<Method>` with `$cmd = Invoke-RestMethod https://get.activated.win; & ([scriptblock]::Create($cmd)) /<Method>` executes the downloaded script block directly with `/Method` as a valid argument.
-4. **ODT Products Fallback**: Checking `config.products.is_empty()` and falling back to `vec!["O365ProPlusRetail".to_string()]` guarantees valid XML structure containing `<Product ID="...">`.
-5. **Non-blocking System Sampling**: Using `tauri::async_runtime::spawn_blocking` offloads thread sleep sampling from the async reactor thread pool, preventing thread blocking during IPC execution.
+- Matching the IPC action keys between frontend UI buttons and backend Rust pattern handlers ensures that triggering "Run DISM Repair" or "Reset Network Stack" from `DiagnosticsView.tsx` executes the intended Rust diagnostic commands (`DISM.exe /Online /Cleanup-Image /RestoreHealth` and `netsh int ip reset; netsh winsock reset`) without encountering `AppError::InvalidConfig("Unsupported diagnostics action: ...")`.
+- Updating the frontend string keys to `'dism_restorehealth'` and `'reset_tcpip'` aligns directly with the canonical action names established in `src-tauri/src/diagnostics/mod.rs`.
+- Expanding the pattern match arms in `src-tauri/src/diagnostics/mod.rs` to `"dism_restorehealth" | "dism_restore_health" | "dism"` and `"reset_tcpip" | "network_reset" | "network" | "tcpip"` guarantees backward and forward resilience against both naming conventions.
 
 ## 3. Caveats
-
-No caveats. All requirements have been implemented genuinely and verified with unit tests without hardcoded facades or shortcuts.
+- No caveats. All changes strictly follow the minimal change principle without affecting adjacent features.
 
 ## 4. Conclusion
-
-All identified M3 backend issues in `src-tauri` have been remediated:
-- Runner structs derive camelCase serde serialization.
-- PowerShell path and XML script escaping in the ODT module is secure against shell injection and handles paths with spaces/special characters.
-- MAS PowerShell invocation syntax is valid.
-- ODT empty products vector fallback is enforced.
-- IPC system info sampling is non-blocking.
-- 21 unit tests in `src-tauri` pass with 0 errors.
+- The IPC action key string mismatch between `DiagnosticsView.tsx` and `src-tauri/src/diagnostics/mod.rs` is fully resolved.
+- Both frontend and backend components are updated, resilient, and verified with automated test suites.
 
 ## 5. Verification Method
-
-To verify:
-1. Run `cargo test` in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`.
-2. Confirm 21 tests pass with 0 errors.
-3. Inspect `src-tauri/src/runner/mod.rs`, `src-tauri/src/odt/mod.rs`, `src-tauri/src/mas.rs`, and `src-tauri/src/commands/mod.rs`.
+- Independent verification can be performed by running:
+  1. `npx tsc --noEmit` in root `c:/Users/Widlily/Documents/projects/WiScripts_Windows`
+  2. `npm run build` in root `c:/Users/Widlily/Documents/projects/WiScripts_Windows`
+  3. `cargo check` in `c:/Users/Widlily/Documents/projects/WiScripts_Windows/src-tauri`
+  4. `cargo test` in `c:/Users/Widlily/Documents/projects/WiScripts_Windows/src-tauri`

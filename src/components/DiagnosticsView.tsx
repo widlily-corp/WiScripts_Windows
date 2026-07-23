@@ -171,11 +171,11 @@ export function DiagnosticsView() {
             </p>
           </div>
           <button
-            onClick={() => handleRunDiagnostic('dism_restore_health')}
+            onClick={() => handleRunDiagnostic('dism_restorehealth')}
             disabled={isExecuting}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           >
-            {activeAction === 'dism_restore_health' ? (
+            {activeAction === 'dism_restorehealth' ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>Repairing Image...</span>
@@ -208,11 +208,11 @@ export function DiagnosticsView() {
             </p>
           </div>
           <button
-            onClick={() => handleRunDiagnostic('network_reset')}
+            onClick={() => handleRunDiagnostic('reset_tcpip')}
             disabled={isExecuting}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           >
-            {activeAction === 'network_reset' ? (
+            {activeAction === 'reset_tcpip' ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 <span>Resetting Network...</span>

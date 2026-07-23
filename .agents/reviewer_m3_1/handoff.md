@@ -1,85 +1,109 @@
-# Milestone 3 Handoff & Review Report — Reviewer M3-1
+# Milestone 3 Handoff & Review Report — Reviewer 1
 
-## Verdict
-**APPROVED**
+## Review Summary
+
+**Verdict**: REQUEST_CHANGES
+
+Independent review of R1 (Diagnostics & Recovery), R2 (Package & Bloatware Manager), and R3 (Optimization Profiles / Presets) in `src/types/index.ts`, `src/store/useAppStore.ts`, `src/components/DiagnosticsView.tsx`, `src/components/PackageManagerView.tsx`, and `src/components/PresetsView.tsx`.
 
 ---
 
 ## 1. Observation
-Direct observation of the codebase and test execution in `src-tauri`:
 
-- **Files Examined**:
-  - `src-tauri/src/odt/mod.rs` (Lines 1-262): Defines `OdtConfig`, `generate_odt_xml`, `generate_xml`, `execute_odt_install`, `execute_install`, and 4 unit tests.
-  - `src-tauri/src/mas.rs` (Lines 1-127): Defines `ActivationMethod`, `get_activation_script_command`, `execute_activation`, `execute`, and 4 unit tests.
-  - `src-tauri/src/commands/mod.rs` (Lines 1-208): Defines Tauri IPC command handlers `generate_odt_xml`, `execute_odt_install`, `execute_activation`, and 4 unit tests.
-  - `src-tauri/src/lib.rs` (Lines 1-26): Registers all 8 Tauri IPC handlers into the app builder runtime.
-  - `src-tauri/src/runner/mod.rs` (Lines 1-180): Defines `CommandRunner` trait, `RealRunner`, `DryRunRunner`, `RecordedCommand`, `ExecutionSummary`, `ExecutedAction`.
-  - `src-tauri/src/error.rs` (Lines 1-24): Defines `AppError` enum implementing `thiserror::Error` and custom `serde::Serialize`.
-
-- **Exact Test Output (`cargo test` in `src-tauri`)**:
-```text
-Finished `test` profile [unoptimized + debuginfo] target(s) in 0.70s
-Running unittests src\lib.rs (target\debug\deps\wiscripts_windows_lib-64fe54900677c537.exe)
-
-running 17 tests
-test mas::tests::test_execute_activation_dry_run_hwid ... ok
-test mas::tests::test_activation_script_commands ... ok
-test mas::tests::test_execute_activation_dry_run_kms38 ... ok
-test mas::tests::test_execute_activation_dry_run_ohook ... ok
-test odt::tests::test_execute_odt_install_dry_run_contains_setup_configure ... ok
-test odt::tests::test_execute_odt_install_dry_run_custom_path ... ok
-test odt::tests::test_generate_odt_xml_multiple_products_and_excluded_apps ... ok
-test optimization::tests::test_execute_optimizations_dry_run_exact_commands ... ok
-test odt::tests::test_generate_odt_xml_various_channels_and_arch ... ok
-test optimization::tests::test_preview_optimizations ... ok
-test optimization::tests::test_rule_catalog_contains_at_least_15_rules ... ok
-test optimization::tests::test_rule_catalog_covers_all_6_categories ... ok
-test runner::tests::test_dry_run_runner_records_powershell_and_cmd ... ok
-test commands::tests::test_execute_activation_ipc_dry_run ... ok
-test commands::tests::test_execute_odt_install_ipc_dry_run ... ok
-test commands::tests::test_execute_optimizations_ipc_dry_run ... ok
-test commands::tests::test_get_system_info_ipc ... ok
-
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
-```
+- **TypeScript Compilation**: Executed `npx tsc --noEmit` at root `c:/Users/Widlily/Documents/projects/WiScripts_Windows`. Output: Exit code 0, 0 type errors.
+- **Frontend Production Build**: Executed `npm run build` at root. Output: Exit code 0. Vite built `dist/index.html` (0.57 kB), `dist/assets/index-CAezhHkE.css` (25.35 kB), `dist/assets/index-lUoI0grG.js` (297.20 kB) in 4.81s.
+- **Backend Cargo Tests**: Executed `cargo test` in `src-tauri`. Output: Exit code 0. 84 tests passed across unit tests and challenger test suites.
+- **IPC Action String Mismatch in DiagnosticsView**:
+  - `src/components/DiagnosticsView.tsx` line 174: `onClick={() => handleRunDiagnostic('dism_restore_health')}`.
+  - `src/components/DiagnosticsView.tsx` line 211: `onClick={() => handleRunDiagnostic('network_reset')}`.
+  - `src-tauri/src/diagnostics/mod.rs` line 26-41:
+    ```rust
+    let steps: Vec<DiagnosticStep> = match action.to_lowercase().as_str() {
+        "sfc_scannow" | "sfc" => vec![...],
+        "dism_restorehealth" | "dism" => vec![...],
+        "reset_tcpip" | "tcpip" | "network" => vec![...],
+        "all" => vec![...],
+        unsupported => {
+            let err_msg = format!("Unsupported diagnostics action: {}", unsupported);
+            log::error!("[DiagnosticsEngine] {}", err_msg);
+            return Err(AppError::InvalidConfig(err_msg));
+        }
+    };
+    ```
+  - When the user triggers DISM Repair, `'dism_restore_health'` is passed to Rust. Rust fails pattern matching on `"dism_restorehealth"` / `"dism"`, triggering `AppError::InvalidConfig("Unsupported diagnostics action: dism_restore_health")`.
+  - When the user triggers Network Stack Reset, `'network_reset'` is passed to Rust. Rust fails pattern matching on `"reset_tcpip"` / `"tcpip"` / `"network"`, triggering `AppError::InvalidConfig("Unsupported diagnostics action: network_reset")`.
 
 ---
 
 ## 2. Logic Chain
-1. **XML Generation Correctness**:
-   - `generate_odt_xml` parses architecture mapping `"64" | "x64" => "64"` and `"32" | "x86" => "32"`.
-   - Iterates through `config.products`, nesting `<Language ID="..." />` and all `config.excluded_apps` as `<ExcludeApp ID="..." />` under each `<Product ID="...">` block.
-   - Includes `<RemoveMSI />` conditionally when `remove_existing_office` is true.
-   - Outputs `<Display Level="..." AcceptEULA="..." />` with uppercase boolean strings `"TRUE"` / `"FALSE"`.
-   - Produces well-formed Microsoft Office Deployment Tool (ODT) configuration XML.
 
-2. **CommandRunner Abstraction & Dry-Run Safety**:
-   - `execute_odt_install` and `execute_activation` accept `runner: &dyn CommandRunner`.
-   - `DryRunRunner` captures commands in an `Arc<Mutex<Vec<RecordedCommand>>>` history buffer without executing system subprocesses or writing files to disk.
-   - When `dry_run` is true in Tauri IPC handlers (`commands/mod.rs`), `DryRunRunner::new()` is instantiated, guaranteeing complete host isolation during preview/dry-run modes.
-
-3. **Error Handling**:
-   - Errors are wrapped in `AppError::Execution(String)` and serialized seamlessly across the Tauri IPC boundary to the frontend context.
-
-4. **Integrity Verification**:
-   - No hardcoded test responses or fake facades were found in `odt/mod.rs` or `mas.rs`.
-   - Real implementations interact with `powershell.exe` via `RealRunner` in production, and test suites verify actual command strings recorded by `DryRunRunner`.
+1. **Premise**: Frontend UI buttons must pass action string identifiers that exactly match the backend Rust pattern match arms in `run_diagnostics`.
+2. **Observation**: `DiagnosticsView.tsx` passes `'dism_restore_health'` (with underscore between restore and health) and `'network_reset'` (with suffix `_reset`).
+3. **Rust match arms**: `diagnostics/mod.rs` expects `"dism_restorehealth"` (no underscore) and `"reset_tcpip"` (or `"network"` without `_reset`).
+4. **Execution path**: Triggering DISM Repair or Network Stack Reset results in Rust returning `AppError::InvalidConfig`, making 2 out of 3 diagnostic features non-functional at runtime.
+5. **Conclusion**: R1 UI implementation fails IPC contract alignment with the backend engine. `REQUEST_CHANGES` is required to fix the action keys in `DiagnosticsView.tsx`.
 
 ---
 
-## 3. Caveats
-- `execute_odt_install` generates inline PowerShell code downloading ODT from `https://config.office.com/api/odt/download` if `setup.exe` is not present at `$env:TEMP\setup.exe`. In dry-run mode, this network download is simulated and not triggered.
-- No network call occurs in test suite due to default `dry_run = true` in IPC unit tests.
+## 3. Findings
+
+### [Critical] Finding 1: Broken IPC Action Keys for DISM and Network Reset in DiagnosticsView
+
+- **What**: Action string key mismatches in `DiagnosticsView.tsx`.
+- **Where**: `src/components/DiagnosticsView.tsx`, lines 174 & 178 (`'dism_restore_health'`), lines 211 & 215 (`'network_reset'`).
+- **Why**: Rust backend `src-tauri/src/diagnostics/mod.rs` only recognizes `"dism_restorehealth"`, `"dism"`, `"reset_tcpip"`, `"tcpip"`, `"network"`, or `"all"`. Unexpected action keys cause runtime `AppError::InvalidConfig` errors, preventing repair actions from executing.
+- **Suggestion**: In `DiagnosticsView.tsx`:
+  - Replace `'dism_restore_health'` with `'dism_restorehealth'` (or `'dism'`).
+  - Replace `'network_reset'` with `'reset_tcpip'` (or `'network'`).
+
+### [Minor] Finding 2: Tabular Number Utility Formatting on Header Counters
+
+- **What**: Package and UWP app count badges in `PackageManagerView.tsx` and rule count in `PresetsView.tsx` do not include `tabular-nums font-mono` CSS classes.
+- **Where**: `src/components/PackageManagerView.tsx` lines 196 & 310; `src/components/PresetsView.tsx` line 96.
+- **Why**: Refined Minimal UI design guidelines specify tabular numbers (`tabular-nums`) for numeric data and counts.
+- **Suggestion**: Add `font-mono tabular-nums` to count badges in header titles.
 
 ---
 
-## 4. Conclusion
-The Rust backend implementation of Milestone 3 in `src-tauri` satisfies all architecture, code quality, safety, error handling, and testing requirements. Verdict is **APPROVED**.
+## 4. Verified Claims
+
+| Claim | Method | Pass/Fail |
+| text | text | text |
+| `npx tsc --noEmit` compiles cleanly | Command execution | PASS |
+| `npm run build` generates production bundle | Command execution | PASS |
+| `cargo test` passes all backend tests | Command execution | PASS (84/84) |
+| R2 (Package Manager) IPC parameter & return types match | Static code trace of `winget_search`, `winget_install`, `winget_update`, `get_uwp_apps`, `remove_uwp_app` | PASS |
+| R3 (Optimization Profiles) IPC parameter & return types match | Static code trace of `get_optimization_profiles`, `apply_optimization_profile` | PASS |
+| Refined Minimal UI palette and dark aesthetics | Code inspection of Tailwind theme classes (`bg-surface`, `border-border`, etc.) | PASS |
+| Zero AI-slop / No dummy mocks in store | Code inspection of `useAppStore.ts` | PASS |
 
 ---
 
-## 5. Verification Method
-To independently verify this review:
-1. Navigate to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`.
-2. Run `cargo test`.
-3. Confirm 17 unit tests pass cleanly.
+## 5. Coverage Gaps
+
+- No coverage gaps identified for R1, R2, R3 frontend review.
+
+---
+
+## 6. Caveats
+
+- Testing was performed in `CODE_ONLY` network mode. Tauri IPC commands were tested via unit tests and dry-run execution models. Live system DISM execution requires elevated Windows environment.
+
+---
+
+## 7. Conclusion
+
+The implementation of R1, R2, and R3 shows strong architecture, zero TypeScript errors, successful production builds, and compliance with the Refined Minimal design system. However, due to Critical Finding 1 (IPC action string key mismatch breaking DISM Repair and Network Stack Reset in `DiagnosticsView.tsx`), the verdict is **REQUEST_CHANGES**.
+
+---
+
+## 8. Verification Method
+
+To verify the required fix after changes are applied:
+
+1. Inspect `src/components/DiagnosticsView.tsx`:
+   - Confirm lines 174 & 178 use `'dism_restorehealth'` (or `'dism'`).
+   - Confirm lines 211 & 215 use `'reset_tcpip'` (or `'network'`).
+2. Run TypeScript check: `npx tsc --noEmit`.
+3. Run frontend build: `npm run build`.
+4. Run Rust unit tests: `cargo test` in `src-tauri`.

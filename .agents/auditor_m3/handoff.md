@@ -1,95 +1,70 @@
-# Forensic Audit Report — Milestone 3
+# Forensic Audit Report — Milestone 3 Frontend Implementation
 
-**Work Product**: Milestone 3 Rust Backend (`src-tauri`)  
-**Profile**: General Project  
-**Verdict**: **CLEAN**  
+**Work Product**: React Frontend (`src/` — `types`, `store/useAppStore.ts`, `components/`, `App.tsx`, `Navigation.tsx`)  
+**Profile**: General Project (Forensic Audit)  
+**Verdict**: CLEAN  
 
 ---
 
 ## 1. Observation
 
-Direct empirical observations from inspecting `src-tauri` source files and executing test suites:
+Direct forensic observations from inspecting source files in `src/` and running compiler/build commands:
 
-- **ODT Generator (`src-tauri/src/odt/mod.rs`)**:
-  - Lines 69–109: Function `generate_odt_xml(config: &OdtConfig) -> String` dynamically formats XML using structure attributes (`architecture`, `channel`, `products`, `excluded_apps`, `language`, `display_level`, `remove_existing_office`, `accept_eula`).
-  - Lines 117–153: Function `execute_odt_install(...)` formats `setup.exe` download, XML content writing (`Set-Content`), and process invocation (`Start-Process -FilePath $setupPath -ArgumentList '/configure ...'`) into a PowerShell string, then passes it to `runner.run_powershell(...)`.
-  - Lines 163–261: Unit tests `test_generate_odt_xml_various_channels_and_arch`, `test_generate_odt_xml_multiple_products_and_excluded_apps`, `test_execute_odt_install_dry_run_contains_setup_configure`, and `test_execute_odt_install_dry_run_custom_path` pass without mock shortcut cheating.
+1. **Source Code Analysis for Prohibited Patterns**:
+   - `DiagnosticsView.tsx`: User action `handleRunDiagnostic(action)` invokes `runDiagnostics(action)` in `useAppStore.ts`, which triggers `invoke<ExecutionSummary>('run_diagnostics', { action, dryRun: dryRunMode })`. No hardcoded scan scores or fake progress arrays exist.
+   - `PackageManagerView.tsx`: Search and action handlers (`wingetSearch`, `wingetInstall`, `wingetUpdate`, `fetchUwpApps`, `removeUwpApp`) invoke corresponding backend IPC commands (`winget_search`, `winget_install`, `winget_update`, `get_uwp_apps`, `remove_uwp_app`). No hardcoded package lists or fake installation results exist.
+   - `PresetsView.tsx`: Profile fetching and application (`fetchOptimizationProfiles`, `applyOptimizationProfile`) invoke `get_optimization_profiles` and `apply_optimization_profile`.
+   - `DnsContextMenuView.tsx`: Settings and status calls (`setDnsServer`, `fetchClassicContextMenuStatus`, `toggleClassicContextMenu`) invoke `set_dns_server`, `get_classic_context_menu_status`, and `toggle_classic_context_menu`.
+   - `DriverBackupView.tsx`: Backup action (`backupDrivers`) invokes `backup_drivers` with `outputDir` and `dryRun`.
 
-- **MAS Script Runner (`src-tauri/src/mas.rs`)**:
-  - Lines 33–40: `get_activation_script_command` maps `ActivationMethod` (`Hwid`, `Ohook`, `Kms38`, `TsForge`) to actual PowerShell commands (`irm https://get.activated.win | iex /<Method>`).
-  - Lines 43–69: `execute_activation(...)` dispatches script commands to `runner.run_powershell` and records executed actions with `CommandOutput`.
-  - Lines 79–126: Unit tests verify exact command string matching for `/HWID`, `/Ohook`, `/KMS38`, `/TSforge` under `DryRunRunner`.
+2. **Zustand Store IPC Verification (`src/store/useAppStore.ts`)**:
+   - All 12 Tauri IPC commands specified in `PROJECT.md` are genuinely imported from `@tauri-apps/api/core` and invoked via `invoke<T>(command, payload)`.
+   - Store actions set `isExecuting`, log start/completion into `logs` via `addLog()`, and capture real execution results/failures returned by the Rust IPC backend.
 
-- **IPC Commands & Integration (`src-tauri/src/commands/mod.rs` & `src-tauri/src/lib.rs`)**:
-  - Lines 21–65 (`commands/mod.rs`): `check_is_elevated` and `probe_telemetry_status` use real system command probes (`net session`, `powershell.exe Get-Service -Name DiagTrack`).
-  - Lines 68–94 (`commands/mod.rs`): `get_system_info` queries live system statistics via `sysinfo::System`.
-  - Lines 114–159 (`commands/mod.rs`): `execute_optimizations`, `execute_odt_install`, and `execute_activation` correctly dispatch `dry_run` flag to instantiate `DryRunRunner` vs `RealRunner`.
-  - Lines 13–24 (`lib.rs`): All 8 Tauri IPC commands (`get_system_info`, `get_rule_catalog`, `get_rules_by_category`, `preview_optimizations`, `execute_optimizations`, `generate_odt_xml`, `execute_odt_install`, `execute_activation`) are registered in `tauri::generate_handler!`.
-
-- **Command Runner Architecture (`src-tauri/src/runner/mod.rs`)**:
-  - Lines 46–91: `RealRunner` spawns actual system processes (`powershell.exe`, `cmd.exe`) via `std::process::Command`.
-  - Lines 101–150: `DryRunRunner` records command strings in a thread-safe `Arc<Mutex<Vec<RecordedCommand>>>` history without modifying the host system.
-
-- **Runtime Test Execution**:
-  - Command executed: `cargo test` inside `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`.
-  - Result:
-    ```
-    running 17 tests
-    test mas::tests::test_execute_activation_dry_run_hwid ... ok
-    test odt::tests::test_execute_odt_install_dry_run_custom_path ... ok
-    test mas::tests::test_execute_activation_dry_run_ohook ... ok
-    test odt::tests::test_generate_odt_xml_various_channels_and_arch ... ok
-    test odt::tests::test_generate_odt_xml_multiple_products_and_excluded_apps ... ok
-    test mas::tests::test_activation_script_commands ... ok
-    test optimization::tests::test_rule_catalog_contains_at_least_15_rules ... ok
-    test optimization::tests::test_execute_optimizations_dry_run_exact_commands ... ok
-    test odt::tests::test_execute_odt_install_dry_run_contains_setup_configure ... ok
-    test mas::tests::test_execute_activation_dry_run_kms38 ... ok
-    test optimization::tests::test_preview_optimizations ... ok
-    test commands::tests::test_execute_activation_ipc_dry_run ... ok
-    test runner::tests::test_dry_run_runner_records_powershell_and_cmd ... ok
-    test commands::tests::test_execute_odt_install_ipc_dry_run ... ok
-    test commands::tests::test_execute_optimizations_ipc_dry_run ... ok
-    test optimization::tests::test_rule_catalog_covers_all_6_categories ... ok
-    test commands::tests::test_get_system_info_ipc ... ok
-
-    test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
-    ```
+3. **TypeScript Compilation & Production Build Verification**:
+   - `npx tsc --noEmit` executed successfully with 0 errors.
+   - `npm run build` executed successfully using Vite v5.4.21, transforming 1822 modules and outputting bundle artifacts in `dist/` in 5.26s.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Static Analysis of ODT Generator**: Inspected `generate_odt_xml` in `odt/mod.rs`. The code constructs XML strings line-by-line using match blocks and iterations over `config.products` and `config.excluded_apps`. There are zero hardcoded XML test constants or stub outputs.
-2. **Static Analysis of MAS Module**: Inspected `get_activation_script_command` in `mas.rs`. Each enum variant returns a distinct, authentic PowerShell invocation string targeting `get.activated.win`. There are zero dummy or facade return values.
-3. **Static Analysis of Command Execution Architecture**: Inspected `DryRunRunner` and `RealRunner` in `runner/mod.rs`. `DryRunRunner` captures the exact script payload in its thread-safe `history` vector without altering system state, and returns exit code 0 with a simulated output string. `RealRunner` invokes system processes via standard Rust `std::process::Command`.
-4. **Static Analysis of Commands & IPC Layer**: Inspected `commands/mod.rs` and `lib.rs`. System probes query real system resources (`sysinfo`, PowerShell `DiagTrack` status, `net session`). IPC endpoints pass parameters down to the implementation modules cleanly.
-5. **Runtime Verification**: `cargo test` was executed cleanly. All 17 tests passed, confirming both static logic and runtime execution behavior.
+1. **Premise 1**: An integrity violation occurs if UI components display hardcoded scores/outputs, fake UI success without invoking Zustand store IPC actions, or produce fabricated log entries.
+2. **Observation 1**: Code inspection of all feature components (`DiagnosticsView.tsx`, `PackageManagerView.tsx`, `PresetsView.tsx`, `DnsContextMenuView.tsx`, `DriverBackupView.tsx`) confirms that every user action is tied directly to `useAppStore` actions.
+3. **Observation 2**: Inspection of `useAppStore.ts` confirms that all store actions dispatch live Tauri IPC `invoke` calls to backend commands (`run_diagnostics`, `winget_search`, `winget_install`, `winget_update`, `get_uwp_apps`, `remove_uwp_app`, `get_optimization_profiles`, `apply_optimization_profile`, `set_dns_server`, `get_classic_context_menu_status`, `toggle_classic_context_menu`, `backup_drivers`).
+4. **Observation 3**: Execution logs and status messages displayed in the UI are dynamically constructed from responses (`ExecutionSummary`, `SystemInfo`, `WingetPackage[]`, `UwpAppInfo[]`, `OptimizationProfile[]`, `boolean`) returned by Tauri Rust handlers.
+5. **Observation 4**: Compilation via `npx tsc --noEmit` and bundling via `npm run build` completed without any errors or warnings.
+6. **Conclusion**: The frontend implementation is genuine, clean, fully integrated with the Rust backend IPC commands, and free of integrity violations.
 
 ---
 
 ## 3. Caveats
 
-- **No caveats**: The entire codebase in `src-tauri` for Milestone 3 was inspected line-by-line, and all tests were compiled and executed locally.
+- Live runtime behavior dependent on OS privilege level (Administrator elevation required for live execution of DISM/SFC/Driver Export; dry-run mode safely simulates commands without system modifications).
+- No other caveats.
 
 ---
 
 ## 4. Conclusion
 
-The Milestone 3 codebase in `src-tauri` is fully authentic, free of hardcoded shortcuts or dummy facades, correctly formats ODT XML, generates valid MAS PowerShell commands, records commands via `DryRunRunner`, and passes all 17 unit/IPC tests cleanly.
+**Verdict**: **CLEAN**
 
-Final Verdict: **CLEAN**
+The React frontend implementation for Milestone 3 meets all architectural requirements and forensic integrity criteria. All 5 feature views genuinely invoke backend IPC commands via `useAppStore`, UI state is fully synchronous with backend responses, and type checking / production build pass cleanly.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify these findings:
+To independently verify this audit:
 
-1. Open PowerShell and navigate to `src-tauri`:
-   ```powershell
-   cd c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri
-   cargo test
-   ```
-2. Inspect the test suite execution output to verify all 17 tests pass.
-3. Inspect `src-tauri/src/odt/mod.rs`, `src-tauri/src/mas.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`, and `src-tauri/src/runner/mod.rs` to verify dynamic XML generation, PowerShell command construction, and dry-run recording.
+```bash
+# 1. Type check
+npx tsc --noEmit
+
+# 2. Production build
+npm run build
+```
+
+Expected Output:
+- `npx tsc --noEmit`: 0 errors.
+- `npm run build`: Vite build completed successfully (`dist/` directory created with `index.html` and assets).

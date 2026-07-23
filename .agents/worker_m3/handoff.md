@@ -1,69 +1,79 @@
-# Milestone 3 Handoff Report — ODT Module and MAS Activation Module Implementation
+# Handoff Report — Worker M3 (Frontend Implementation for Features R1-R5)
 
 ## 1. Observation
+The following frontend updates and view components were implemented and verified for Features R1 through R5:
 
-### Implementation Files Inspected and Modified:
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\odt\mod.rs`:
-  - `OdtConfig` struct defined with fields: `architecture`, `channel`, `products`, `excluded_apps`, `language`, `display_level`, `remove_existing_office`, `accept_eula`.
-  - Serde field aliases added (`ExcludedAppVec`, `excludedAppVec`, `excluded_app_vec`, `DisplayLevel`, `displayLevel`, etc.).
-  - `generate_odt_xml(config: &OdtConfig) -> String` generates valid XML with `<Configuration>`, `<Add OfficeClientEdition=... Channel=...>`, `<Product ID=...>`, `<Language ID=...>`, `<ExcludeApp ID=...>`, `<RemoveMSI />`, `<Display Level=... AcceptEULA=... />`.
-  - `execute_odt_install(runner: &dyn CommandRunner, config: &OdtConfig, setup_path: Option<String>, dry_run: bool) -> Result<ExecutionSummary, String>` prepares configuration and invokes setup executable with `/configure`.
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\mas.rs`:
-  - `ActivationMethod` enum: `Hwid`, `Ohook`, `Kms38`, `TsForge`.
-  - `get_activation_script_command(method: &ActivationMethod) -> String` returns PowerShell script invocations for activation (`/HWID`, `/Ohook`, `/KMS38`, `/TSforge`).
-  - `execute_activation(runner: &dyn CommandRunner, method: ActivationMethod, dry_run: bool) -> Result<ExecutionSummary, String>` runs requested activation method using `CommandRunner`.
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\activation\mod.rs`:
-  - Re-exports `crate::mas::*` for backward compatibility.
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\commands\mod.rs`:
-  - Tauri `#[tauri::command]` functions:
-    - `generate_odt_xml(config: OdtConfig) -> Result<String, AppError>`
-    - `execute_odt_install(config: OdtConfig, setup_path: Option<String>, dry_run: bool) -> Result<ExecutionSummary, AppError>`
-    - `execute_activation(method: ActivationMethod, dry_run: bool) -> Result<ExecutionSummary, AppError>`
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\lib.rs`:
-  - Registered `pub mod mas;` alongside `odt`, `activation`, `commands`, `runner`, `optimization`, `error`.
+- **TypeScript Definitions (`src/types/index.ts`)**:
+  - `TabType` expanded to include `'diagnostics'`, `'package_manager'`, `'presets'`, `'dns_context'`, `'driver_backup'`.
+  - Added interface definitions:
+    - `WingetPackage`: `{ id: string; name: string; version: string; source: string }`
+    - `UwpAppInfo`: `{ name: string; packageFullName: string; publisherId: string; isFramework: boolean }`
+    - `OptimizationProfile`: `{ id: string; name: string; description: string; iconName: string; ruleIds: string[] }`
+    - `DnsProvider`: `{ id: string; name: string; primaryDns: string; secondaryDns: string; description: string }`
 
-### Verification Output:
-Command: `cargo test` inside `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`
-Result:
-```
-running 17 tests
-test mas::tests::test_activation_script_commands ... ok
-test optimization::tests::test_rule_catalog_contains_at_least_15_rules ... ok
-test mas::tests::test_execute_activation_dry_run_ohook ... ok
-test mas::tests::test_execute_activation_dry_run_kms38 ... ok
-test optimization::tests::test_execute_optimizations_dry_run_exact_commands ... ok
-test odt::tests::test_execute_odt_install_dry_run_custom_path ... ok
-test odt::tests::test_generate_odt_xml_multiple_products_and_excluded_apps ... ok
-test mas::tests::test_execute_activation_dry_run_hwid ... ok
-test optimization::tests::test_preview_optimizations ... ok
-test odt::tests::test_execute_odt_install_dry_run_contains_setup_configure ... ok
-test odt::tests::test_generate_odt_xml_various_channels_and_arch ... ok
-test optimization::tests::test_rule_catalog_covers_all_6_categories ... ok
-test runner::tests::test_dry_run_runner_records_powershell_and_cmd ... ok
-test commands::tests::test_execute_activation_ipc_dry_run ... ok
-test commands::tests::test_execute_odt_install_ipc_dry_run ... ok
-test commands::tests::test_execute_optimizations_ipc_dry_run ... ok
-test commands::tests::test_get_system_info_ipc ... ok
+- **Zustand Store Extensions (`src/store/useAppStore.ts`)**:
+  - Implemented state fields & async Tauri IPC (`invoke`) actions:
+    - `runDiagnostics(action: string)` -> `run_diagnostics`
+    - `wingetSearch(query: string)` -> `winget_search`
+    - `wingetInstall(packageId: string)` -> `winget_install`
+    - `wingetUpdate(packageId: string)` -> `winget_update`
+    - `fetchUwpApps()` -> `get_uwp_apps`
+    - `removeUwpApp(packageFullName: string)` -> `remove_uwp_app`
+    - `fetchOptimizationProfiles()` -> `get_optimization_profiles`
+    - `applyOptimizationProfile(profileId: string)` -> `apply_optimization_profile`
+    - `setDnsServer(provider: string, interfaceAlias?: string)` -> `set_dns_server`
+    - `fetchClassicContextMenuStatus()` -> `get_classic_context_menu_status`
+    - `toggleClassicContextMenu(enable: boolean)` -> `toggle_classic_context_menu`
+    - `backupDrivers(outputDir: string)` -> `backup_drivers`
 
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
-```
+- **Navigation & App Shell Shell (`src/components/Navigation.tsx`, `src/components/Header.tsx`, `src/App.tsx`)**:
+  - Navigation menu items updated with Lucide icons (`Activity`, `Package`, `Sparkles`, `Globe`, `HardDrive`).
+  - `TAB_TITLES` map updated in `Header.tsx`.
+  - Conditional view rendering in `App.tsx` mapped for all 10 application tabs.
+
+- **5 Feature View Components (`src/components/`)**:
+  1. `DiagnosticsView.tsx` (R1): Live system metrics cards, action buttons for `sfc_scannow`, `dism_restore_health`, and `network_reset`, level-filtered log stream console with search, copy stream, and log export.
+  2. `PackageManagerView.tsx` (R2): Dual sub-tab interface for WinGet package search/install/upgrade with quick presets and UWP AppX bloatware uninstaller with framework filtering.
+  3. `PresetsView.tsx` (R3): Cards for curated 1-click optimization profiles ("Gaming", "Maximum Privacy", "Workstation / Productivity") displaying rule badges and execution triggers.
+  4. `DnsContextMenuView.tsx` (R4): Section 1 for DNS provider switcher (AdGuard, Cloudflare 1.1.1.1, Google, DHCP) with optional interface alias parameter. Section 2 for Windows 11 Classic Context Menu toggle (`{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}`).
+  5. `DriverBackupView.tsx` (R5): Driver export target directory path input with quick preset buttons (`C:\DriverBackup`, `D:\DriverBackup`), execution trigger calling `backup_drivers`, administrator requirement warning, and status feedback.
+
+- **Verification Results**:
+  - `npx tsc --noEmit`: 0 TypeScript errors.
+  - `npm run build`: PASS (Vite production bundle built, 1822 modules transformed, output `dist/`).
+  - `cargo test` in `src-tauri`: PASS (84/84 tests passed 100%).
 
 ## 2. Logic Chain
-1. **Observation**: Milestone 3 requires implementation of ODT configuration generation, execution with custom `setup_path`, MAS activation methods (HWID, Ohook, KMS38), IPC command exposure in Tauri, and programmatic tests using `DryRunRunner`.
-2. **Logic Step**: Implemented `OdtConfig`, `generate_odt_xml`, and `execute_odt_install` in `src-tauri/src/odt/mod.rs`. In `execute_odt_install`, when `DryRunRunner` or real runner is executed, the generated script explicitly includes `# Executing setup.exe /configure $env:TEMP\configuration.xml`.
-3. **Logic Step**: Created `src-tauri/src/mas.rs` with `ActivationMethod` and `execute_activation`. Each activation method maps to its clean PowerShell script execution and records in `DryRunRunner`. Re-exported `mas` in `activation/mod.rs` to maintain compatibility with M2.
-4. **Logic Step**: Exposed Tauri commands in `src-tauri/src/commands/mod.rs` with matching signatures and error handling. Registered `mas` module in `src-tauri/src/lib.rs`.
-5. **Logic Step**: Ran `cargo test` in `src-tauri` which executed all 17 unit tests cleanly across M1, M2, and M3 modules with 0 failures and 0 warnings.
+- Feature R1 through R5 required React frontend integration matching the Tauri Rust IPC command contracts in `PROJECT.md` § Interface Contracts.
+- Expanding `TabType` and adding `WingetPackage`, `UwpAppInfo`, `OptimizationProfile`, and `DnsProvider` ensured full type safety across all React components and Zustand state slices.
+- Extending `useAppStore.ts` with dedicated async IPC actions standardizes error handling, logging (`addLog`), and execution state (`isExecuting`) while delegating command execution to Tauri's `invoke` API.
+- Utilizing the Refined Minimal (Linear/Stripe style) aesthetic with Tailwind CSS ensured UI consistency, subtle 1px borders, monospace tabular-nums metrics, clean card layouts, and dry-run safety indicators.
 
 ## 3. Caveats
-- Real execution of `execute_odt_install` and `execute_activation` requires Windows administrative privileges (`is_elevated`). Dry-run execution works without administrator privileges and is fully isolated using `DryRunRunner`.
-- `execute_odt_install` downloads `setup.exe` from Microsoft's official CDN (`https://config.office.com/api/odt/download`) if `setup_path` is `None` or not found on the local filesystem during real execution mode.
+- Browser runtime testing outside of Tauri fallback relies on `try...catch` handling in `useAppStore` to catch missing Tauri IPC runtime bindings gracefully during pure Vite dev server preview.
+- WinGet package searching requires network connectivity to query WinGet sources in real execution mode (dry-run returns simulated packages).
 
 ## 4. Conclusion
-Milestone 3 requirements for Office Deployment Tool (ODT) XML generation/execution and Microsoft Activation Scripts (MAS) activation are fully implemented, exposed via Tauri IPC, and 100% verified with programmatic unit tests in `src-tauri`.
+Worker M3 has successfully implemented all required TypeScript interfaces, Zustand store extensions, navigation tabs, header titles, and 5 UI view components for features R1 through R5. The frontend builds with 0 TypeScript compilation errors and Vite produces a clean production bundle.
 
 ## 5. Verification Method
-To independently verify:
-1. Open terminal in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`.
-2. Run `cargo test`.
-3. Verify that all 17 tests pass with `test result: ok. 17 passed; 0 failed`.
+To independently verify the work:
+
+1. **TypeScript Type Verification**:
+   ```cmd
+   npx tsc --noEmit
+   ```
+   *Expected output: 0 errors.*
+
+2. **Frontend Production Build**:
+   ```cmd
+   npm run build
+   ```
+   *Expected output: Successful build (`✓ built in ...s`), output written to `dist/`.*
+
+3. **Backend Integration & IPC Unit Tests**:
+   ```cmd
+   cd src-tauri
+   cargo test
+   ```
+   *Expected output: All 84 tests pass (100%).*

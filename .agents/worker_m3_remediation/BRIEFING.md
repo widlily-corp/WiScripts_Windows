@@ -1,62 +1,52 @@
-# BRIEFING — 2026-07-22T13:47:00Z
+# BRIEFING — 2026-07-23T14:05:29Z
 
 ## Mission
-Fix Serde camelCase attributes on runner structs and PowerShell path escaping in ODT module, with unit tests passing.
+Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx and src-tauri/src/diagnostics/mod.rs.
 
 ## 🔒 My Identity
-- Archetype: worker
+- Archetype: Software Craftsman / Implementer & QA
 - Roles: implementer, qa, specialist
-- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation
-- Original parent: 53dfd8eb-a8ca-46fd-ba93-f89656301a66
-- Milestone: Milestone 3 Remediation
+- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/worker_m3_remediation
+- Original parent: af959d17-7dc6-48aa-b065-8f833af38b1c
+- Milestone: M3 Remediation
 
 ## 🔒 Key Constraints
-- Minimal changes principle
-- Genuine implementation (no hardcoded test results or dummy facade)
-- camelCase Serde attributes on ExecutionSummary, ExecutedAction, CommandOutput in src-tauri/src/runner/mod.rs
-- Safe PowerShell path escaping in src-tauri/src/odt/mod.rs
-- All unit tests pass in src-tauri via `cargo test`
+- Minimal change principle.
+- No dummy/facade implementations or hardcoded values.
+- Verify through tsc, npm run build, cargo check, cargo test.
 
 ## Current Parent
-- Conversation ID: 53dfd8eb-a8ca-46fd-ba93-f89656301a66
-- Updated: 2026-07-22T13:51:30Z
+- Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
+- Updated: 2026-07-23T14:05:29Z
 
 ## Task Summary
-- **What to build**: Remediation for M3 issues (runner serde attributes, ODT PowerShell path escaping, MAS syntax fix, ODT empty products protection, non-blocking system info, and unit tests).
+- **What to build**: Update string action keys in DiagnosticsView.tsx and expand pattern match arms in src-tauri/src/diagnostics/mod.rs.
 - **Success criteria**:
-  1. `ExecutionSummary`, `ExecutedAction`, `CommandOutput` serialize to JSON with camelCase fields (`executedActions`, `totalDurationMs`, `isDryRun`, `exitCode`, `stdout`, `stderr`).
-  2. `execute_odt_install` safely escapes paths against PowerShell injection / space issues.
-  3. `cargo test` in `src-tauri` passes 100%.
-  4. Handoff report in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation\handoff.md`.
-- **Interface contracts**: Rust Tauri backend code in `src-tauri`.
+  1. DiagnosticsView.tsx uses 'dism_restorehealth' and 'reset_tcpip'.
+  2. src-tauri/src/diagnostics/mod.rs handles `"dism_restorehealth" | "dism_restore_health" | "dism"` and `"reset_tcpip" | "network_reset" | "network" | "tcpip"`.
+  3. `npx tsc --noEmit` & `npm run build` pass in project root.
+  4. `cargo check` & `cargo test` pass in `src-tauri/`.
+- **Interface contracts**: PROJECT.md
+- **Code layout**: PROJECT.md
+
+## Key Decisions Made
+- Initializing remediation task environment.
+
+## Artifact Index
+- ORIGINAL_REQUEST.md — Initial user prompt backup
+- BRIEFING.md — Context briefing tracking
+- progress.md — Liveness heartbeat and step tracking
+- handoff.md — Handoff report for parent agent
 
 ## Change Tracker
-- **Files modified**:
-  - `src-tauri/src/runner/mod.rs`: Added `#[serde(rename_all = "camelCase")]` to `ExecutionSummary`, `ExecutedAction`, `CommandOutput`, `RecordedCommand`; added camelCase serde unit test.
-  - `src-tauri/src/odt/mod.rs`: Added `escape_powershell_literal` helper; updated `execute_odt_install` with safe single-quoted path and XML escaping; added empty products fallback; added unit tests.
-  - `src-tauri/src/mas.rs`: Fixed MAS script invocation syntax to `$cmd = Invoke-RestMethod ...; & ([scriptblock]::Create($cmd)) /<Method>`.
-  - `src-tauri/src/commands/mod.rs`: Replaced blocking `std::thread::sleep` in `get_system_info` with `tauri::async_runtime::spawn_blocking`.
-- **Build status**: PASS (cargo test output: 21 passed; 0 failed)
+- **Files modified**: None yet
+- **Build status**: Not run yet
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: 21 passed; 0 failed
-- **Lint status**: Clean
-- **Tests added/modified**:
-  - `test_execution_summary_camel_case_serialization`
-  - `test_escape_powershell_literal`
-  - `test_execute_odt_install_path_escaping_with_special_characters`
-  - `test_generate_odt_xml_empty_products_fallback`
+- **Build/test result**: Not run yet
+- **Lint status**: Not run yet
+- **Tests added/modified**: TBD
 
 ## Loaded Skills
 - None
-
-## Key Decisions Made
-- Used PowerShell single-quoted escaping `'...'` with doubled single-quotes `''` and `-LiteralPath` for secure shell execution without injection risks.
-- Replaced blocking thread sleep in async IPC command with `tauri::async_runtime::spawn_blocking`.
-
-## Artifact Index
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation\ORIGINAL_REQUEST.md` — Original task request
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation\BRIEFING.md` — Active briefing index
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation\progress.md` — Progress heartbeat
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation\handoff.md` — Handoff report

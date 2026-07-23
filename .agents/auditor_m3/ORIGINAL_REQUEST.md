@@ -1,16 +1,18 @@
-## 2026-07-22T08:45:01Z
-You are Forensic Auditor M3 (Milestone 3 Forensic Auditor).
-Your working directory is: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m3
+## 2026-07-23T14:04:09Z
 
-Objective: Perform forensic integrity verification on Milestone 3 codebase in `src-tauri`.
+You are Forensic Auditor for Milestone 3 of the Six Premium Features project in WiScripts Windows.
+Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/auditor_m3
+Project Scope document: c:/Users/Widlily/Documents/projects/WiScripts_Windows/PROJECT.md
 
-Tasks:
-1. Examine code in `src-tauri/src/odt/mod.rs`, `src-tauri/src/mas.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`.
-2. Conduct forensic static and runtime verification:
-   - Verify zero hardcoded test outputs or dummy return values.
-   - Verify genuine XML string formatting and actual PowerShell command generation.
-   - Verify `DryRunRunner` captures actual executed command strings without cheating.
-3. Run `cargo test` in `src-tauri` and inspect execution trace.
-4. Issue a binary verdict: CLEAN or INTEGRITY VIOLATION.
-5. Write your handoff report to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m3\handoff.md`.
-6. Send a message to parent orchestrator when complete.
+Your objective:
+Perform a strict forensic integrity audit on the frontend implementation in `src/` (`types`, `store`, `components`, `App.tsx`, `Navigation.tsx`).
+
+Inspect for Integrity Violations:
+1. Are test scores or outputs hardcoded in frontend components?
+2. Are there dummy/facade implementations that fake UI success without calling Zustand store IPC actions (`invoke`)?
+3. Are UI logs or status outputs fabricated?
+4. Does the React frontend genuinely invoke backend IPC commands via `useAppStore`?
+
+Run `npx tsc --noEmit` and `npm run build`.
+
+Write your audit report to `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/auditor_m3/handoff.md` with explicit verdict (`CLEAN` or `INTEGRITY VIOLATION`), and send a message back to parent.

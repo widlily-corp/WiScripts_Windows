@@ -1,18 +1,15 @@
-## 2026-07-22T13:45:01Z
-Review the Rust backend implementation of Milestone 3 (ODT & MAS Activation Modules) in `src-tauri`.
+## 2026-07-23T14:04:08Z
+You are Reviewer 1 for Milestone 3 of the Six Premium Features project in WiScripts Windows.
+Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m3_1
+Project Scope document: c:/Users/Widlily/Documents/projects/WiScripts_Windows/PROJECT.md
 
-Tasks:
-1. Examine code quality, correctness, efficiency, and safety in:
-   - `src-tauri/src/odt/mod.rs` (`OdtConfig`, `generate_odt_xml`, `execute_odt_install`)
-   - `src-tauri/src/mas.rs` (`ActivationMethod`, `execute_activation`, script commands)
-   - `src-tauri/src/commands/mod.rs`
-   - `src-tauri/src/lib.rs`
-2. Verify that:
-   - XML generation is valid and handles all channel, architecture, language, product, and excluded app variations cleanly.
-   - `execute_odt_install` and `execute_activation` utilize the `CommandRunner` abstraction properly (`DryRunRunner` and `RealRunner`).
-   - No sensitive host system changes occur when running in `dry_run = true` mode.
-   - Error handling is complete and clean (`AppError` / `Result`).
-3. Execute `cargo test` in `src-tauri` and record exact command output.
-4. Give a definitive APPROVED or CHANGES REQUESTED verdict with technical rationale.
-5. Write your handoff report to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m3_1\handoff.md`.
-6. Send a message to parent orchestrator when complete.
+Your objective:
+Independently review the frontend implementation of R1 (Diagnostics), R2 (Packages & Bloatware), and R3 (Profiles) in `src/types/index.ts`, `src/store/useAppStore.ts`, `src/components/DiagnosticsView.tsx`, `src/components/PackageManagerView.tsx`, and `src/components/PresetsView.tsx`.
+
+Verify:
+1. TypeScript compilation (`npx tsc --noEmit`).
+2. Frontend build (`npm run build`).
+3. Alignment with Rust backend IPC command signatures.
+4. Refined Minimal (Linear/Stripe) UI design system compliance, tabular numbers, accessibility, and zero AI-slop or dummy shortcuts.
+
+Write your review handoff report to `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m3_1/handoff.md` and send a message back to parent.

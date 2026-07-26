@@ -25,6 +25,10 @@ WiScripts Windows empowers you to take full control of your operating system wit
 2. Download the latest `wiscripts_windows.exe`.
 3. Run as Administrator (required for system-level tweaks and PowerShell execution).
 
+> **Note on Windows SmartScreen:**
+> Because this is a free, open-source tool, it does not currently have a paid code-signing certificate. Windows Defender SmartScreen may show a "Windows protected your PC" warning when you first launch it.
+> To proceed, click **"More info"** and then **"Run anyway"**.
+
 ## 👨‍💻 Development
 
 Prerequisites:

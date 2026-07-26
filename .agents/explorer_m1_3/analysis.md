@@ -1,246 +1,196 @@
-# Detailed Technical Analysis: Build, Test & Verification Infrastructure
+# Administrator Elevation Detection & UI Warning Analysis
 
-**Explorer ID**: explorer_m1_3  
-**Date**: 2026-07-22  
-**Target System**: WiScripts Windows (Tauri v2 + React 18 + Rust)
+## Executive Summary
 
----
+WiScripts Windows detects administrator privileges in its Rust backend (`src-tauri/src/commands/mod.rs`) via a `net session` check executed with hidden window flags (`CREATE_NO_WINDOW = 0x08000000`). This privilege status is exposed to the React frontend as `isElevated: boolean` via the `get_system_info` Tauri IPC command.
 
-## 1. Overview & Build Configuration
+While the backend correctly detects elevation status, **the backend execution engine does not block administrative commands when `isElevated` is `false`**, relying instead on runtime OS access control. Furthermore, **the current React frontend (`src/components/`) only displays elevation status in three places** (`Navigation.tsx` sidebar card, `DiagnosticsView.tsx` metric card, and `DriverBackupView.tsx` info card). All major execution buttons across Optimizations, Package Manager, Presets, DNS, Driver Backup, Diagnostics, ODT, and MAS remain clickable for standard users without warning banners or disabled states.
 
-The WiScripts Windows application is structured as a Tauri v2 desktop application combining a Rust backend (`src-tauri/`) and a React 18 TypeScript frontend (`src/`).
-
-### Backend Build Configuration (`src-tauri/Cargo.toml`)
-- **Package**: `wiscripts_windows` (v0.1.0, Rust edition 2021)
-- **Library Crate**: `wiscripts_windows_lib` with `crate-type = ["staticlib", "cdylib", "rlib"]`. The `rlib` output allows integration testing and unit testing of internal modules.
-- **Dependencies**:
-  - `tauri`: version 2.0.0
-  - `tauri-plugin-opener`: 2.0.0
-  - `serde` & `serde_json`: 1.0 (with `derive` feature for JSON serialization over IPC)
-  - `thiserror`: 1.0 (custom `AppError` type)
-  - `sysinfo`: 0.30 (OS stats, CPU/RAM monitoring)
-  - `log` (0.4) & `simplelog` (0.12) (structured logging to file & stdout)
-
-### Frontend Build Configuration (`package.json` & `vite.config.ts`)
-- **Build Engine**: Vite v5.4.21 with `@vitejs/plugin-react`
-- **TypeScript**: TS 5.6.0 with `strict: true` and `noEmit: true` in `tsconfig.json`
-- **Dependencies**: `@tauri-apps/api` (v2.0.0), `lucide-react`, `react` (18.3.1), `react-dom`, `zustand` (4.5.5)
-- **CSS Stack**: TailwindCSS v3.4.14 with PostCSS & Autoprefixer
-- **Scripts in `package.json`**:
-  - `npm run dev`: Starts Vite HMR dev server on port 1420
-  - `npm run build`: Runs `tsc && vite build` (compiles React + TS into `dist/`)
-  - `npm run preview`: Serves production build preview
-  - `npm run tauri`: Runs `@tauri-apps/cli`
+This document details the backend mechanism, audits all feature actions requiring Administrator privileges, evaluates current UI components, and specifies precise UI design requirements using Tailwind CSS and Lucide icons following the Refined Minimal aesthetic standard.
 
 ---
 
-## 2. Existing Verification Commands & Execution Results
+## 1. Backend Elevation Detection Analysis (`src-tauri/src/`)
 
-### 2.1 Backend Commands
-1. **`cargo check`** (in `src-tauri/`):
-   - Validates Rust code compilation without linking binaries.
-   - Result: **Passed cleanly (0 errors)**.
-2. **`cargo test`** (in `src-tauri/`):
-   - Executes 25 unit and IPC mock tests across modules:
-     - `commands::tests`: `test_get_system_info_ipc`, `test_execute_optimizations_ipc_dry_run`, `test_execute_odt_install_ipc_dry_run`, `test_execute_activation_ipc_dry_run`
-     - `logger::tests`: `test_init_logger_creates_debug_log`, `test_reinit_logger_handles_set_logger_error_gracefully`, `test_log_levels_timestamps_and_output_formatting`, `test_command_runner_logging_stdout_stderr`
-     - `mas::tests`: `test_activation_script_commands`, `test_execute_activation_dry_run_hwid`, `test_execute_activation_dry_run_kms38`, `test_execute_activation_dry_run_ohook`
-     - `odt::tests`: `test_generate_odt_xml_...`, `test_execute_odt_install_...`, `test_escape_powershell_literal`
-     - `optimization::tests`: `test_rule_catalog_contains_at_least_15_rules`, `test_rule_catalog_covers_all_6_categories`, `test_preview_optimizations`, `test_execute_optimizations_dry_run_exact_commands`
-     - `runner::tests`: `test_dry_run_runner_records_powershell_and_cmd`, `test_execution_summary_camel_case_serialization`
-   - Result: **25 passed, 0 failed, completed in 1.08s**.
-
-### 2.2 Frontend Commands
-1. **`npm run build`**:
-   - Executes `tsc` followed by `vite build`.
-   - Result: **Passed cleanly**. 1816 modules transformed into `dist/assets/index-CuH3O7Rh.js` (245 kB) in 2.77s.
-2. **`npx tsc --noEmit`**:
-   - Performs strict TypeScript type checks on `src/`.
-   - Result: **Passed with 0 errors**.
-
----
-
-## 3. Backend Event Emission Verification Strategy (`optimization::execute`)
-
-### Current State
-`optimization::execute` signature:
-```rust
-pub fn execute(
-    runner: &dyn CommandRunner,
-    selected_keys: &[String],
-) -> Result<ExecutionSummary, AppError>
-```
-Currently, execution runs synchronously over selected rules using `CommandRunner` (`DryRunRunner` or `RealRunner`) and returns an `ExecutionSummary`.
-
-### Strategy for Event Emission & Headless Testing
-
-#### Approach A: Event Emitter Trait Abstraction (Recommended for Pure Unit Testing)
-Decouple event emission from the Tauri `AppHandle` / `WebviewWindow` using a trait:
+### 1.1 Detection Mechanism
+- **File**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\commands\mod.rs`
+- **Function**: `check_is_elevated()` (lines 26–44)
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProgressEvent {
-    pub current_index: usize,
-    pub total_count: usize,
-    pub item_id: String,
-    pub item_title: String,
-    pub status: String, // "running" | "success" | "failed" | "skipped"
-    pub duration_ms: u64,
-}
-
-pub trait ProgressEmitter: Send + Sync {
-    fn emit_progress(&self, event: ProgressEvent) -> Result<(), AppError>;
-}
-```
-
-1. **Tauri App Handle Implementation**:
-   ```rust
-   impl ProgressEmitter for tauri::AppHandle {
-       fn emit_progress(&self, event: ProgressEvent) -> Result<(), AppError> {
-           use tauri::Emitter;
-           self.emit("optimization-progress", event)
-               .map_err(|e| AppError::Execution(e.to_string()))
-       }
-   }
-   ```
-2. **Test Mock Implementation**:
-   ```rust
-   pub struct MockProgressEmitter {
-       pub emitted: Arc<Mutex<Vec<ProgressEvent>>>,
-   }
-   
-   impl ProgressEmitter for MockProgressEmitter {
-       fn emit_progress(&self, event: ProgressEvent) -> Result<(), AppError> {
-           self.emitted.lock().unwrap().push(event);
-           Ok(())
-       }
-   }
-   ```
-3. **Verification in Rust Test**:
-   ```rust
-   #[test]
-   fn test_execute_optimizations_emits_progress_events() {
-       let runner = DryRunRunner::new();
-       let emitter = MockProgressEmitter::new();
-       let selected = vec!["telemetry_diagtrack".to_string(), "disk_clean_temp".to_string()];
-       
-       let summary = execute_with_events(&runner, &selected, Some(&emitter)).unwrap();
-       
-       let events = emitter.emitted.lock().unwrap();
-       assert_eq!(events.len(), 2);
-       assert_eq!(events[0].item_id, "telemetry_diagtrack");
-       assert_eq!(events[0].status, "success");
-       assert_eq!(events[1].current_index, 2);
-       assert_eq!(events[1].total_count, 2);
-   }
-   ```
-
-#### Approach B: Tauri v2 Headless `mock_app` Context
-Tauri 2.0 provides native headless testing primitives when enabling `features = ["test"]` in `src-tauri/Cargo.toml`:
-```toml
-[dependencies]
-tauri = { version = "2.0.0", features = ["test"] }
-```
-In tests:
-```rust
-#[test]
-fn test_ipc_event_emission_with_mock_app() {
-    let app = tauri::test::mock_app();
-    let handle = app.handle();
-    
-    let (tx, rx) = std::sync::mpsc::channel();
-    handle.listen("optimization-progress", move |event| {
-        let payload: ProgressEvent = serde_json::from_str(event.payload()).unwrap();
-        tx.send(payload).unwrap();
-    });
-    
-    // Call command or execute with handle
-    // Assert rx.recv_timeout(...) receives emitted events
-}
-```
-
----
-
-## 4. Frontend Component Testing & Linting Strategy
-
-### 4.1 Lint Infrastructure
-Currently, `package.json` lacks an ESLint setup.
-**Recommendation**:
-- Add `eslint`, `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`.
-- Create `.eslintrc.cjs` configured for React TS + hooks.
-- Add script: `"lint": "eslint src --ext .ts,.tsx --max-warnings 0"`.
-
-### 4.2 Unit & Component Testing Setup (Vitest + React Testing Library)
-**Recommended Stack**:
-- `vitest`: Ultra-fast Vite-native test runner.
-- `@testing-library/react` & `@testing-library/jest-dom`: Component rendering & DOM assertions.
-- `jsdom`: Browser DOM environment simulation.
-
-**Configuration in `vite.config.ts`**:
-```typescript
-/// <reference types="vitest" />
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
-  },
-});
-```
-
-**Tauri IPC Mocking (`src/test/setup.ts`)**:
-```typescript
-import { vi } from 'vitest';
-import '@testing-library/jest-dom';
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async (cmd: string, args: any) => {
-    if (cmd === 'get_system_info') {
-      return {
-        osName: 'Windows 11 Pro',
-        osVersion: '23H2',
-        osBuild: '22631.3880',
-        isElevated: true,
-        cpuUsagePercent: 15,
-        memoryUsedMb: 4096,
-        memoryTotalMb: 16384,
-        telemetryStatus: 'Active',
-      };
+fn check_is_elevated() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("net");
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.arg("session")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
-    if (cmd === 'execute_optimizations') {
-      return {
-        success: true,
-        executedActions: [],
-        totalDurationMs: 150,
-        isDryRun: args?.dryRun ?? true,
-      };
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
     }
-    return null;
-  }),
-}));
+}
 ```
 
-**Example Component Test (`src/components/__tests__/OptimizationView.test.tsx`)**:
-- Test category tab selection (`Telemetry`, `Bloatware`, `Services`).
-- Test preset button application (`Recommended`, `Telemetry-Only`).
-- Test search filtering by keyword.
-- Test safety confirmation modal trigger when clicking "Execute Selected".
-- Test dry-run mode badge display.
+### 1.2 IPC Exposure to Frontend
+- **Command**: `get_system_info()` (lines 83–125 of `commands/mod.rs`)
+- **Data Structure**: `SystemInfo` struct (lines 13–24 of `commands/mod.rs` & `src/types/index.ts` lines 1–10)
+
+```typescript
+export interface SystemInfo {
+  osName: string;
+  osVersion: string;
+  osBuild: string;
+  isElevated: boolean;
+  cpuUsagePercent: number;
+  memoryUsedMb: number;
+  memoryTotalMb: number;
+  telemetryStatus: 'Active' | 'Minimized' | 'Disabled' | 'Unknown';
+}
+```
+
+- **Frontend Invocation**: `App.tsx` calls `invoke<SystemInfo>('get_system_info')` on mount (lines 30–45) and stores the result in Zustand (`useAppStore.ts`).
+
+### 1.3 Backend Privilege Enforcement Gap
+- The backend IPC handlers (`execute_optimizations`, `run_diagnostics`, `set_dns_server`, `backup_drivers`, `remove_uwp_app`, `winget_install`, `execute_odt_install`, `execute_activation`) **do not inspect `is_elevated` before invoking PowerShell or process commands**.
+- If a standard user triggers an action, PowerShell is spawned under the non-elevated user token, resulting in runtime PowerShell `Access is denied` or command failure exit codes (e.g. `sfc /scannow` returning error code 1).
+- Frontend UI guards are therefore critical to inform users before they attempt privileged operations.
 
 ---
 
-## 5. Summary Matrix of Verification Commands
+## 2. Feature Audit: Actions Requiring Administrator Rights
 
-| Scope | Purpose | Command | Status |
-|-------|---------|---------|--------|
-| Rust Backend | Type check / check | `cargo check` (in `src-tauri`) | ✅ Passing |
-| Rust Backend | Unit & Integration Tests | `cargo test` (in `src-tauri`) | ✅ Passing (25/25) |
-| React Frontend | TypeScript Type Check | `npx tsc --noEmit` | ✅ Passing (0 errors) |
-| React Frontend | Production Bundle Build | `npm run build` | ✅ Passing (2.77s) |
-| React Frontend | Component Tests (Proposed) | `npm run test` (`vitest run`) | Recommended setup |
-| React Frontend | Linter Check (Proposed) | `npm run lint` (`eslint`) | Recommended setup |
+The table below lists all feature actions in WiScripts Windows and their exact privilege requirements:
+
+| Feature / Action | Underlying System Operation / Script | Privilege Required | Impact of Non-Elevated Run |
+|---|---|---|---|
+| **System File Checker (SFC)** | `sfc /scannow` | **Administrator** | Fails with "You must be an administrator running a console session." |
+| **DISM RestoreHealth** | `Dism /Online /Cleanup-Image /RestoreHealth` | **Administrator** | Fails with DISM Error 0x800f0806 / Access Denied. |
+| **Network Stack Reset** | `netsh winsock reset; netsh int ip reset; Clear-DnsClientCache` | **Administrator** | `netsh` fails with "The requested operation requires elevation (Run as administrator)". |
+| **UWP Bloatware Removal** | `Remove-AppxPackage -Package <FullName>` / `Remove-AppxProvisionedPackage` | **Administrator** | Provisioned and multi-user AppX packages fail with Access Denied. |
+| **WinGet System Installs** | `winget install --id ...` / `winget upgrade --id ...` | **Administrator** (for machine-wide MSI/EXE) | Machine-wide installers fail or request UAC elevation dialog. |
+| **DNS Server Switcher** | `Set-DnsClientServerAddress -InterfaceAlias ... -ServerAddresses ...` | **Administrator** | Fails with PowerShell `PermissionDenied` error on network adapter. |
+| **Classic Context Menu Toggle** | `New-Item -Path 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32'` | Standard User (HKCU) | Succeeds for HKCU, but full Explorer restarts may require elevated rights. |
+| **Driver Backup Export** | `Export-WindowsDriver -Online -Destination <path>` | **Administrator** | Fails with "Export-WindowsDriver requires administrative privileges". |
+| **Service Optimization** | `Stop-Service -Name DiagTrack; Set-Service -Name DiagTrack -StartupType Disabled` | **Administrator** | Fails with `Cannot open DiagTrack service on computer '.'` (Access Denied). |
+| **Scheduled Tasks Tweak** | `Disable-ScheduledTask -TaskPath '\Microsoft\Windows\...'` | **Administrator** | Fails with `Access is denied`. |
+| **HKLM Registry Hardening** | `Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\...'` | **Administrator** | Fails with `Requested registry access is not allowed`. |
+| **HKCU UI Tweaks** | `Set-ItemProperty -Path 'HKCU:\Software\Microsoft\...'` | Standard User (HKCU) | Succeeds (user hive modification). |
+| **Disk Cleanup (Temp & DO)** | `Remove-Item "$env:SystemRoot\Temp\*"` & `Delete-DeliveryOptimizationCache` | **Administrator** | Deleting `C:\Windows\Temp` and DO cache fails due to permissions. |
+| **Optimization Profiles** | Batch execution of Service, HKLM, AppX, and Task rules | **Administrator** | Partial failure (HKCU rules succeed, HKLM/Service rules fail). |
+| **Office ODT Deployment** | `Setup.exe /configure configuration.xml` | **Administrator** | Setup binary fails to write to Program Files or create Office services. |
+| **MAS Activation** | `irm https://get.activated.win \| iex` (HWID / Ohook / KMS38) | **Administrator** | License ticket generation and SPP service hooks fail. |
+
+---
+
+## 3. Current React UI Elevation Check Audit (`src/components/`)
+
+We audited all 14 React components in `src/components/`:
+
+| Component File | Checks `systemInfo?.isElevated`? | Current UI Presentation | Identified UI Defect / Gap |
+|---|---|---|---|
+| `Navigation.tsx` | YES | Sidebar bottom card displays `ShieldCheck` + `Elevated Privileges` OR `ShieldAlert` + `Standard User`. | Informational only. Bottom of sidebar has low visual prominence when viewing main content. |
+| `Header.tsx` | NO | Displays CPU/RAM stats, Safety Dry-Run toggle, Refresh button. | **No elevation status badge or warning** in top header bar. |
+| `Dashboard.tsx` | NO | Displays readiness card, CPU/RAM, Telemetry status, rule preview. | **No warning banner** when standard user. "Apply Recommended Presets" button is active. |
+| `OptimizationView.tsx` | NO | Rule catalog, search, category tabs, "Execute Selected" button. | **No elevation warning banner**. "Execute Selected" button is enabled for standard users. |
+| `PackageManagerView.tsx` | NO | WinGet search/install and UWP debloater list/uninstall. | **No elevation warning banner**. Uninstall and Install buttons remain enabled. |
+| `PresetsView.tsx` | NO | Profile cards with "Apply Profile" buttons. | **No elevation warning banner**. "Apply Profile" buttons remain enabled. |
+| `DnsContextMenuView.tsx` | NO | Classic menu toggle and DNS provider cards. | **No elevation warning banner**. "Set DNS" buttons remain enabled. |
+| `DriverBackupView.tsx` | YES | Secondary card displays `Elevated Administrator` vs `Standard User` badge. | Card shows status, but **"Start Driver Backup" execution button is STILL ENABLED**. |
+| `DiagnosticsView.tsx` | YES | Metric card 3 displays `Elevated (Admin)` vs `Standard Privileges`. | Metric card shows status, but **"Run SFC Scan", "Run DISM Repair", "Reset Network Stack" buttons REMAIN ENABLED**. |
+| `OdtView.tsx` | NO | XML configurator and "Deploy Office" button. | **No elevation warning banner**. "Deploy Office" button remains enabled. |
+| `MasView.tsx` | NO | Method cards (HWID, Ohook, KMS38) and "Activate" button. | **No elevation warning banner**. "Activate" button remains enabled. |
+| `SafetyConfirmationModal.tsx` | NO | Risk level, dry-run toggle, command list, confirm input. | **Does NOT show elevation warning** before user confirms live execution. |
+| `ExecutionProgressModal.tsx` | NO | Progress bar, step counter, live console. | Shows dry-run mode, but does not display privilege status. |
+| `SettingsView.tsx` | NO | Safety toggle, environment info, theme specs, credits. | Shows environment info, but no privilege elevation indicator. |
+
+---
+
+## 4. UI Design Requirements for Elevation Warnings
+
+To maintain strict alignment with the **Refined Minimal (Linear/Stripe style)** design system, all elevation warning UI elements must utilize subtle hairlines (`1px solid`), deep background tones, `6px` border radii, tabular monospaced indicators (Geist Mono), and distinct status colors (`text-status-warning`, `bg-status-warningSubtle`, `border-status-warning/30`).
+
+### 4.1 Specification 1: Header Privilege Status Pill (`Header.tsx`)
+- **Location**: In top `<Header />` component between CPU/RAM stats and Safety Dry-Run toggle.
+- **Behavior**:
+  - When `systemInfo?.isElevated === true`:
+    ```tsx
+    <div className="flex items-center gap-1.5 bg-surface-subtle border border-border-subtle rounded-[6px] px-3 py-1 text-xs">
+      <ShieldCheck className="h-3.5 w-3.5 text-status-success" />
+      <span className="text-[11px] font-medium text-text-secondary font-mono">Admin Elevated</span>
+    </div>
+    ```
+  - When `systemInfo?.isElevated === false`:
+    ```tsx
+    <div className="flex items-center gap-1.5 bg-status-warningSubtle border border-status-warning/30 rounded-[6px] px-3 py-1 text-xs" title="Running with standard user rights. Administrative tasks require elevation.">
+      <ShieldAlert className="h-3.5 w-3.5 text-status-warning shrink-0" />
+      <span className="text-[11px] font-semibold text-status-warning font-mono">Standard User (Limited)</span>
+    </div>
+    ```
+
+### 4.2 Specification 2: Reusable View Elevation Warning Banner
+- **Component Design**: `AdminElevationBanner.tsx`
+- **Container**: `rounded-[6px] border border-status-warning/40 bg-status-warningSubtle/40 p-3.5 flex items-center justify-between gap-3 text-xs`
+- **JSX Spec**:
+  ```tsx
+  {systemInfo && !systemInfo.isElevated && (
+    <div className="rounded-[6px] border border-status-warning/40 bg-status-warningSubtle/40 p-3.5 flex items-center justify-between gap-3 text-xs mb-4">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <ShieldAlert className="h-4 w-4 text-status-warning shrink-0" />
+        <div className="text-text-primary">
+          <span className="font-semibold text-status-warning">Administrator Elevation Required:</span>{' '}
+          WiScripts is running under a Standard User account. System-wide changes (Services, Registry, SFC/DISM, DNS, Drivers) require Administrator rights.
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 font-mono text-[10px] uppercase text-status-warning bg-status-warning/10 px-2.5 py-1 rounded border border-status-warning/30">
+        Non-Elevated Session
+      </div>
+    </div>
+  )}
+  ```
+- **Placement**: Top of `OptimizationView.tsx`, `PackageManagerView.tsx`, `PresetsView.tsx`, `DnsContextMenuView.tsx`, `DriverBackupView.tsx`, `DiagnosticsView.tsx`, `OdtView.tsx`, and `MasView.tsx`.
+
+### 4.3 Specification 3: Execution Button Warning Badges & States
+- When `isElevated === false` and `dryRunMode === false`:
+  - Action buttons (`Execute Selected`, `Start Driver Backup`, `Run SFC Scan`, `Set DNS Server`, `Deploy Office`, `Activate (MAS)`, `Apply Profile`) should feature a subtle warning badge/icon (`<ShieldAlert className="h-3.5 w-3.5 text-status-warning" />`) or display a tooltip warning `Requires Administrator privileges unless running in Safety Dry-Run mode`.
+  - Alternatively, buttons can be disabled with tooltip:
+    ```tsx
+    disabled={isExecuting || (!systemInfo?.isElevated && !dryRunMode)}
+    ```
+
+### 4.4 Specification 4: Safety Confirmation Modal Integration (`SafetyConfirmationModal.tsx`)
+- **Location**: Inside modal body, above command disclosure box.
+- **Condition**: Renders when `!systemInfo?.isElevated`.
+- **JSX Spec**:
+  ```tsx
+  {!systemInfo?.isElevated && (
+    <div className="rounded-[6px] border border-status-warning/40 bg-status-warningSubtle/50 p-3 flex items-start gap-2.5 text-xs text-status-warning">
+      <ShieldAlert className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
+      <div>
+        <div className="font-semibold">Standard User Privileges Detected</div>
+        <div className="text-[11px] text-text-secondary mt-0.5">
+          {dryRunMode
+            ? 'Safety Dry-Run is active. Commands will be simulated without requiring elevation.'
+            : 'Live execution will likely fail with Windows Access Denied errors unless WiScripts is restarted as Administrator.'}
+        </div>
+      </div>
+    </div>
+  )}
+  ```
+
+---
+
+## 5. Verification Method
+
+1. **Backend Verification**:
+   - Inspect `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\src\commands\mod.rs` lines 26–44 to verify `check_is_elevated()` implementation.
+2. **Frontend Verification**:
+   - Run `npm test` or UI empirical test script `npx ts-node src/tests/m3_views_empirical.ts` to confirm component render integrity.
+3. **Execution State Verification**:
+   - Launch application in standard user mode vs elevated administrator mode to verify `systemInfo.isElevated` value propagation.

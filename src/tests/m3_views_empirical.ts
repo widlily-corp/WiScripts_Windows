@@ -38,11 +38,11 @@ async function runEmpiricalTests() {
 
   // Test 2: Dry Run Mode Toggle
   console.log('\n[Test 2] Global Dry Run Mode Toggle');
+  assert(useAppStore.getState().dryRunMode === false, 'Default dry run mode is false');
   useAppStore.getState().setDryRunMode(true);
   assert(useAppStore.getState().dryRunMode === true, 'Dry run mode enabled');
   useAppStore.getState().setDryRunMode(false);
   assert(useAppStore.getState().dryRunMode === false, 'Dry run mode disabled');
-  useAppStore.getState().setDryRunMode(true); // reset to safety default
 
   // Test 3: R1 Diagnostics State & Executing Flags
   console.log('\n[Test 3] Feature R1: Diagnostics Execution');
@@ -116,8 +116,13 @@ async function runEmpiricalTests() {
   // Reset path to default
   useAppStore.getState().setDriverBackupPath('C:\\DriverBackup');
 
+  // Test 8: Elevation Check State
+  console.log('\n[Test 8] Elevation Check State & Action');
+  assert(typeof useAppStore.getState().isElevated === 'boolean', 'isElevated state property exists as boolean');
+  assert(typeof useAppStore.getState().checkElevation === 'function', 'checkElevation action exists');
+
   console.log('\n====================================================');
-  console.log(' ALL 7 EMPIRICAL TESTS PASSED SUCCESSFULLY! 🎉');
+  console.log(' ALL 8 EMPIRICAL TESTS PASSED SUCCESSFULLY! 🎉');
   console.log('====================================================\n');
 }
 

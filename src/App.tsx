@@ -24,16 +24,18 @@ export function App() {
   const setGeneratedXml = useAppStore((s) => s.setGeneratedXml);
   const addLog = useAppStore((s) => s.addLog);
   const setSystemInfo = useAppStore((s) => s.setSystemInfo);
+  const checkElevation = useAppStore((s) => s.checkElevation);
 
-  // Fetch real system information on mount
+  // Fetch real system information & check elevation on mount
   useEffect(() => {
     async function fetchSystemInfoOnMount() {
       try {
+        await checkElevation();
         const info = await invoke<SystemInfo>('get_system_info');
         setSystemInfo(info);
         addLog({
           level: 'info',
-          message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB`,
+          message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${info.isElevated})`,
         });
       } catch (err) {
         addLog({
@@ -43,7 +45,7 @@ export function App() {
       }
     }
     fetchSystemInfoOnMount();
-  }, [setSystemInfo, addLog]);
+  }, [setSystemInfo, checkElevation, addLog]);
 
   // Generate ODT XML preview when odtConfig changes
   useEffect(() => {

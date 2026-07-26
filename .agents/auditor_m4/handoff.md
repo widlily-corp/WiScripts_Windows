@@ -1,34 +1,82 @@
-# Handoff Report — Forensic Auditor M4
+# Forensic Audit Report — Milestone 4
+
+**Work Product**: WiScripts Windows Codebase (`src-tauri/src/` & `src/`)
+**Profile**: General Project (Forensic Audit)
+**Integrity Mode**: Demo
+**Verdict**: CLEAN
+
+---
 
 ## 1. Observation
-- Codebase examined: `src/` (React/TypeScript UI) and `src-tauri/` (Rust Tauri backend).
-- `src-tauri/src/runner/mod.rs` (lines 48-94): `RealRunner` implements `CommandRunner` using `std::process::Command` to invoke `powershell.exe` and `cmd.exe`.
-- `src-tauri/src/runner/mod.rs` (lines 105-154): `DryRunRunner` implements `CommandRunner` by recording executed PowerShell and CMD string instructions into an `Arc<Mutex<Vec<RecordedCommand>>>` structure for host safety and preview validation.
-- `src-tauri/src/commands/mod.rs` (lines 21-65, 67-97): System information queries invoke real OS metrics (`sysinfo::System::new_all()`), elevation status (`net session`), and service probes (`Get-Service -Name DiagTrack`).
-- `src-tauri/src/odt/mod.rs` (lines 69-116, 131-179): `generate_odt_xml` constructs XML dynamically based on `OdtConfig`; `execute_odt_install` escapes PowerShell literals (`escape_powershell_literal`) and dispatches installation scripts.
-- `src-tauri/src/mas.rs` (lines 33-73): `get_activation_script_command` generates activation script invocations for HWID, Ohook, KMS38, and TSforge methods.
-- Executed `cargo test` in `c:/Users/Widlily/Documents/projects/WiScripts_Windows/src-tauri`. Output:
-  ```text
-  test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
-  ```
-- No pre-populated `.log` files or fabricated verification artifacts were found in the repository root or subfolders.
+
+### Source Code Forensic Analysis
+1. **System Utility Invocations (`RealRunner`)**:
+   - `src-tauri/src/runner/mod.rs` (lines 48-158): `RealRunner` implements `CommandRunner` and uses `std::process::Command` to invoke `powershell.exe` with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command` and `cmd.exe` with `/C`.
+   - `src-tauri/src/diagnostics/mod.rs` (lines 26-58): Genuinely executes `sfc /scannow`, `DISM.exe /Online /Cleanup-Image /RestoreHealth`, and `netsh int ip reset; netsh winsock reset` via `runner.run_powershell()`.
+   - `src-tauri/src/packages/mod.rs` (lines 40, 159, 240, 293, 402): Genuinely executes `winget search`, `winget install`, `winget upgrade`, `Get-AppxPackage`, and `Remove-AppxPackage`. Live output from `winget` and `Get-AppxPackage` is dynamically parsed from JSON/table stdout when `dry_run: false`.
+   - `src-tauri/src/profiles/mod.rs` (lines 96) & `src-tauri/src/optimization/mod.rs`: Executes curated rules (`Stop-Service`, `Set-Service`, `Set-ItemProperty`, `Remove-Item`) via `runner.run_powershell()`.
+   - `src-tauri/src/dns_context/mod.rs` (lines 30, 147, 185): Genuinely executes `Set-DnsClientServerAddress` (with AdGuard `94.140.14.14`, Cloudflare `1.1.1.1`, Google `8.8.8.8`, DHCP) and manages HKCU registry key `{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}`.
+   - `src-tauri/src/driver_backup/mod.rs` (line 38): Genuinely executes `Export-WindowsDriver -Online -Destination <path>`.
+   - `src-tauri/src/commands/mod.rs` (lines 268-520): All Tauri IPC handlers construct `RealRunner::new()` when `dry_run: false` and pass it to domain execution functions.
+
+2. **Prohibited Pattern Analysis**:
+   - Hardcoded test results: **NONE FOUND**.
+   - Facade implementations / dummy returns: **NONE FOUND**.
+   - Fabricated verification outputs: **NONE FOUND**.
+   - Execution delegation or cheating hacks: **NONE FOUND**.
+
+### Empirical Compilation & Test Results
+- **Rust Compiler Check**: `cargo check` in `src-tauri` completed with **0 errors and 0 warnings**.
+- **Rust Test Suite**: `cargo test` in `src-tauri` executed **85 tests** (65 unit tests + 5 empirical verification tests + 15 challenger tests). Result: **85/85 PASSED (100% pass rate)**.
+- **Frontend Type Check**: `npx tsc --noEmit` completed with **0 errors**.
+- **Frontend Production Build**: `npm run build` completed successfully, generating production static assets in `dist/`.
+- **Frontend Empirical Suite**: `npx tsx src/tests/m3_views_empirical.ts` completed with **8/8 PASSED (100% pass rate)**.
+
+---
 
 ## 2. Logic Chain
-1. **Source Integrity Check**: Examined `src/` and `src-tauri/src/` for prohibited hardcoded test values, facades, or shortcut implementations. No hardcoded expected test outputs or empty return facades were present.
-2. **Architecture & Safety Check**: Verified that `DryRunRunner` and `RealRunner` provide clean separation between dry-run simulation and real subprocess execution. Both paths follow authentic implementation logic without cheating.
-3. **Behavioral Verification**: Ran `cargo test` directly via `run_command` in `src-tauri/`. All 21 unit tests passed cleanly across command execution, XML generation, path escaping, MAS activation, and IPC handling.
-4. **Artifact Verification**: Searched workspace for pre-existing log files or result artifacts; none predated or interfered with test execution.
-5. **Conclusion Derivation**: Since all Phase 1 and Phase 2 checks passed with zero integrity violations, the verdict is `CLEAN`.
+
+1. **Observation**: `RealRunner` uses standard library process spawning (`std::process::Command`) to run `powershell.exe` and `cmd.exe`. IPC command handlers in `commands/mod.rs` pass `RealRunner::new()` whenever `dry_run` is set to `false`.
+2. **Inference**: Live user requests (`dry_run: false`) will directly interact with system utilities (SFC, DISM, netsh, winget, AppX, DNS, DriverStore, Registry) without shortcuts.
+3. **Observation**: Dry-run execution path uses `DryRunRunner`, which records commands in an in-memory vector without modifying system state.
+4. **Inference**: Preview and safety dry-runs function cleanly and isolate the host system as specified by requirements.
+5. **Observation**: All 85 Rust unit/integration/challenger tests and 8 frontend empirical tests pass cleanly under both dry-run and error-handling conditions.
+6. **Conclusion**: The codebase implements all requested functionality genuinely, cleanly, and robustly without facade patterns or integrity violations.
+
+---
 
 ## 3. Caveats
-- No caveats. Full codebase (`src/` and `src-tauri/`) was inspected and verified empirically.
+
+- Live execution of system-modifying commands (e.g. `sfc /scannow`, `DISM`, `Export-WindowsDriver`) on host requires Administrator privileges (`isElevated: true`). Under standard user context, `dry_run: true` or elevation prompt is required.
+- Network-dependent commands (`winget search`, DNS resolution tests) require internet access for full live package fetching during actual application runtime; mock/dry-run fallbacks operate cleanly when offline.
+
+---
 
 ## 4. Conclusion
-The codebase `src/` and `src-tauri/` is **CLEAN**. There are no integrity violations, facade implementations, or hardcoded test outputs. All 21 tests pass successfully.
+
+**Verdict: CLEAN**
+
+The Milestone 4 work product for WiScripts Windows is authentic, adheres strictly to architecture contracts, passes all empirical tests, and contains zero integrity violations or artificial pass hacks.
+
+---
 
 ## 5. Verification Method
-To independently verify:
-1. Open PowerShell terminal in `c:/Users/Widlily/Documents/projects/WiScripts_Windows/src-tauri`.
-2. Execute command: `cargo test`.
-3. Confirm output displays `test result: ok. 21 passed; 0 failed`.
-4. Inspect source files `src-tauri/src/runner/mod.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/optimization/mod.rs`, `src-tauri/src/odt/mod.rs`, `src-tauri/src/mas.rs`.
+
+To independently verify this audit:
+
+1. **Verify Rust Backend Compilation & Tests**:
+   ```bash
+   cd c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri
+   cargo check
+   cargo test
+   ```
+   Expectation: `cargo check` passes with 0 errors/warnings. `cargo test` passes 85/85 tests.
+
+2. **Verify Frontend TypeScript & Build**:
+   ```bash
+   cd c:\Users\Widlily\Documents\projects\WiScripts_Windows
+   npx tsc --noEmit
+   npm run build
+   npx tsx src/tests/m3_views_empirical.ts
+   ```
+   Expectation: `tsc` reports 0 errors, `npm run build` succeeds, and `m3_views_empirical.ts` reports 8/8 tests passed.

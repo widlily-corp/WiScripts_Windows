@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import {
   Globe,
   MousePointer,
@@ -63,6 +64,7 @@ export function DnsContextMenuView() {
   const [isTogglingMenu, setIsTogglingMenu] = useState(false);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const selectedDnsProvider = useAppStore((s) => s.selectedDnsProvider);
   const setSelectedDnsProvider = useAppStore((s) => s.setSelectedDnsProvider);
@@ -77,8 +79,10 @@ export function DnsContextMenuView() {
     fetchClassicContextMenuStatus();
   }, [fetchClassicContextMenuStatus]);
 
+  const isDnsButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   const handleApplyDns = async (providerId: string) => {
-    if (isExecuting) return;
+    if (isDnsButtonDisabled) return;
     setActiveDnsAction(providerId);
     setSelectedDnsProvider(providerId);
     try {
@@ -118,6 +122,9 @@ export function DnsContextMenuView() {
           </span>
         )}
       </div>
+
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="System DNS Resolver Configuration" />
 
       {/* Section 1: Win11 Classic Context Menu Manager */}
       <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
@@ -265,8 +272,9 @@ export function DnsContextMenuView() {
 
                 <button
                   onClick={() => handleApplyDns(dns.id)}
-                  disabled={isExecuting}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] text-xs font-medium transition-opacity shadow-sm ${
+                  disabled={isDnsButtonDisabled}
+                  title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] text-xs font-medium transition-opacity shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
                     isSelected
                       ? 'bg-brand text-white hover:bg-brand-hover'
                       : 'bg-surface-subtle border border-border text-text-primary hover:bg-surface-hover'

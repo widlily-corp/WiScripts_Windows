@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { ExecutionLog } from '../types';
 import {
   Terminal,
@@ -25,6 +26,7 @@ import {
 
 export function DiagnosticsView() {
   const systemInfo = useAppStore((s) => s.systemInfo);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const logs = useAppStore((s) => s.logs);
   const clearLogs = useAppStore((s) => s.clearLogs);
   const runDiagnostics = useAppStore((s) => s.runDiagnostics);
@@ -37,7 +39,7 @@ export function DiagnosticsView() {
   const [activeAction, setActiveAction] = useState<string | null>(null);
 
   const handleRunDiagnostic = async (action: string) => {
-    if (isExecuting) return;
+    if (isExecuting || (!isElevated && !dryRunMode)) return;
     setActiveAction(action);
     try {
       await runDiagnostics(action);
@@ -81,6 +83,8 @@ export function DiagnosticsView() {
     setTimeout(() => setCopiedLogs(false), 2000);
   };
 
+  const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
       {/* Header */}
@@ -113,6 +117,9 @@ export function DiagnosticsView() {
         </div>
       </div>
 
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Diagnostics & System Repair (SFC, DISM, Network Reset)" />
+
       {/* R1 Repair & Diagnostics Action Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* SFC Card */}
@@ -135,7 +142,8 @@ export function DiagnosticsView() {
           </div>
           <button
             onClick={() => handleRunDiagnostic('sfc_scannow')}
-            disabled={isExecuting}
+            disabled={isButtonDisabled}
+            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           >
             {activeAction === 'sfc_scannow' ? (
@@ -172,7 +180,8 @@ export function DiagnosticsView() {
           </div>
           <button
             onClick={() => handleRunDiagnostic('dism_restorehealth')}
-            disabled={isExecuting}
+            disabled={isButtonDisabled}
+            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           >
             {activeAction === 'dism_restorehealth' ? (
@@ -209,7 +218,8 @@ export function DiagnosticsView() {
           </div>
           <button
             onClick={() => handleRunDiagnostic('reset_tcpip')}
-            disabled={isExecuting}
+            disabled={isButtonDisabled}
+            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
           >
             {activeAction === 'reset_tcpip' ? (

@@ -1,35 +1,38 @@
-# BRIEFING — 2026-07-23T18:56:15Z
+# BRIEFING — 2026-07-26T19:32:25Z
 
 ## Mission
-Investigate React frontend codebase in `src/` to understand UI navigation, Zustand store management, rule representation for presets, and design strategy for 5 module views.
+Investigate React frontend execution calls (views, Zustand store, types, App.tsx) to identify dry_run usage and details needed to enable real execution (dry_run: false).
 
 ## 🔒 My Identity
 - Archetype: Explorer
 - Roles: Frontend Investigator
-- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/explorer_m1_2
-- Original parent: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Milestone: Milestone 1
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\explorer_m1_2
+- Original parent: da3aa4d7-52d2-4524-9333-58934ac59a6d
+- Milestone: Milestone 1 - Real Backend Execution Integration
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement
-- Operational mode: CODE_ONLY (no external web search)
-- Write output to handoff.md and report to parent
+- Only write reports and analysis files in working directory `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\explorer_m1_2`
 
 ## Current Parent
-- Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Updated: 2026-07-23T18:56:15Z
+- Conversation ID: da3aa4d7-52d2-4524-9333-58934ac59a6d
+- Updated: 2026-07-26T19:32:25Z
 
 ## Investigation State
-- **Explored paths**: `src/App.tsx`, `src/components/*`, `src/store/useAppStore.ts`, `src/types/index.ts`, `src/hooks/useTauriCommand.ts`, `PROJECT.md`
-- **Key findings**: Complete mapping of navigation (`TabType`, `Navigation.tsx`, `Header.tsx`), Zustand store architecture (`useAppStore.ts`), presets integration schema, safety modal & task-progress listener flow, and Refined Minimal design strategy for R1-R5 features.
-- **Unexplored areas**: None (frontend investigation complete).
+- **Explored paths**: `src/components/`, `src/store/useAppStore.ts`, `src/types/index.ts`, `src/App.tsx`, `src-tauri/src/commands/mod.rs`
+- **Key findings**:
+  1. Frontend does NOT hardcode `dry_run: true`.
+  2. All store actions and view executions dynamically pass `dryRunMode` from `useAppStore`.
+  3. `dryRunMode` defaults to `true` in `useAppStore.ts` (line 347) and is persisted in `localStorage`.
+  4. Tauri IPC maps JS `dryRun` camelCase key to Rust `dry_run` parameter.
+  5. Required changes detailed in `analysis.md` and `handoff.md`.
+- **Unexplored areas**: None (investigation complete).
 
 ## Key Decisions Made
-- Investigated all React frontend source files and mapped exact extension design for R1-R5 module views.
-- Completed 5-component handoff report at `.agents/explorer_m1_2/handoff.md`.
+- Investigation completed and findings documented in `analysis.md` and `handoff.md`.
 
 ## Artifact Index
-- c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/explorer_m1_2/ORIGINAL_REQUEST.md — Original request log
-- c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/explorer_m1_2/BRIEFING.md — Working memory briefing
-- c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/explorer_m1_2/progress.md — Progress heartbeat log
-- c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/explorer_m1_2/handoff.md — 5-component detailed handoff report
+- ORIGINAL_REQUEST.md — Original task prompt
+- BRIEFING.md — Working briefing state
+- analysis.md — Detailed analysis report of frontend execution calls and required changes
+- handoff.md — 5-component handoff report

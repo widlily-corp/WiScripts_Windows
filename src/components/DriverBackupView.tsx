@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import {
   HardDrive,
   Folder,
@@ -23,14 +24,17 @@ export function DriverBackupView() {
   const [lastExportResult, setLastExportResult] = useState<string | null>(null);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const systemInfo = useAppStore((s) => s.systemInfo);
   const driverBackupPath = useAppStore((s) => s.driverBackupPath);
   const setDriverBackupPath = useAppStore((s) => s.setDriverBackupPath);
   const backupDrivers = useAppStore((s) => s.backupDrivers);
 
+  const isButtonDisabled = isExecuting || isExporting || !driverBackupPath.trim() || (!isElevated && !dryRunMode);
+
   const handleStartBackup = async () => {
-    if (!driverBackupPath.trim() || isExecuting) return;
+    if (!driverBackupPath.trim() || isExecuting || (!isElevated && !dryRunMode)) return;
     setIsExporting(true);
     setLastExportResult(null);
     try {
@@ -68,6 +72,9 @@ export function DriverBackupView() {
         )}
       </div>
 
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Export-WindowsDriver Device Driver Backup" />
+
       {/* Main Backup Form Card */}
       <div className="rounded-[6px] border border-border bg-surface p-5 space-y-5">
         <div className="space-y-2">
@@ -87,8 +94,9 @@ export function DriverBackupView() {
             </div>
             <button
               onClick={handleStartBackup}
-              disabled={isExecuting || isExporting || !driverBackupPath.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 transition-opacity shadow-sm"
+              disabled={isButtonDisabled}
+              title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+              className="flex items-center gap-2 px-5 py-2 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
             >
               {isExporting ? (
                 <>

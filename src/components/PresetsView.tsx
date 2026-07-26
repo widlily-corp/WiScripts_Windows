@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { OptimizationProfile } from '../types';
 import {
   Sparkles,
@@ -23,6 +24,7 @@ export function PresetsView() {
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const profiles = useAppStore((s) => s.optimizationProfiles);
   const isLoadingProfiles = useAppStore((s) => s.isLoadingProfiles);
@@ -36,8 +38,10 @@ export function PresetsView() {
     }
   }, [profiles.length, isLoadingProfiles, fetchOptimizationProfiles]);
 
+  const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   const handleApplyProfile = async (profileId: string) => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
     setActiveProfileId(profileId);
     try {
       await applyOptimizationProfile(profileId);
@@ -66,6 +70,9 @@ export function PresetsView() {
           </span>
         )}
       </div>
+
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Curated 1-Click Optimization Profiles" />
 
       {isLoadingProfiles ? (
         <div className="py-20 flex flex-col items-center justify-center gap-3 text-text-muted text-xs">
@@ -125,8 +132,9 @@ export function PresetsView() {
                 {/* Apply Button */}
                 <button
                   onClick={() => handleApplyProfile(profile.id)}
-                  disabled={isExecuting}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 transition-opacity shadow-sm"
+                  disabled={isButtonDisabled}
+                  title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[6px] bg-brand text-xs font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-sm"
                 >
                   {isRunning ? (
                     <>

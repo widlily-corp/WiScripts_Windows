@@ -34,7 +34,9 @@ interface AppState {
 
   // System Info State
   systemInfo: SystemInfo | null;
+  isElevated: boolean;
   isSystemLoading: boolean;
+  checkElevation: () => Promise<boolean>;
   setSystemInfo: (info: SystemInfo) => void;
   setSystemLoading: (loading: boolean) => void;
 
@@ -53,7 +55,7 @@ interface AppState {
   setOptimizations: (items: OptimizationItem[]) => void;
 
   // Feature R1: Diagnostics
-  runDiagnostics: (action: string) => Promise<ExecutionSummary | null>;
+  runDiagnostics: (action: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // Feature R2: Package & Bloatware Manager
   wingetPackages: WingetPackage[];
@@ -61,30 +63,30 @@ interface AppState {
   uwpApps: UwpAppInfo[];
   isUwpLoading: boolean;
   wingetSearch: (query: string) => Promise<WingetPackage[]>;
-  wingetInstall: (packageId: string) => Promise<ExecutionSummary | null>;
-  wingetUpdate: (packageId: string) => Promise<ExecutionSummary | null>;
+  wingetInstall: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+  wingetUpdate: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
   fetchUwpApps: () => Promise<UwpAppInfo[]>;
-  removeUwpApp: (packageFullName: string) => Promise<ExecutionSummary | null>;
+  removeUwpApp: (packageFullName: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // Feature R3: Optimization Presets / Profiles
   optimizationProfiles: OptimizationProfile[];
   isLoadingProfiles: boolean;
   fetchOptimizationProfiles: () => Promise<OptimizationProfile[]>;
-  applyOptimizationProfile: (profileId: string) => Promise<ExecutionSummary | null>;
+  applyOptimizationProfile: (profileId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // Feature R4: DNS & Context Menu Manager
   classicContextMenuEnabled: boolean;
   isContextMenuLoading: boolean;
   selectedDnsProvider: string;
   setSelectedDnsProvider: (provider: string) => void;
-  setDnsServer: (provider: string, interfaceAlias?: string) => Promise<ExecutionSummary | null>;
+  setDnsServer: (provider: string, interfaceAlias?: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
   fetchClassicContextMenuStatus: () => Promise<boolean>;
-  toggleClassicContextMenu: (enable: boolean) => Promise<ExecutionSummary | null>;
+  toggleClassicContextMenu: (enable: boolean, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // Feature R5: Driver Backup
   driverBackupPath: string;
   setDriverBackupPath: (path: string) => void;
-  backupDrivers: (outputDir: string) => Promise<ExecutionSummary | null>;
+  backupDrivers: (outputDir: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // ODT State
   odtConfig: OdtConfig;
@@ -344,7 +346,7 @@ export const useAppStore = create<AppState>()(
   devtools(
     persist(
       (set, get) => ({
-        dryRunMode: true,
+        dryRunMode: false,
         setDryRunMode: (enabled) => set({ dryRunMode: enabled }),
         activeTab: 'dashboard',
         setActiveTab: (tab) => set({ activeTab: tab }),
@@ -359,8 +361,18 @@ export const useAppStore = create<AppState>()(
           memoryTotalMb: 16384,
           telemetryStatus: 'Active',
         },
+        isElevated: true,
         isSystemLoading: false,
-        setSystemInfo: (info) => set({ systemInfo: info }),
+        checkElevation: async () => {
+          try {
+            const info = await invoke<SystemInfo>('get_system_info');
+            set({ systemInfo: info, isElevated: info.isElevated });
+            return info.isElevated;
+          } catch (err) {
+            return false;
+          }
+        },
+        setSystemInfo: (info) => set({ systemInfo: info, isElevated: info.isElevated }),
         setSystemLoading: (loading) => set({ isSystemLoading: loading }),
 
         optimizations: DEFAULT_OPTIMIZATIONS,
@@ -416,17 +428,18 @@ export const useAppStore = create<AppState>()(
         setOptimizations: (items) => set({ optimizations: items }),
 
         // Feature R1: Diagnostics
-        runDiagnostics: async (action: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        runDiagnostics: async (action: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
           addLog({
             level: 'cmd',
-            message: `Invoking run_diagnostics: ${action} (dryRun: ${dryRunMode})`,
+            message: `Invoking run_diagnostics: ${action} (dryRun: ${currentDryRun})`,
           });
           try {
             const summary = await invoke<ExecutionSummary>('run_diagnostics', {
               action,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -466,14 +479,15 @@ export const useAppStore = create<AppState>()(
           }
         },
 
-        wingetInstall: async (packageId: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        wingetInstall: async (packageId: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Installing Winget package "${packageId}" (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Installing Winget package "${packageId}" (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('winget_install', {
               packageId,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -489,14 +503,15 @@ export const useAppStore = create<AppState>()(
           }
         },
 
-        wingetUpdate: async (packageId: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        wingetUpdate: async (packageId: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Updating Winget package "${packageId}" (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Updating Winget package "${packageId}" (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('winget_update', {
               packageId,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -530,20 +545,21 @@ export const useAppStore = create<AppState>()(
           }
         },
 
-        removeUwpApp: async (packageFullName: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        removeUwpApp: async (packageFullName: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Removing UWP App: ${packageFullName} (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Removing UWP App: ${packageFullName} (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('remove_uwp_app', {
               packageFullName,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
               message: `Remove UWP ${packageFullName} result: ${summary.success ? 'Success' : 'Failed'}`,
             });
-            if (summary.success && !dryRunMode) {
+            if (summary.success && !currentDryRun) {
               set((state) => ({
                 uwpApps: state.uwpApps.filter((a) => a.packageFullName !== packageFullName),
               }));
@@ -580,14 +596,15 @@ export const useAppStore = create<AppState>()(
           }
         },
 
-        applyOptimizationProfile: async (profileId: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        applyOptimizationProfile: async (profileId: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Applying optimization profile "${profileId}" (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Applying optimization profile "${profileId}" (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('apply_optimization_profile', {
               profileId,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -610,18 +627,19 @@ export const useAppStore = create<AppState>()(
 
         setSelectedDnsProvider: (provider: string) => set({ selectedDnsProvider: provider }),
 
-        setDnsServer: async (provider: string, interfaceAlias?: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        setDnsServer: async (provider: string, interfaceAlias?: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
           addLog({
             level: 'cmd',
-            message: `Setting DNS provider: ${provider} (interface: ${interfaceAlias || 'All Active'}, dryRun: ${dryRunMode})`,
+            message: `Setting DNS provider: ${provider} (interface: ${interfaceAlias || 'All Active'}, dryRun: ${currentDryRun})`,
           });
           try {
             const summary = await invoke<ExecutionSummary>('set_dns_server', {
               provider,
               interfaceAlias: interfaceAlias || null,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -653,20 +671,21 @@ export const useAppStore = create<AppState>()(
           }
         },
 
-        toggleClassicContextMenu: async (enable: boolean) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        toggleClassicContextMenu: async (enable: boolean, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Toggling classic context menu: ${enable} (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Toggling classic context menu: ${enable} (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('toggle_classic_context_menu', {
               enable,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
               message: `Toggle classic context menu (${enable}) result: ${summary.success ? 'Success' : 'Failed'}`,
             });
-            if (summary.success && !dryRunMode) {
+            if (summary.success && !currentDryRun) {
               set({ classicContextMenuEnabled: enable });
             }
             return summary;
@@ -683,14 +702,15 @@ export const useAppStore = create<AppState>()(
         driverBackupPath: 'C:\\DriverBackup',
         setDriverBackupPath: (path: string) => set({ driverBackupPath: path }),
 
-        backupDrivers: async (outputDir: string) => {
-          const { dryRunMode, addLog, setIsExecuting } = get();
+        backupDrivers: async (outputDir: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
           setIsExecuting(true);
-          addLog({ level: 'cmd', message: `Exporting drivers to "${outputDir}" (dryRun: ${dryRunMode})` });
+          addLog({ level: 'cmd', message: `Exporting drivers to "${outputDir}" (dryRun: ${currentDryRun})` });
           try {
             const summary = await invoke<ExecutionSummary>('backup_drivers', {
               outputDir,
-              dryRun: dryRunMode,
+              dryRun: currentDryRun,
             });
             addLog({
               level: summary.success ? 'info' : 'error',
@@ -764,4 +784,5 @@ export const useAppStore = create<AppState>()(
     )
   )
 );
+
 

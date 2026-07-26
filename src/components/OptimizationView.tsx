@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { OptimizationCategory, PresetType, ExecutionSummary } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -42,6 +43,7 @@ export function OptimizationView() {
   const deselectAllOptimizations = useAppStore((s) => s.deselectAllOptimizations);
   const applyPreset = useAppStore((s) => s.applyPreset);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const openSafetyModal = useAppStore((s) => s.openSafetyModal);
   const addLog = useAppStore((s) => s.addLog);
   const isExecuting = useAppStore((s) => s.isExecuting);
@@ -63,8 +65,10 @@ export function OptimizationView() {
   const selectedRules = optimizations.filter((o) => o.isSelected);
   const selectedCount = selectedRules.length;
 
+  const isButtonDisabled = selectedCount === 0 || isExecuting || (!isElevated && !dryRunMode);
+
   const handleExecuteSelected = () => {
-    if (selectedCount === 0 || isExecuting) return;
+    if (isButtonDisabled) return;
 
     const highestRisk = selectedRules.some((r) => r.riskLevel === 'high')
       ? 'high'
@@ -144,6 +148,8 @@ export function OptimizationView() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="System Optimization & Debloat Rule Execution" />
       {/* Header & Stats Banner */}
       <div className="rounded-[6px] border border-border bg-surface-subtle p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -168,9 +174,10 @@ export function OptimizationView() {
           </div>
           <button
             onClick={handleExecuteSelected}
-            disabled={selectedCount === 0 || isExecuting}
+            disabled={isButtonDisabled}
+            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
             className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium transition-all ${
-              selectedCount > 0 && !isExecuting
+              !isButtonDisabled
                 ? 'bg-brand text-white hover:bg-brand-hover shadow-sm'
                 : 'bg-surface-active text-text-muted cursor-not-allowed border border-border'
             }`}

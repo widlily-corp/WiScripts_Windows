@@ -1,6 +1,7 @@
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { MasMethod, ExecutionSummary } from '../types';
 import { KeyRound, ShieldCheck, ShieldAlert, Sparkles, CheckCircle2, Info, Lock, Play, Loader2 } from 'lucide-react';
 
@@ -60,6 +61,7 @@ export function MasView() {
   const selectedMasMethod = useAppStore((s) => s.selectedMasMethod);
   const setSelectedMasMethod = useAppStore((s) => s.setSelectedMasMethod);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const openSafetyModal = useAppStore((s) => s.openSafetyModal);
   const addLog = useAppStore((s) => s.addLog);
   const isExecuting = useAppStore((s) => s.isExecuting);
@@ -67,8 +69,10 @@ export function MasView() {
 
   const activeMethodDetail = ACTIVATION_METHODS.find((m) => m.id === selectedMasMethod) || ACTIVATION_METHODS[0];
 
+  const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   const handleActivate = () => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
 
     openSafetyModal({
       title: `Execute Activation via MAS (${selectedMasMethod})`,
@@ -132,9 +136,10 @@ export function MasView() {
         </div>
         <button
           onClick={handleActivate}
-          disabled={isExecuting}
+          disabled={isButtonDisabled}
+          title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
           className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium text-white transition-opacity shadow-sm ${
-            isExecuting
+            isButtonDisabled
               ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border opacity-50'
               : 'bg-brand hover:bg-brand-hover'
           }`}
@@ -147,6 +152,9 @@ export function MasView() {
           <span>{isExecuting ? `Activating (${selectedMasMethod})...` : `Activate (${selectedMasMethod})`}</span>
         </button>
       </div>
+
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Microsoft Activation Scripts (MAS)" />
 
       {/* Activation Method Selector Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

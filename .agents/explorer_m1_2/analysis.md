@@ -1,328 +1,85 @@
-# Frontend React UI Modal & Event Listener Analysis Report
+# React Frontend Execution & Dry-Run Integration Analysis
 
-## Executive Summary
-This report analyzes the Frontend React codebase in `src/` of the **WiScripts_Windows** project. It details the existing UI modal structure, state management, Tauri event listening capabilities, and provides a complete architectural design and code specification for a live execution progress modal (`ExecutionProgressModal`) with real-time `task-progress` event subscriptions, progress bar percentage calculation, highlighted error log streams, and an auto-scrolling log console.
-
----
-
-## 1. Inventory of Current Modal & Dialog Components
-
-| Component File Path | Component Name | Role & Description | Current Limitations |
-|---------------------|----------------|--------------------|---------------------|
-| `src/components/SafetyConfirmationModal.tsx` | `SafetyConfirmationModal` | Pre-execution safety check dialog triggered before running potentially risky commands. Features risk badges, dry-run safety toggle, collapsible command preview, and a type-to-confirm "CONFIRM" text input for critical tasks. | Only acts as a pre-execution confirmation prompt. Closes when execution starts (`onConfirmAction()`). Does NOT display real-time execution progress or streaming logs during task execution. |
-| `src/App.tsx` (line 73) | `App` Root | Global overlay container mounting `<SafetyConfirmationModal />` at the bottom of the viewport. | Does not currently mount an execution progress modal. |
+## 1. Overview & Objectives
+This analysis investigates the React frontend in `src/components/`, `src/store/`, `src/types/`, and `src/App.tsx` for Milestone 1 of WiScripts Windows. The objective is to analyze how execution buttons across UI views trigger backend commands and determine why executions are currently executing in dry-run mode or how to configure them for real execution (`dry_run: false`).
 
 ---
 
-## 2. Current State Management & Execution Flow
+## 2. Codebase Architecture & IPC Flow
 
-### State Definition (`src/store/useAppStore.ts`)
-The Zustand store (`useAppStore`) maintains execution-related state:
-
-```typescript
-// Relevant slices in AppState (src/store/useAppStore.ts):
-isExecuting: boolean;               // Line 60: true while an IPC command execution is active
-setIsExecuting: (executing: boolean) => void;
-executionProgress: number;          // Line 62: defined as 0, but NOT updated anywhere in views/hooks!
-logs: ExecutionLog[];                // Line 63: array of ExecutionLog objects
-addLog: (log: Omit<ExecutionLog, 'id' | 'timestamp'>) => void;
-clearLogs: () => void;
-```
-
-### Execution Flow in Current Views (`OptimizationView.tsx`, `MasView.tsx`, `OdtView.tsx`)
-1. User clicks **"Execute Selected"** / **"Activate"** / **"Deploy Office"**.
-2. View calls `openSafetyModal(...)` passing `onConfirmAction`.
-3. Inside `onConfirmAction`:
-   - `setIsExecuting(true)` is set.
-   - `invoke<ExecutionSummary>('execute_optimizations' | 'execute_activation' | 'execute_odt_install', ...)` is called.
-   - The call **blocks asynchronously** until the backend completely finishes the entire command execution batch.
-   - Upon promise resolution, the full batch `ExecutionSummary` is received and batch-appended to `logs`.
-   - `setIsExecuting(false)` is set in the `finally` block.
-4. **Issue Identified**: While the backend process is running (which can take seconds or minutes for long-running scripts like Office deployment or system debloat), the UI provides no modal feedback, step counts, or real-time streaming output to the user.
+### Frontend Architecture
+- **State Management**: Zustand store (`src/store/useAppStore.ts`) manages global state, including active tab, system info, execution logs, and the `dryRunMode` boolean flag.
+- **Type Definitions**: `src/types/index.ts` defines `ExecutionSummary`, `ExecutedAction`, `CommandOutput`, `SystemInfo`, `OptimizationProfile`, etc.
+- **Tauri IPC Binding**: `invoke` from `@tauri-apps/api/core` is used to send JSON payloads to Rust Tauri command handlers (`src-tauri/src/commands/mod.rs`).
+- **IPC Key Mapping**: Tauri automatically converts camelCase JavaScript keys (e.g., `{ dryRun: boolean }`) to Rust snake_case function parameters (`dry_run: bool`).
 
 ---
 
-## 3. Evaluation of `@tauri-apps/api/event` Imports
+## 3. Detailed Audit of Execution Views
 
-- **Current Status**: `@tauri-apps/api/event` is **NOT imported anywhere** in `src/`.
-- **Installed Version**: `@tauri-apps/api` v2.0.0 (verified in `package.json` line 13).
-- **Tauri v2 API Pattern**:
-  ```typescript
-  import { listen, UnlistenFn } from '@tauri-apps/api/event';
-  ```
-- **Function Signature**:
-  ```typescript
-  const unlisten: UnlistenFn = await listen<TPayload>(
-    eventName: string,
-    handler: (event: Event<TPayload>) => void
-  );
-  ```
+| View Component | File Location | Trigger Button / Action | Store Method / IPC Command | Current `dryRun` Argument Passing |
+| :--- | :--- | :--- | :--- | :--- |
+| **DiagnosticsView** | `src/components/DiagnosticsView.tsx:137,173,210` | "Run SFC Scan", "Run DISM Repair", "Reset Network Stack" | `runDiagnostics(action)` -> `invoke('run_diagnostics', { action, dryRun: dryRunMode })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **PackageManagerView** | `src/components/PackageManagerView.tsx:235,247,352` | "Install", "Upgrade" (WinGet), "Uninstall" (UWP) | `wingetInstall`, `wingetUpdate`, `removeUwpApp` -> `invoke('winget_install' / 'winget_update' / 'remove_uwp_app', { ..., dryRun: dryRunMode })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **PresetsView** | `src/components/PresetsView.tsx:127` | "Apply [Profile]" | `applyOptimizationProfile(id)` -> `invoke('apply_optimization_profile', { profileId, dryRun: dryRunMode })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **DnsContextMenuView** | `src/components/DnsContextMenuView.tsx:163,179,266` | "Enable Classic Menu", "Restore Win11 Modern Menu", "Set [DNS Provider]" | `toggleClassicContextMenu(enable)`, `setDnsServer(provider, interface)` -> `invoke('toggle_classic_context_menu' / 'set_dns_server', { ..., dryRun: dryRunMode })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **DriverBackupView** | `src/components/DriverBackupView.tsx:89` | "Start Driver Backup" | `backupDrivers(path)` -> `invoke('backup_drivers', { outputDir, dryRun: dryRunMode })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **OptimizationView** | `src/components/OptimizationView.tsx:170` | "Execute Selected (N)" | Opens `SafetyConfirmationModal` -> `invoke('execute_optimizations', { selectedKeys, dryRun: currentDryRun })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **OdtView** | `src/components/OdtView.tsx:137` | "Deploy Office" | Opens `SafetyConfirmationModal` -> `invoke('execute_odt_install', { config, dryRun: currentDryRun })` | Passes store state `dryRunMode` (defaults to `true`) |
+| **MasView** | `src/components/MasView.tsx:133` | "Activate ([Method])" | Opens `SafetyConfirmationModal` -> `invoke('execute_activation', { method, dryRun: currentDryRun })` | Passes store state `dryRunMode` (defaults to `true`) |
 
 ---
 
-## 4. Architectural Design for Live Execution Progress Component
+## 4. Findings on `dry_run` Handling
 
-### Target Event Data Interface (`src/types/index.ts`)
-```typescript
-export interface TaskProgressPayload {
-  task_id?: string;
-  current_step: number;
-  total_steps: number;
-  message: string;
-  status?: 'info' | 'warn' | 'error' | 'cmd' | 'success';
-  is_error?: boolean;
-}
-```
+1. **No Hardcoded `dry_run: true` in Calls**:
+   - The frontend does NOT hardcode `dry_run: true` or `dryRun: true` in tool invocations.
+   - All components and store methods dynamically fetch and send `dryRunMode` from `useAppStore`.
 
-### Proposed Component: `ExecutionProgressModal.tsx`
-File location: `src/components/ExecutionProgressModal.tsx`
+2. **Default Store Configuration**:
+   - In `src/store/useAppStore.ts` (line 347):
+     ```typescript
+     dryRunMode: true,
+     ```
+   - The store is initialized with `dryRunMode: true` by default.
 
-#### Key UI Features & Behavior:
-1. **Visibility Trigger**: Visible whenever `isExecuting === true` in `useAppStore`.
-2. **Event Subscription**: Inside a React `useEffect`, subscribes to the `'task-progress'` Tauri IPC event using `listen()`. Returns the `unlisten()` cleanup callback when `isExecuting` turns false or on unmount.
-3. **Progress Calculation**:
-   $$\text{Percentage} = \min\left(100, \text{Math.round}\left(\frac{\text{current\_step}}{\text{total\_steps}} \times 100\right)\right)$$
-4. **Auto-Scrolling Log Console**: Utilizes a React `useRef<HTMLDivElement>` attached to the log container. Upon every update to the logs array, triggers `scrollTop = scrollHeight`.
-5. **Error & Status Highlighting**:
-   - **Error (`is_error` or `level === 'error'`)**: Highlighted with `bg-status-dangerSubtle text-status-danger border-status-danger/30` and an `<AlertOctagon />` icon.
-   - **Warning (`level === 'warn'`)**: Highlighted with `bg-status-warningSubtle text-status-warning`.
-   - **Command (`level === 'cmd'`)**: Highlighted with `bg-brand-subtle text-brand` and a `<Terminal />` icon.
-   - **Success / Info (`level === 'info'` or `status === 'success'`)**: Standard code text color `#E5E7EB`.
+3. **LocalStorage Persistence**:
+   - In `src/store/useAppStore.ts` (lines 754-762):
+     ```typescript
+     partialize: (state) => ({
+       dryRunMode: state.dryRunMode,
+       ...
+     })
+     ```
+   - `dryRunMode` is saved in `localStorage` under key `'wiscripts-app-store'`. If a user or test previously loaded the application, `dryRunMode: true` remains saved until explicitly changed.
+
+4. **Direct Execution vs Safety Modal**:
+   - `OptimizationView`, `OdtView`, and `MasView` route actions through `SafetyConfirmationModal.tsx`, which displays a toggle checkbox allowing users to disable Dry-Run mode prior to confirming execution.
+   - `DiagnosticsView`, `PackageManagerView`, `PresetsView`, `DnsContextMenuView`, and `DriverBackupView` execute actions directly without popping up `SafetyConfirmationModal`. They rely purely on the current state of `dryRunMode` in `useAppStore`.
 
 ---
 
-## 5. Recommended Code Implementations
+## 5. Required Frontend Changes for Real Backend Execution (`dry_run: false`)
 
-### A. Store Update (`src/store/useAppStore.ts`)
-Add `setExecutionProgress` to `AppState` interface and state creator:
+To ensure user actions trigger real backend execution (`dry_run: false`) properly:
 
-```typescript
-// In AppState interface:
-setExecutionProgress: (progress: number) => void;
+1. **Update Default `dryRunMode` in Zustand Store**:
+   - In `src/store/useAppStore.ts` (line 347), change default `dryRunMode: true` to `dryRunMode: false` (or make it configurable via initial props/environment setting).
 
-// In store creator:
-executionProgress: 0,
-setExecutionProgress: (progress) => set({ executionProgress: progress }),
-```
+2. **Add Optional Parameter Overrides in Store Actions**:
+   - Enhance store actions in `src/store/useAppStore.ts` to accept an optional `dryRun?: boolean` parameter:
+     - `runDiagnostics: (action: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `wingetInstall: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `wingetUpdate: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `removeUwpApp: (packageFullName: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `applyOptimizationProfile: (profileId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `setDnsServer: (provider: string, interfaceAlias?: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `toggleClassicContextMenu: (enable: boolean, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+     - `backupDrivers: (outputDir: string, dryRun?: boolean) => Promise<ExecutionSummary | null>`
+   - Implementation logic: `const effectiveDryRun = dryRun ?? get().dryRunMode;`.
 
-### B. New Component Implementation (`src/components/ExecutionProgressModal.tsx`)
+3. **Consistency Across Views**:
+   - In `DiagnosticsView`, `PackageManagerView`, `PresetsView`, `DnsContextMenuView`, and `DriverBackupView`, ensure the UI visually reflects whether Live Execution or Safety Dry-Run is active (via the `Header.tsx` toggle switch or view-level indicators), or optionally wrap critical actions with `SafetyConfirmationModal`.
 
-```tsx
-import React, { useEffect, useRef, useState } from 'react';
-import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { useAppStore } from '../store/useAppStore';
-import { TaskProgressPayload, ExecutionLog } from '../types';
-import { Loader2, Terminal, AlertOctagon, CheckCircle2, Shield } from 'lucide-react';
-
-export function ExecutionProgressModal() {
-  const isExecuting = useAppStore((s) => s.isExecuting);
-  const executionProgress = useAppStore((s) => s.executionProgress);
-  const setExecutionProgress = useAppStore((s) => s.setExecutionProgress);
-  const dryRunMode = useAppStore((s) => s.dryRunMode);
-  const logs = useAppStore((s) => s.logs);
-  const addLog = useAppStore((s) => s.addLog);
-
-  const [currentStep, setCurrentStep] = useState(0);
-  const [totalSteps, setTotalSteps] = useState(0);
-  const [activeMessage, setActiveMessage] = useState('Initializing task execution...');
-  
-  const logConsoleRef = useRef<HTMLDivElement>(null);
-
-  // 1. Subscribe to 'task-progress' event from Tauri backend
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-
-    async function setupTaskListener() {
-      try {
-        unlisten = await listen<TaskProgressPayload>('task-progress', (event) => {
-          const { current_step, total_steps, message, status, is_error } = event.payload;
-
-          setCurrentStep(current_step);
-          setTotalSteps(total_steps);
-          setActiveMessage(message);
-
-          // Calculate percentage
-          const pct = total_steps > 0 ? Math.min(Math.round((current_step / total_steps) * 100), 100) : 0;
-          setExecutionProgress(pct);
-
-          // Add to central log stream
-          const logLevel = is_error ? 'error' : (status || 'info');
-          addLog({
-            level: logLevel,
-            message: `[Step ${current_step}/${total_steps}] ${message}`,
-          });
-        });
-      } catch (err) {
-        console.error('Failed to register task-progress listener:', err);
-      }
-    }
-
-    if (isExecuting) {
-      setExecutionProgress(0);
-      setCurrentStep(0);
-      setTotalSteps(0);
-      setActiveMessage('Task initiated...');
-      setupTaskListener();
-    }
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [isExecuting, setExecutionProgress, addLog]);
-
-  // 2. Auto-scroll behavior for live log stream
-  useEffect(() => {
-    if (logConsoleRef.current) {
-      logConsoleRef.current.scrollTop = logConsoleRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  if (!isExecuting) return null;
-
-  const isCompleted = executionProgress >= 100;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="progress-modal-title"
-    >
-      <div className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl animate-scale-in space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-brand-subtle text-brand border border-brand/30">
-              {isCompleted ? (
-                <CheckCircle2 className="h-5 w-5 text-status-success" />
-              ) : (
-                <Loader2 className="h-5 w-5 animate-spin text-brand" />
-              )}
-            </div>
-            <div>
-              <h3 id="progress-modal-title" className="text-base font-semibold text-text-primary">
-                {isCompleted ? 'Execution Complete' : 'Executing Task Operations...'}
-              </h3>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] font-mono text-text-muted">
-                  {dryRunMode ? 'Mode: Simulated (Dry-Run)' : 'Mode: Live Execution'}
-                </span>
-                {dryRunMode && (
-                  <span className="rounded bg-brand/10 px-1.5 py-0.2 font-mono text-[9px] uppercase text-brand border border-brand/20">
-                    Dry-Run Guard Active
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="text-right font-mono">
-            <div className="text-lg font-bold text-brand tabular-nums">{executionProgress}%</div>
-            <div className="text-[10px] text-text-muted">
-              {totalSteps > 0 ? `Step ${currentStep} of ${totalSteps}` : 'Processing...'}
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Bar Container */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-mono text-text-secondary truncate max-w-[80%]">{activeMessage}</span>
-            <span className="font-mono text-text-muted tabular-nums">{executionProgress}%</span>
-          </div>
-          <div className="w-full bg-surface-active h-2.5 rounded-full overflow-hidden border border-border-subtle">
-            <div
-              className={`h-full transition-all duration-300 ease-out ${
-                isCompleted ? 'bg-status-success' : 'bg-brand'
-              }`}
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Live Auto-Scrolling Log Console */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] font-mono text-text-muted">
-            <span className="flex items-center gap-1.5">
-              <Terminal className="h-3.5 w-3.5 text-brand" /> Live Task Console Output
-            </span>
-            <span>{logs.length} entries</span>
-          </div>
-
-          <div
-            ref={logConsoleRef}
-            className="h-52 overflow-y-auto rounded-[6px] border border-border-subtle bg-surface-subtle p-3 font-mono text-xs space-y-1.5 scroll-smooth"
-          >
-            {logs.length === 0 ? (
-              <div className="text-text-muted italic py-8 text-center text-xs">
-                Awaiting task output stream...
-              </div>
-            ) : (
-              logs.map((log) => {
-                const isError = log.level === 'error';
-                const isWarn = log.level === 'warn';
-                const isCmd = log.level === 'cmd';
-
-                return (
-                  <div
-                    key={log.id}
-                    className={`p-1.5 rounded text-xs leading-relaxed flex items-start gap-2 border transition-colors ${
-                      isError
-                        ? 'bg-status-dangerSubtle text-status-danger border-status-danger/30 font-medium'
-                        : isWarn
-                        ? 'bg-status-warningSubtle text-status-warning border-status-warning/30'
-                        : isCmd
-                        ? 'bg-brand-subtle text-brand border-brand/20'
-                        : 'bg-surface/50 text-text-code border-border-subtle/50'
-                    }`}
-                  >
-                    {isError ? (
-                      <AlertOctagon className="h-3.5 w-3.5 text-status-danger shrink-0 mt-0.5" />
-                    ) : (
-                      <span className="text-[10px] text-text-muted tabular-nums shrink-0 mt-0.5">
-                        [{log.timestamp.slice(11, 19)}]
-                      </span>
-                    )}
-                    <span className="flex-1 break-words">{log.message}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-```
-
-### C. Mounting in `App.tsx`
-Import and place `<ExecutionProgressModal />` inside `App.tsx`:
-
-```tsx
-import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
-import { ExecutionProgressModal } from './components/ExecutionProgressModal';
-
-export function App() {
-  // ...
-  return (
-    <div className="...">
-      {/* ... main layout ... */}
-      <SafetyConfirmationModal />
-      <ExecutionProgressModal />
-    </div>
-  );
-}
-```
-
----
-
-## 6. Summary Checklist of Proposed UI Changes
-
-- [x] Identified all modal locations (`SafetyConfirmationModal.tsx` in `App.tsx`).
-- [x] Verified `@tauri-apps/api/event` import strategy for Tauri v2.
-- [x] Designed `ExecutionProgressModal` with `listen('task-progress', ...)` inside `useEffect`.
-- [x] Formulated progress percentage calculation formula: `(current_step / total_steps) * 100`.
-- [x] Provided auto-scrolling log console using React `useRef` and `useEffect`.
-- [x] Applied error entry styling using `bg-status-dangerSubtle`, `text-status-danger`, and `AlertOctagon` icon.
+4. **Storage Migration / Reset**:
+   - Ensure existing persisted `localStorage` data does not silently force `dryRunMode: true` when default is updated to `false`.

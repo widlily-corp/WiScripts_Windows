@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { ExecutionSummary } from '../types';
 import { FileCode, Play, Copy, Check, ShieldAlert, Package, Layers, SlidersHorizontal, Loader2 } from 'lucide-react';
 
@@ -36,6 +37,7 @@ export function OdtView() {
   const updateOdtConfig = useAppStore((s) => s.updateOdtConfig);
   const generatedXml = useAppStore((s) => s.generatedXml);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const openSafetyModal = useAppStore((s) => s.openSafetyModal);
   const addLog = useAppStore((s) => s.addLog);
   const isExecuting = useAppStore((s) => s.isExecuting);
@@ -67,8 +69,10 @@ export function OdtView() {
     updateOdtConfig({ excludedApps: updated });
   };
 
+  const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   const handleDeploy = () => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
 
     openSafetyModal({
       title: 'Deploy Office Suite via ODT',
@@ -136,10 +140,11 @@ export function OdtView() {
         </div>
         <button
           onClick={handleDeploy}
-          disabled={isExecuting}
+          disabled={isButtonDisabled}
+          title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
           className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium transition-all shadow-sm ${
-            isExecuting
-              ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border'
+            isButtonDisabled
+              ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border opacity-50'
               : 'bg-brand text-white hover:bg-brand-hover'
           }`}
         >
@@ -151,6 +156,9 @@ export function OdtView() {
           <span>{isExecuting ? 'Deploying Office...' : 'Deploy Office'}</span>
         </button>
       </div>
+
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Office Deployment Tool Setup Execution" />
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

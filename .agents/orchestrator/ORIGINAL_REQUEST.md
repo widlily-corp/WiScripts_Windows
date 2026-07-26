@@ -1,36 +1,27 @@
 # Original User Request
 
-## Initial Request — 2026-07-23T13:54:43Z
+## 2026-07-27T00:31:25Z
 
-Extend the WiScripts Windows application with six premium features: Diagnostics, App Manager, Optimization Profiles, DNS/Network tweaks, Context Menu Manager, and Driver Backup.
+Fix all bugs in WiScripts Windows, ensure all backend optimization and tweaking functions execute for real (not just dry-run), and implement UI warnings for functions that require Administrator privileges.
 
-Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows
-Integrity mode: demo
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Integrity mode: development
 
 ## Requirements
 
-### R1. Advanced Diagnostics & Recovery
-Implement a new UI section and backend commands to run `sfc /scannow`, `DISM /Online /Cleanup-Image /RestoreHealth`, and reset the TCP/IP network stack via PowerShell.
+### R1. Real Execution
+Ensure the frontend React application correctly triggers real execution of commands (e.g., passing `dry_run: false` where appropriate or fixing any bugs in `RealRunner`/IPC handlers). All features (diagnostics, package manager, profiles, DNS, driver backup) must work properly.
 
-### R2. Package & Bloatware Manager
-Implement a GUI wrapper for `winget` (search, install, update) and a debloat mechanism to remove pre-installed UWP apps.
-
-### R3. Optimization Profiles (Presets)
-Implement 1-click profiles ("Gaming", "Maximum Privacy", "Work") that automatically select and apply a curated list of existing optimization rules.
-
-### R4. DNS & Context Menu Manager
-Implement toggles to switch system DNS to AdGuard/Cloudflare/Google, and a toggle to restore the Windows 10 classic context menu.
-
-### R5. Driver Backup
-Implement a feature to export all 3rd-party drivers using `Export-WindowsDriver` to a specified folder.
+### R2. Administrator Warnings
+Implement clear and informative UI warnings (using existing Tailwind/Lucide design system) for features that require the app to be launched as Administrator. If `is_elevated` is false, warn the user and optionally disable execution buttons for actions that will fail without elevation.
 
 ## Acceptance Criteria
 
-### Execution & Compilation
-- [ ] Rust code successfully compiles (`cargo check`).
-- [ ] Frontend successfully builds (`npm run build`).
+### Execution & Build Verification
+- [ ] Execution buttons trigger real PowerShell/CMD commands.
+- [ ] `cargo check` and `cargo test` pass without errors.
+- [ ] `npm run build` succeeds (no TypeScript errors).
 
-### Feature Verification
-- [ ] The React frontend contains new tabs/sections for the 5 modules.
-- [ ] The Rust backend correctly implements IPC commands (`#[tauri::command]`) for all PowerShell integrations.
-- [ ] The `Runner` implementation is correctly utilized for dry-runs and execution tracking.
+### UI / Admin Checks
+- [ ] Visual indicators clearly communicate when Admin privileges are missing for system-level operations.
+- [ ] No `any` types or "AI-slop" in the new code; strict adherence to the project's coding standards.

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { AdminElevationBanner } from './AdminElevationBanner';
 import { WingetPackage, UwpAppInfo } from '../types';
 import {
   Package,
@@ -31,6 +32,7 @@ export function PackageManagerView() {
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const wingetPackages = useAppStore((s) => s.wingetPackages);
   const isWingetSearching = useAppStore((s) => s.isWingetSearching);
@@ -61,8 +63,10 @@ export function PackageManagerView() {
     wingetSearch(presetId);
   };
 
+  const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+
   const handleInstall = async (packageId: string) => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
     setActionInProgress(`install_${packageId}`);
     try {
       await wingetInstall(packageId);
@@ -72,7 +76,7 @@ export function PackageManagerView() {
   };
 
   const handleUpdate = async (packageId: string) => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
     setActionInProgress(`update_${packageId}`);
     try {
       await wingetUpdate(packageId);
@@ -82,7 +86,7 @@ export function PackageManagerView() {
   };
 
   const handleRemoveUwp = async (packageFullName: string) => {
-    if (isExecuting) return;
+    if (isButtonDisabled) return;
     setActionInProgress(`uwp_${packageFullName}`);
     try {
       await removeUwpApp(packageFullName);
@@ -142,6 +146,9 @@ export function PackageManagerView() {
           </button>
         </div>
       </div>
+
+      {/* Admin Elevation Warning Banner */}
+      <AdminElevationBanner featureName="Package Installation & UWP Debloater" />
 
       {/* Sub-tab 1: Winget Package Manager */}
       {activeSubTab === 'winget' && (

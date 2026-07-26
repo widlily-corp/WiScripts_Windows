@@ -1,290 +1,158 @@
-# Real-Time Progress Reporting Analysis Report
+# Comprehensive Analysis of Rust Backend Execution Logic & IPC Commands
 
-**Target Codebase**: `src-tauri` (Rust backend)  
-**Author**: Explorer 1 (`explorer_m1_1`)  
-**Date**: 2026-07-22  
-**Tauri Version**: 2.0.0 (`tauri = { version = "2.0.0" }`)
+**Target System**: WiScripts Windows (Tauri v2 + Rust Backend)  
+**Working Directory**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\explorer_m1_1`  
+**Date**: 2026-07-26  
 
 ---
 
 ## 1. Executive Summary
 
-This investigation analyzed the Rust backend architecture of WiScripts Windows to enable real-time progress reporting via Tauri IPC events. The codebase currently runs three core execution engines (`optimization`, `odt`, and `mas`) synchronously without emitting intermediate progress updates to the frontend.
+This report presents a complete investigation of the Rust backend in `src-tauri/src/`. The backend is designed with a clean, decoupled architecture centered around the `CommandRunner` abstraction trait (`runner/mod.rs`), which provides both `RealRunner` (real process execution via PowerShell/CMD) and `DryRunRunner` (safe mock recording in memory).
 
-By introducing a `TaskProgressPayload` structure and passing `Option<&tauri::AppHandle>` (or injecting `tauri::AppHandle` into Tauri command handlers), real-time progress events named `"task-progress"` can be emitted before and after each rule or execution step. Using `Option<&tauri::AppHandle>` guarantees 100% test compatibility, allowing all unit tests to execute headless with `None` while production handlers pass `Some(&app_handle)`.
-
----
-
-## 2. Codebase & Module Architecture Overview
-
-The backend is built as a single Rust library crate (`wiscripts_windows_lib`) wrapped by `main.rs`.
-
-### File & Module Hierarchy
-
-| Module / File | Path | Key Responsibilities |
-| :--- | :--- | :--- |
-| `main.rs` | `src-tauri/src/main.rs` | Entrypoint launching `wiscripts_windows_lib::run()`. |
-| `lib.rs` | `src-tauri/src/lib.rs` | Tauri application builder (`tauri::Builder`), plugin init, and handler registration. |
-| `commands/mod.rs` | `src-tauri/src/commands/mod.rs` | `#[tauri::command]` handlers for IPC invocation (`execute_optimizations`, `execute_odt_install`, `execute_activation`, etc.). |
-| `optimization/mod.rs` | `src-tauri/src/optimization/mod.rs` | Rule catalog definitions, filtering, and `execute()` loop running batch optimizations. |
-| `odt/mod.rs` | `src-tauri/src/odt/mod.rs` | ODT XML generator and `execute_odt_install()` runner. |
-| `mas.rs` / `activation` | `src-tauri/src/mas.rs` | Microsoft Activation Scripts (HWID, Ohook, KMS38, TSforge) execution logic. |
-| `runner/mod.rs` | `src-tauri/src/runner/mod.rs` | `CommandRunner` trait, `RealRunner` (PowerShell/CMD), and `DryRunRunner` (mock recorder). |
-| `error.rs` | `src-tauri/src/error.rs` | `AppError` enum and serde serialization. |
+Key findings:
+- **Architecture Integrity**: The backend **fully supports real system execution**. When `dry_run: false` is passed from the frontend, IPC handlers instantiate `RealRunner::new()`, which executes real PowerShell/CMD subprocesses.
+- **IPC Command Audit**: Out of 20 exposed Tauri IPC handlers in `lib.rs` / `commands/mod.rs`, **11 handlers execute action commands** (accepting `dry_run: bool`), and **9 handlers are read-only queries** or configuration generators.
+- **Root Causes of Real Execution Issues**: Real command execution can fail or remain in dry-run mode due to three primary external factors:
+  1. **Frontend Invocation Parameter**: If the frontend passes `dry_run: true` (or defaults the UI parameter to true), the backend executes `DryRunRunner`.
+  2. **Administrator Privilege Requirements (UAC)**: Most real execution commands (`Stop-Service DiagTrack`, `Export-WindowsDriver`, `DISM`, `sfc /scannow`, `Set-DnsClientServerAddress`, `Remove-AppxPackage -AllUsers`, `New-Item HKLM:...`) require Administrative elevation. Spawning `powershell.exe` without elevation results in OS access denied errors (exit code 1).
+  3. **External Dependencies**: MAS activation requires internet connectivity (`get.activated.win`), ODT installation requires downloading `setup.exe`, and Winget operations require `winget.exe` in `%PATH%`.
 
 ---
 
-## 3. Analysis of Execution Engine & Iteration Logic
+## 2. Rust Backend Architecture (`src-tauri/src/`)
 
-### 3.1 Optimization Engine (`src-tauri/src/optimization/mod.rs`)
+The Rust backend is structured into modular domain packages:
 
-- **Function Signature** (Lines 244-247):
-  ```rust
-  pub fn execute(
-      runner: &dyn CommandRunner,
-      selected_keys: &[String],
-  ) -> Result<ExecutionSummary, AppError>
-  ```
-- **Loop Structure** (Lines 254-293):
-  ```rust
-  let rules = preview(selected_keys)?;
-  let mut executed_actions = Vec::new();
-  let mut overall_success = true;
-
-  for rule in rules {
-      log::info!("[OptimizationEngine] Executing rule ID: '{}', Title: '{}'", rule.id, rule.title);
-      let output = runner
-          .run_powershell(&rule.powershell_command)
-          .map_err(|e| ... )?;
-      ...
-  }
-  ```
-- **Observation**:
-  `rules` is a `Vec<OptimizationItem>`. Total steps = `rules.len()`.
-  Currently, there are no progress emissions inside the `for rule in rules` loop.
-
-### 3.2 Office ODT Engine (`src-tauri/src/odt/mod.rs`)
-
-- **Function Signature** (Lines 137-142):
-  ```rust
-  pub fn execute_odt_install(
-      runner: &dyn CommandRunner,
-      config: &OdtConfig,
-      setup_path: Option<String>,
-      dry_run: bool,
-  ) -> Result<ExecutionSummary, String>
-  ```
-- **Execution Flow**: Single setup command constructed and executed via `runner.run_powershell(&ps_command)`.
-
-### 3.3 MAS Activation Engine (`src-tauri/src/mas.rs`)
-
-- **Function Signature** (Lines 47-51):
-  ```rust
-  pub fn execute_activation(
-      runner: &dyn CommandRunner,
-      method: ActivationMethod,
-      dry_run: bool,
-  ) -> Result<ExecutionSummary, String>
-  ```
-- **Execution Flow**: Single activation script command executed via `runner.run_powershell(&command)`.
+```
+src-tauri/src/
+├── lib.rs              # Tauri builder & register 20 IPC command handlers
+├── main.rs             # Application entry point
+├── error.rs            # Custom AppError enum (Execution, InvalidConfig, Io, System)
+├── logger.rs           # File-based logging (debug.log) with RFC-3339 timestamps
+├── runner/             # CommandRunner trait, RealRunner, DryRunRunner, CommandOutput
+├── commands/           # 20 #[tauri::command] IPC endpoint handlers
+├── optimization/       # Optimization engine & 15+ OS tuning rule definitions
+├── diagnostics/        # System diagnostics engine (SFC, DISM, TCP/IP reset)
+├── packages/           # Package manager engine (winget search/install/update, UWP app removal)
+├── profiles/           # 1-click curated optimization profiles (Gaming, Privacy, Work)
+├── dns_context/        # DNS server manager & Windows 11 Classic Context Menu toggle
+├── driver_backup/      # Third-party driver backup engine (Export-WindowsDriver)
+├── odt/                # Office Deployment Tool XML generator & setup.exe runner
+└── mas.rs / activation/# Microsoft Activation Script engine (HWID, Ohook, KMS38, TSforge)
+```
 
 ---
 
-## 4. Tauri Event Emission Mechanism & Payload Definition
+## 3. `dry_run` Handling & Execution Flow Analysis
 
-### 4.1 Tauri 2.0 Event API
-- **Crate Version**: Tauri 2.0.0 (`tauri-build = "2.0.0"`, `tauri = "2.0.0"` in `Cargo.toml`).
-- **Trait Requirement**: In Tauri 2.0, event emission requires importing `use tauri::Emitter;`.
-- **Method Call**:
-  ```rust
-  app_handle.emit("task-progress", &payload)?;
-  ```
-  *(Note: `emit_all` was removed in Tauri 2.0; `emit` broadcasts to all windows).*
+### 3.1 The `CommandRunner` Abstraction (`src-tauri/src/runner/mod.rs`)
 
-### 4.2 Progress Payload Definition (`TaskProgressPayload`)
-
-To adhere to camelCase JSON conventions expected by frontend TypeScript, the payload structure is defined as:
+Command execution is abstracted via the `CommandRunner` trait (`src-tauri/src/runner/mod.rs:36-45`):
 
 ```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskProgressPayload {
-    pub current_step: usize,
-    pub total_steps: usize,
-    pub message: String,
-    pub is_error: bool,
+pub trait CommandRunner: Send + Sync {
+    fn run_powershell(&self, script: &str) -> Result<CommandOutput, String>;
+    fn run_cmd(&self, command: &str) -> Result<CommandOutput, String>;
+    fn is_dry_run(&self) -> bool;
 }
 ```
 
-**Serialized JSON Example**:
-```json
-{
-  "currentStep": 2,
-  "totalSteps": 5,
-  "message": "Executing rule [2/5]: Disable Cortana App & Background Execution",
-  "isError": false
-}
-```
+Two concrete implementations exist:
+1. **`RealRunner`** (`runner/mod.rs:48-158`):
+   - `run_powershell`: Spawns `powershell.exe` with arguments `["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]`.
+   - `run_cmd`: Spawns `cmd.exe` with arguments `["/C", command]`.
+   - On Windows, sets creation flag `0x08000000` (`CREATE_NO_WINDOW`) to prevent console popup windows.
+   - Captures `exit_code`, `stdout`, and `stderr`.
+   - `is_dry_run()` returns `false`.
 
-### 4.3 Helper Function Strategy
+2. **`DryRunRunner`** (`runner/mod.rs:170-228`):
+   - Records execution history in an `Arc<Mutex<Vec<RecordedCommand>>>` without spawning OS processes.
+   - Returns simulated stdout: `"[DRY-RUN] Simulated ... Execution: ..."` with exit code 0.
+   - `is_dry_run()` returns `true`.
 
-To keep code clean and modular across all engines, a centralized emission helper can be created in `src-tauri/src/runner/mod.rs` (or `src-tauri/src/commands/mod.rs`):
+### 3.2 IPC Dispatch Pattern (`src-tauri/src/commands/mod.rs`)
 
-```rust
-use tauri::Emitter;
-
-pub fn emit_progress(
-    app_handle: Option<&tauri::AppHandle>,
-    current_step: usize,
-    total_steps: usize,
-    message: impl Into<String>,
-    is_error: bool,
-) {
-    let payload = TaskProgressPayload {
-        current_step,
-        total_steps,
-        message: message.into(),
-        is_error,
-    };
-    log::info!(
-        "[Progress] [{}/{}] (is_error={}): {}",
-        payload.current_step,
-        payload.total_steps,
-        payload.is_error,
-        payload.message
-    );
-    if let Some(app) = app_handle {
-        if let Err(e) = app.emit("task-progress", &payload) {
-            log::error!("[Progress] Failed to emit task-progress event: {}", e);
-        }
-    }
-}
-```
-
----
-
-## 5. Execution Paths Analysis
-
-All four key execution paths requiring real-time progress events:
-
-| Path ID | Trigger Command in `commands/mod.rs` | Target Module | Iteration / Step Count | Emitted Events |
-| :--- | :--- | :--- | :--- | :--- |
-| **Path 1** | `execute_optimizations` | `optimization::execute` | Multi-step (`N = selected_keys.len()`) | - Pre-step start (`current_step = i + 1`, `is_error = false`) <br> - Post-step result (`is_error = !action_success`) <br> - Completion summary |
-| **Path 2** | `execute_odt_install` | `odt::execute_odt_install` | Single batch step (`N = 1`) | - Pre-install start (`current_step = 1`, `is_error = false`) <br> - Post-install result (`is_error = !is_success`) |
-| **Path 3** | `execute_activation` | `mas::execute_activation` | Single batch step (`N = 1`) | - Pre-activation start (`current_step = 1`, `is_error = false`) <br> - Post-activation result (`is_error = !is_success`) |
-| **Path 4** | All commands when `dry_run = true` | `DryRunRunner` paths | Matches step count of Path 1, 2, or 3 | Identical progress events emitted so UI shows progress during dry-runs |
-
----
-
-## 6. Detailed Modification Plan & Code Changes
-
-### 6.1 `src-tauri/src/commands/mod.rs`
-Update `#[tauri::command]` signatures to take `app_handle: tauri::AppHandle`:
+All 11 action execution IPC commands follow an explicit dual-path runner selection pattern:
 
 ```rust
 #[tauri::command]
 pub async fn execute_optimizations(
-    app_handle: tauri::AppHandle,
+    app: tauri::AppHandle,
     selected_keys: Vec<String>,
     dry_run: bool,
 ) -> Result<ExecutionSummary, AppError> {
-    ...
     let res = if dry_run {
         let runner = DryRunRunner::new();
-        optimization::execute(&runner, &selected_keys, Some(&app_handle))
+        optimization::execute(Some(&app), &runner, &selected_keys)
     } else {
         let runner = RealRunner::new();
-        optimization::execute(&runner, &selected_keys, Some(&app_handle))
+        optimization::execute(Some(&app), &runner, &selected_keys)
     };
-    ...
+    res
 }
 ```
 
-Similarly update `execute_odt_install` and `execute_activation` command handlers.
-
-### 6.2 `src-tauri/src/optimization/mod.rs`
-Update `optimization::execute`:
-
-```rust
-pub fn execute(
-    runner: &dyn CommandRunner,
-    selected_keys: &[String],
-    app_handle: Option<&tauri::AppHandle>,
-) -> Result<ExecutionSummary, AppError> {
-    let start_time = std::time::Instant::now();
-    let rules = preview(selected_keys)?;
-    let total_steps = rules.len();
-    let mut executed_actions = Vec::new();
-    let mut overall_success = true;
-
-    for (idx, rule) in rules.into_iter().enumerate() {
-        let current_step = idx + 1;
-        
-        // Event 1: Pre-step execution
-        emit_progress(
-            app_handle,
-            current_step,
-            total_steps,
-            format!("Executing rule [{}/{}]: {}", current_step, total_steps, rule.title),
-            false,
-        );
-
-        let output_res = runner.run_powershell(&rule.powershell_command);
-        match output_res {
-            Ok(output) => {
-                let action_success = output.exit_code == 0;
-                if action_success {
-                    // Event 2a: Post-step success
-                    emit_progress(
-                        app_handle,
-                        current_step,
-                        total_steps,
-                        format!("Completed [{}/{}]: {}", current_step, total_steps, rule.title),
-                        false,
-                    );
-                } else {
-                    overall_success = false;
-                    // Event 2b: Post-step error exit code
-                    emit_progress(
-                        app_handle,
-                        current_step,
-                        total_steps,
-                        format!("Failed [{}/{}]: {} (Exit code {})", current_step, total_steps, rule.title, output.exit_code),
-                        true,
-                    );
-                }
-                executed_actions.push(ExecutedAction {
-                    id: rule.id,
-                    name: rule.title,
-                    command: rule.powershell_command,
-                    output,
-                    skipped: false,
-                });
-            }
-            Err(e) => {
-                overall_success = false;
-                emit_progress(
-                    app_handle,
-                    current_step,
-                    total_steps,
-                    format!("Failed [{}/{}]: {} ({})", current_step, total_steps, rule.title, e),
-                    true,
-                );
-                return Err(AppError::Execution(e));
-            }
-        }
-    }
-
-    Ok(ExecutionSummary { ... })
-}
-```
+This pattern guarantees that when `dry_run: false` is passed in the IPC request payload, **`RealRunner` is instantiated and real commands are executed on the host system**.
 
 ---
 
-## 7. Verification & Safety
+## 4. Why Commands Might Not Execute For Real (Failure Analysis)
 
-1. **Unit Test Safety**: All 25 existing unit tests call `execute(...)` with `None` as `app_handle`. Thus `cargo test` remains 100% isolated and green without needing Tauri mock context.
-2. **Payload Validation Test**: Unit tests can be added to verify `TaskProgressPayload` serializes into camelCase (`currentStep`, `totalSteps`, `message`, `isError`).
-3. **Execution Verification**: Running `cargo test` verifies full backward compatibility.
+Through code inspection, we identified the potential reasons why commands might fail to execute for real or appear to execute only in dry-run mode:
+
+| Factor | Impact / Cause | Code Reference |
+| :--- | :--- | :--- |
+| **1. Frontend Invocation Parameter** | If the Frontend UI sends `dry_run: true` (or defaults toggle switches to `true`), the IPC handler routes to `DryRunRunner`. The backend is not hardcoded to dry-run; it strictly obeys the frontend parameter. | `commands/mod.rs:158`, `202`, `234`, `269`, etc. |
+| **2. Lack of Administrative Elevation (UAC)** | Most real commands (`Stop-Service DiagTrack`, `Export-WindowsDriver`, `DISM /RestoreHealth`, `sfc /scannow`, `Set-DnsClientServerAddress`, `Remove-AppxPackage -AllUsers`, `New-Item HKLM:...`) require elevated Administrator rights. If the Tauri app runs as a standard user process, PowerShell subprocesses return exit code `1` or error in stderr ("Access is denied"). | `commands/mod.rs:26-44` (`check_is_elevated`) |
+| **3. Offline / Network Restrictions** | `execute_activation` executes `Invoke-RestMethod https://get.activated.win`. `execute_odt_install` downloads `https://config.office.com/api/odt/download`. On offline systems or strict firewalls, these PowerShell commands fail. | `mas.rs:42-45`, `odt/mod.rs:178-180` |
+| **4. Missing CLI Tool (Winget)** | `winget_install` and `winget_update` invoke `winget.exe`. If `winget` is missing from `%PATH%` (e.g. bare Windows Server installation), process spawning fails. | `packages/mod.rs:159`, `240` |
+| **5. Task Progress Emission** | Real execution functions emit progress events (`task-progress`) via `app_handle.emit()`. In headless unit test environments where `app` is `None`, emitting is safely skipped without error. | `optimization/mod.rs:288`, `diagnostics/mod.rs:86` |
+
+---
+
+## 5. Catalog of All 20 IPC Commands & Execution Capabilities
+
+Below is the complete inventory of all 20 Tauri IPC commands defined in `src-tauri/src/lib.rs` and `src-tauri/src/commands/mod.rs`:
+
+### Action Execution Commands (11 Commands — Support `dry_run: bool`)
+
+| # | IPC Command | Module | Functionality | Real Execution Command | Requires Elevation |
+| :-: | :--- | :--- | :--- | :--- | :-: |
+| 1 | `execute_optimizations` | `optimization` | Executes selected system optimization rules | `powershell.exe -Command "<rule_script>"` | **Yes** |
+| 2 | `execute_odt_install` | `odt` | Downloads setup.exe & configures Office ODT | `powershell.exe -Command "Start-Process setup.exe /configure ..."` | **Yes** |
+| 3 | `execute_activation` | `mas` | Executes MAS Windows/Office activation | `powershell.exe -Command "Invoke-RestMethod https://get.activated.win ..."` | **Yes** |
+| 4 | `run_diagnostics` | `diagnostics` | Runs SFC, DISM, and TCP/IP stack reset | `sfc /scannow`, `DISM /RestoreHealth`, `netsh int ip reset` | **Yes** |
+| 5 | `winget_install` | `packages` | Installs winget package | `winget install --id "<id>" --silent ...` | **Yes** (some pkgs) |
+| 6 | `winget_update` | `packages` | Upgrades winget package | `winget upgrade --id "<id>" --silent ...` | **Yes** (some pkgs) |
+| 7 | `remove_uwp_app` | `packages` | Uninstalls UWP / AppX package | `Get-AppxPackage -AllUsers ... \| Remove-AppxPackage -AllUsers` | **Yes** |
+| 8 | `apply_optimization_profile` | `profiles` | Applies Gaming, Privacy, or Work profile | Delegates to `optimization::execute` | **Yes** |
+| 9 | `set_dns_server` | `dns_context` | Sets DNS to AdGuard, Cloudflare, Google, DHCP | `Set-DnsClientServerAddress -InterfaceAlias ...` | **Yes** |
+| 10 | `toggle_classic_context_menu` | `dns_context` | Restores Win10 classic right-click menu | `New-Item` / `Remove-Item` on `HKCU:\Software\Classes\CLSID\...` | **No** (HKCU) |
+| 11 | `backup_drivers` | `driver_backup` | Backs up device drivers to folder | `Export-WindowsDriver -Online -Destination "<dir>"` | **Yes** |
+
+### Query / Read-Only Commands (9 Commands — No `dry_run` parameter)
+
+| # | IPC Command | Module | Functionality | Implementation Details |
+| :-: | :--- | :--- | :--- | :--- |
+| 12 | `get_system_info` | `commands` | Queries OS version, RAM, CPU, Telemetry, UAC status | Uses `sysinfo` crate & `RealRunner` queries |
+| 13 | `get_rule_catalog` | `optimization` | Returns all 15+ available optimization rules | Returns static rule vectors |
+| 14 | `get_rules_by_category` | `optimization` | Returns rules for category (telemetry, bloatware, etc.) | Filters rule catalog |
+| 15 | `preview_optimizations` | `optimization` | Previews details for selected rule IDs | Filters rule catalog |
+| 16 | `generate_odt_xml` | `odt` | Generates Office Deployment Tool XML string | Pure string formatting from `OdtConfig` |
+| 17 | `winget_search` | `packages` | Searches winget packages for query string | Runs `winget search --query ...` via `RealRunner` |
+| 18 | `get_uwp_apps` | `packages` | Lists installed UWP/AppX packages | Runs `Get-AppxPackage` JSON query via `RealRunner` |
+| 19 | `get_optimization_profiles` | `profiles` | Returns curated 1-click profiles | Returns static profile definitions |
+| 20 | `get_classic_context_menu_status` | `dns_context` | Checks if classic context menu is enabled | Runs `Test-Path HKCU:\...` via `RealRunner` |
+
+---
+
+## 6. Verification & Next Steps for Implementer
+
+1. **Backend Test Suite Verification**:
+   - Executed `cargo test` in `src-tauri/`.
+   - Result: **85 tests passed, 0 failed, 0 ignored** (65 library unit tests + 5 empirical verification integration tests + 15 challenger integration tests).
+2. **IPC Integration Verification**:
+   - Ensure the Frontend invokes execution IPC commands passing `dryRun: false` when real execution is requested by the user.
+   - Ensure application binary manifest or launcher has requested Execution Level set to `highestAvailable` or `requireAdministrator` when real system tweaks are triggered.
+

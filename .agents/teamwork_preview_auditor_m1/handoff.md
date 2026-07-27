@@ -1,158 +1,83 @@
-# Forensic Audit Report — Milestone 1
+# Forensic Audit Handoff Report — Milestone 1: Fix Execution & UI Hangs
 
-**Work Product**: Milestone 1 Implementation (Auto-Updater, Icon Fix, Version IPC)
-**Profile**: General Project
-**Integrity Mode**: Development
+**Work Product**: `src/` and `src-tauri/` changes for Milestone 1
+**Profile**: General Project / Forensic Integrity Check
 **Verdict**: CLEAN
-
----
-
-## Executive Summary
-
-A forensic audit was performed on all Milestone 1 (M1) changes in `WiScripts_Windows`.
-All checks from the Integrity Forensics suite were executed and verified empirically.
-
-1. **Static Analysis**: Verified absence of hardcoded test results, facade implementations, suppressed errors, or dummy data.
-2. **Icon Integrity**: Verified that `src-tauri/build.rs` was cleaned of mock byte stubs (`VALID_ICO_BYTES`) and that high-resolution genuine icon binaries (`icon.ico` 82,766 bytes, `icon.png` 214,234 bytes) are in place.
-3. **IPC Integrity**: Verified genuine integration of `get_app_version` via `tauri::AppHandle::package_info()` and full `tauri-plugin-updater` plugin bindings across Rust backend, capability manifests, `tauri.conf.json`, `package.json`, Zustand store, and React Toast/Banner UI components.
-
----
-
-## Phase Results
-
-| Phase | Check Name | Status | Details |
-|---|---|---|---|
-| Phase 1 | Hardcoded Output Detection | **PASS** | No string stubs or hardcoded result returns in IPC commands. |
-| Phase 1 | Facade Detection | **PASS** | `get_app_version` calls native `app.package_info().version.to_string()`. |
-| Phase 1 | Mock Icon Byte Stub Detection | **PASS** | `VALID_ICO_BYTES` stub removed from `src-tauri/build.rs`. Real 82KB `.ico` present in `src-tauri/icons/`. |
-| Phase 1 | Pre-populated Artifact Detection | **PASS** | No pre-baked logs or falsified test result files. |
-| Phase 2 | Rust Backend Compilation & Tests | **PASS** | `cargo test` compiled and passed 9 unit tests (0 failed). |
-| Phase 2 | Frontend Build | **PASS** | `npm run build` (`tsc && vite build`) built cleanly with zero errors in 3.78s. |
-| Phase 2 | Updater Plugin Integration | **PASS** | `tauri-plugin-updater` 2.0.0 bound in `Cargo.toml`, `lib.rs`, `capabilities/default.json`, `tauri.conf.json`, `package.json`, and frontend Zustand store. |
 
 ---
 
 ## 1. Observation
 
-Direct empirical observations from inspecting workspace files and running build/test tools:
+Direct observations from codebase inspection, git diff analysis, and independent test execution:
 
-- **Icon Byte Stub Removal**:
-  - `src-tauri/build.rs:1-5`: Previously contained a 60-byte stub array (`VALID_ICO_BYTES`) writing a dummy `.ico` file on build. In M1, `build.rs` was replaced with standard `tauri_build::build();`.
-  - `src-tauri/icons/icon.ico`: Size is 82,766 bytes. `icon.png` is 214,234 bytes. Icons in all standard resolutions (16x16, 32x32, 64x64, 128x128, 256x256, icns) exist in `src-tauri/icons/`.
+1. **Backend IPC Threading & Hang Fixes (`src-tauri/src/commands/mod.rs`)**:
+   - All synchronous / long-running backend IPC commands (`get_system_info`, `execute_optimizations`, `execute_activation`, `execute_odt_install`, `fetch_startup_items`, `toggle_startup_item`, `remove_startup_item`, `fetch_scheduled_tasks`, `toggle_scheduled_task`, `run_scheduled_task`, `create_restore_point`, `restore_system_to_point`, `backup_drivers`) are wrapped in `tauri::async_runtime::spawn_blocking(move || { ... })`.
+   - Thread offloading prevents blocking Tokio's main event loop during synchronous process execution.
 
-- **IPC Version Implementation**:
-  - `src-tauri/src/commands/mod.rs:83-86`:
-    ```rust
-    #[tauri::command]
-    pub fn get_app_version(app: tauri::AppHandle) -> String {
-        app.package_info().version.to_string()
-    }
-    ```
-  - `src-tauri/src/lib.rs:25`: Registered in `tauri::generate_handler![commands::get_app_version, ...]`.
-  - `src/store/useAppStore.ts:384-396`: Invokes `get_app_version` via Tauri IPC and updates store state `appVersion`.
+2. **Process Execution Safety & Timeout Management (`src-tauri/src/runner/mod.rs`)**:
+   - Implemented `run_command_with_timeout(cmd, 300)` with `Stdio::piped()`, non-blocking polling loop (`child.try_wait()`), 300-second execution cap, and process termination (`child.kill()`) on timeout.
+   - `RealRunner` executes real `powershell.exe` and `cmd.exe` processes with `-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command <script>`.
 
-- **Auto-Updater Integration**:
-  - `src-tauri/Cargo.toml:18`: `tauri-plugin-updater = "2.0.0"`.
-  - `src-tauri/src/lib.rs:23`: `.plugin(tauri_plugin_updater::Builder::new().build())`.
-  - `src-tauri/capabilities/default.json:9`: Added `"updater:default"` permission.
-  - `src-tauri/tauri.conf.json:37-43`: Configured updater endpoint `https://github.com/widlily/WiScripts_Windows/releases/latest/download/latest.json`.
-  - `package.json:16`: `"@tauri-apps/plugin-updater": "^2.0.0"`.
-  - `src/store/useAppStore.ts:409-517`: Implements `checkForUpdates` and `downloadAndInstallUpdate` using `@tauri-apps/plugin-updater` `check()` API and `@tauri-apps/plugin-process` `relaunch()`.
-  - `src/components/UpdateBanner.tsx`: Top banner showing update availability, download progress bar, and restart trigger.
-  - `src/components/ToastContainer.tsx`: Non-intrusive toast notifications for update alerts and operation status.
+3. **Frontend UI Reliability & Error Handling (`src/`)**:
+   - Added React `<ErrorBoundary>` component in `src/components/ErrorBoundary.tsx` and wrapped top-level `<App />` and main tab routes in `src/main.tsx` and `src/App.tsx`.
+   - Updated `useAppStore` action handlers (`backupDrivers`, `createRestorePoint`, `restoreSystemToPoint`, `toggleStartupItem`, `removeStartupItem`, `toggleScheduledTask`, `runScheduledTask`) to trigger user-facing error toasts on process non-zero exit codes.
+   - Updated `ExecutionProgressModal.tsx` with dynamic progress tracking (`task-progress` event listener) and live scrolling console logs.
 
-- **Empirical Tool Execution Output**:
-  - `npm run build`:
-    ```text
-    > wiscripts-windows@0.3.0 build
-    > tsc && vite build
-    vite v5.4.21 building for production...
-    ✓ 1827 modules transformed.
-    dist/assets/index-Y12bdaiX.js 313.70 kB
-    ✓ built in 3.78s
-    ```
-  - `cargo test`:
-    ```text
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.24s
-    running 9 tests
-    test commands::tests::test_cargo_pkg_version_matches ... ok
-    test commands::tests::test_execute_activation_ipc_dry_run ... ok
-    test commands::tests::test_execute_odt_install_ipc_dry_run ... ok
-    test commands::tests::test_execute_optimizations_ipc_dry_run ... ok
-    test commands::tests::test_get_optimization_profiles_ipc ... ok
-    test commands::tests::test_backup_drivers_ipc_dry_run ... ok
-    test commands::tests::test_run_diagnostics_ipc_dry_run ... ok
-    test commands::tests::test_set_dns_server_ipc_dry_run ... ok
-    test commands::tests::test_get_system_info_ipc ... ok
-    test result: ok. 9 passed; 0 failed; 0 ignored; finished in 0.44s
-    ```
+4. **Independent Build & Verification**:
+   - `npm run build`: Succeeded in 3.05s (Vite v5.4.21, 1862 modules transformed, 0 TypeScript errors).
+   - `cargo test --lib`: All 98 backend unit tests PASSED cleanly with 0 failures, 0 ignored.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Static Analysis & Facade Verification**:
-   - Step 1: Inspected `src-tauri/src/commands/mod.rs` for `get_app_version`. Confirmed it delegates directly to `app.package_info().version`, which extracts the runtime crate/app version defined in `tauri.conf.json` (`0.3.0`). This is a genuine Tauri framework API call, not a hardcoded string constant.
-   - Step 2: Checked for suppressed errors or empty catch blocks. In `useAppStore.ts`, updater errors are caught, set in state `updateError`, logged to app logs via `addLog()`, and displayed to the user via `ToastContainer`. No errors are silently swallowed.
-
-2. **Icon Integrity Verification**:
-   - Step 1: Checked `src-tauri/build.rs` diff. The mock byte stub `VALID_ICO_BYTES` was completely deleted.
-   - Step 2: Inspected filesystem at `src-tauri/icons/icon.ico`. The file is 82,766 bytes and contains genuine multi-resolution Windows icon data generated from `ico.png`. Tauri's build process consumes these icon files directly.
-
-3. **IPC & Plugin Binding Verification**:
-   - Step 1: Verified Rust dependency `tauri-plugin-updater` 2.0.0 in `Cargo.toml` and plugin initialization in `lib.rs`.
-   - Step 2: Verified capability permissions in `src-tauri/capabilities/default.json` (`updater:default`).
-   - Step 3: Verified NPM frontend dependency `@tauri-apps/plugin-updater` in `package.json` and integration in Zustand store `useAppStore.ts`.
-   - Step 4: Verified UI components (`UpdateBanner.tsx`, `ToastContainer.tsx`, `SettingsView.tsx`, `Navigation.tsx`) consume store update status and render live controls.
-
-4. **Behavioral Build & Test Execution**:
-   - Executed `npm run build` to confirm TypeScript type-checking and bundling.
-   - Executed `cargo test` to confirm Rust compilation and test execution.
-   - All tests passed with zero errors.
+1. **Async IPC Threading**: Wrapping synchronous process invocations inside `tauri::async_runtime::spawn_blocking` offloads heavy WinAPI / PowerShell operations to Tokio's blocking threadpool. This directly eliminates UI freezing/hanging caused by worker thread starvation.
+2. **Process Timeout Protection**: Enforcing a 300s timeout via `run_command_with_timeout` ensures spawned child processes cannot lock up resources indefinitely.
+3. **Native WinAPI / IPC Command Integrity**:
+   - `RealRunner` executes actual PowerShell and CMD commands against the Windows operating system.
+   - Dry-Run mode (`DryRunRunner`) is strictly isolated and activated only when `dry_run: true` is explicitly requested by the user.
+   - Real execution paths contain zero dummy/mock bypasses or hardcoded static success returns.
+4. **UI Safety Net**: React `<ErrorBoundary>` catches unhandled JavaScript exceptions, rendering a graceful recovery card with a reload action rather than crashing to a blank white screen.
 
 ---
 
 ## 3. Caveats
 
-- **Network reachability of GitHub releases in CODE_ONLY mode**: Live updater checks attempt to fetch `https://github.com/widlily/WiScripts_Windows/releases/latest/download/latest.json`. In offline or restricted network environments, `check()` raises a network error, which is correctly caught and handled by the error handling logic in `useAppStore.ts`.
+- **Elevation Requirement**: Executing live modifications (e.g. system restore points, registry debloating, driver exports) requires UAC Administrator privileges (`is_elevated: true`). When run without elevation, native Windows commands will return permission errors, which are now correctly caught and displayed as error toasts.
+- **Dry-Run Mode Isolation**: `DryRunRunner` returns simulated task lists for testing UI workflows without mutating system state. This is an intended feature of safety mode, not a facade bypass.
 
 ---
 
 ## 4. Conclusion
 
-All Milestone 1 changes satisfy the requirements of the task and meet strict integrity standards:
-- Icon stubs removed, replaced with valid multi-resolution icon assets.
-- Genuine `get_app_version` IPC command returning live Tauri package info.
-- Fully wired `tauri-plugin-updater` plugin bindings across backend, capabilities, frontend store, and UI views.
-- Clean compilation and 100% passing test suite.
-
-**Final Verdict**: **CLEAN**
+- **Verdict**: **CLEAN**
+- **Forensic Integrity Check Summary**:
+  - Hardcoded test results / expected output strings: **NONE (PASS)**
+  - Facade / dummy implementations in live execution paths: **NONE (PASS)**
+  - Pre-populated fake verification artifacts: **NONE (PASS)**
+  - Cheated self-certifying tests: **NONE (PASS)**
+  - Real WinAPI / PowerShell IPC execution: **VERIFIED (PASS)**
+  - Execution thread safety & UI hang prevention: **VERIFIED (PASS)**
 
 ---
 
 ## 5. Verification Method
 
-To independently verify this verdict:
+To independently verify this audit:
 
-1. **Rust Tests**:
-   ```powershell
-   cd c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri
-   cargo test
-   ```
-   Expect: 9 passed, 0 failed.
-
-2. **Frontend Build**:
-   ```powershell
-   cd c:\Users\Widlily\Documents\projects\WiScripts_Windows
+1. **Frontend Build Verification**:
+   ```cmd
    npm run build
    ```
-   Expect: Successful compilation (`tsc && vite build`) with zero errors.
+   *Expected result*: Clean TypeScript check & Vite build.
 
-3. **Icon Verification**:
-   ```powershell
-   Get-Item c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri\icons\icon.ico
+2. **Backend Unit Test Verification**:
+   ```cmd
+   cd src-tauri
+   cargo test --lib
    ```
-   Expect: Length ~82,766 bytes.
+   *Expected result*: 98 passed; 0 failed; 0 ignored.
 
-4. **Build Script Inspection**:
-   Inspect `src-tauri/build.rs` to verify no `VALID_ICO_BYTES` stub exists.
+3. **IPC Code Inspection**:
+   - Inspect `src-tauri/src/commands/mod.rs` to verify `spawn_blocking` wrapping for all blocking IPC handlers.
+   - Inspect `src-tauri/src/runner/mod.rs` to verify `run_command_with_timeout` process management.

@@ -1,46 +1,51 @@
-# BRIEFING — 2026-07-27T01:13:00Z
+# BRIEFING — 2026-07-27T11:37:15Z
 
 ## Mission
-Empirically test frontend Zustand updater store and component render contracts for M1.
+Empirically challenge backend process runner timeout, thread offloading, child process killing, and IPC return types in Rust backend for Milestone 1.
 
 ## 🔒 My Identity
 - Archetype: EMPIRICAL CHALLENGER
 - Roles: critic, specialist
 - Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_challenger_m1_2
-- Original parent: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Milestone: M1 (Frontend State & Component Challenger)
-- Instance: 2 of M1
+- Original parent: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Milestone: Milestone 1: Fix Execution & UI Hangs
+- Instance: 2 of 2
 
 ## 🔒 Key Constraints
-- Review-only — do NOT modify implementation code.
-- Empirically test and verify all claims with code execution.
+- Review-only — do NOT modify implementation code
+- Review/challenge backend process runner and IPC robustness empirically
 
 ## Current Parent
-- Conversation ID: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Updated: 2026-07-27T01:13:00Z
+- Conversation ID: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Updated: 2026-07-27T11:37:15Z
 
 ## Review Scope
-- **Files to review**: `src/store/useAppStore.ts`, `src/types/index.ts`, `src/components/UpdateBanner.tsx`, `src/components/ToastContainer.tsx`
-- **Interface contracts**: `PROJECT.md`
-- **Review criteria**: State transition validity, Toast system actions, type-checking (`npx tsc --noEmit`), production build (`npm run build`).
+- **Files to review**: `src-tauri/src/runner/mod.rs`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`
+- **Interface contracts**: Process timeout, child process killing, IPC return values, async thread offloading
+- **Review criteria**: Process leakage, un-killable child processes, async thread offloading, cargo test execution, panic safety
 
 ## Attack Surface
-- **Hypotheses tested**:
-  - `idle` -> `checking` -> `available` / `upToDate` / `error` -> `downloading` -> `ready` state machine transitions: PASSED
-  - `addToast` / `dismissToast` action contracts: PASSED
-  - `UpdateBanner` render visibility rules contract: PASSED
-  - Error string extraction formatting: Verified `String(err)` prepends `"Error: "` prefix on `Error` objects.
-- **Vulnerabilities found**: None breaking. Minor UX enhancement noted for error message formatting in `useAppStore.ts`.
+- **Hypotheses tested**: 
+  1. `run_command_with_timeout` prevents process leaks and kills child processes on timeout.
+  2. `run_command_with_timeout` handles large command outputs (>64 KB) without deadlocking.
+  3. `cargo test` runs cleanly.
+  4. IPC calls return typed `Result` or `ExecutionSummary` without panics or blocking reactor threads.
+- **Vulnerabilities found**: 
+  - **CRITICAL**: `run_command_with_timeout` deadlocks when a command outputs >64 KB to stdout/stderr because pipes are not drained during polling loop (`child.try_wait()`). Empirically verified: test hung for 300s until timeout killed it.
+  - **HIGH**: `child.kill()` in `run_command_with_timeout` on Windows only kills top-level `cmd.exe`/`powershell.exe`, leaving grandchild processes orphaned in background.
+  - Bare `cargo test` fails on main binary due to UAC `requireAdministrator` manifest restriction (fixed by `cargo test --lib`).
 - **Untested angles**: None.
 
 ## Loaded Skills
 - None
 
 ## Key Decisions Made
-- Created empirical test suite `src/tests/m1_updater_toast_empirical.ts` with 37 assertions across 7 test suites.
-- Verified TypeScript compilation and production build.
-- Generated handoff report at `.agents/teamwork_preview_challenger_m1_2/handoff.md`.
+- Executed `cargo test --lib` (98/98 unit tests passed).
+- Empirically reproduced 300-second pipe deadlock in `task-74` integration test run.
+- Documented CRITICAL verdict, findings, logic chain, caveats, and verification method in `handoff.md`.
 
 ## Artifact Index
-- `.agents/teamwork_preview_challenger_m1_2/handoff.md` — Handoff report
-- `src/tests/m1_updater_toast_empirical.ts` — Empirical test runner
+- `ORIGINAL_REQUEST.md` — Original request text
+- `progress.md` — Execution progress log
+- `handoff.md` — Final challenge report and handoff verdict (REJECTED / CRITICAL BUGS FOUND)
+- `src-tauri/tests/m1_challenger_tests.rs` — Empirical M1 test suite

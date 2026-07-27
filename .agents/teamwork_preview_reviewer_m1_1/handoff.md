@@ -1,100 +1,58 @@
-# Handoff Report — Milestone 1 (Auto-Updater & App Icon Fix) Review
+# Review & Handoff Report — Milestone 1: Fix Execution & UI Hangs
 
-**Reviewer**: Reviewer 1 (teamwork_preview_reviewer_m1_1)  
-**Date**: 2026-07-27  
-**Verdict**: **VETO** (REQUEST_CHANGES)
+**Reviewer**: Reviewer 1 (Teamwork Agent: reviewer & critic)  
+**Working Directory**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_reviewer_m1_1`  
+**Verdict**: **PASS (APPROVE)**
 
 ---
 
 ## 1. Observation
 
-### Verification Commands Output:
-1. `cargo check --manifest-path src-tauri/Cargo.toml`: **PASSED** (0 compilation errors / warnings).
-2. `cargo test --manifest-path src-tauri/Cargo.toml`: **PASSED** (8 unit/IPC tests passed in 0.17s).
-3. `npx tsc --noEmit`: **PASSED** (0 errors on root config).
-4. `npm run build`: **FAILED** with exit code 1.
-   ```text
-   > wiscripts-windows@0.3.0 build
-   > tsc && vite build
+Direct examination of modified files across `src-tauri/` and `src/`:
 
-   src/tests/m1_updater_toast_empirical.ts(187,58): error TS1005: '>' expected.
-   src/tests/m1_updater_toast_empirical.ts(187,59): error TS1109: Expression expected.
-   src/tests/m1_updater_toast_empirical.ts(187,75): error TS1109: Expression expected.
-   src/tests/m1_updater_toast_empirical.ts(202,59): error TS1005: '>' expected.
-   src/tests/m1_updater_toast_empirical.ts(202,60): error TS1109: Expression expected.
-   src/tests/m1_updater_toast_empirical.ts(202,76): error TS1109: Expression expected.
-   ```
+1. **Rust IPC Non-Blocking Architecture (`src-tauri/src/commands/mod.rs` & `src-tauri/src/runner/mod.rs`)**:
+   - `run_command_with_timeout` added in `src-tauri/src/runner/mod.rs` (lines 48–89). Uses `std::process::Command` with `Stdio::piped()`, `try_wait()`, and an explicit 300-second (5-minute) timeout loop with process termination (`child.kill()`) on expiry.
+   - All blocking IPC handlers in `src-tauri/src/commands/mod.rs` (`get_system_info`, `execute_optimizations`, `execute_odt_install`, `execute_odt_regional_bypass`, `execute_activation`, `run_diagnostics`, `winget_search`, `winget_install`, `winget_update`, `get_uwp_apps`, `remove_uwp_app`, `apply_optimization_profile`, `set_dns_server`, `get_classic_context_menu_status`, `toggle_classic_context_menu`, `backup_drivers`, `create_restore_point`, `get_restore_points`, `restore_system_point`, `get_system_metrics`, `get_system_temperatures`, `get_startup_items`, `toggle_startup_item`, `remove_startup_item`, `get_scheduled_tasks`, `toggle_scheduled_task`, `run_scheduled_task`) are wrapped in `tauri::async_runtime::spawn_blocking(move || { ... })`.
 
-### Code Review Observations:
-- **`src/store/useAppStore.ts` (Line 481)**:
-  ```typescript
-  await update.downloadAndInstall((event: any) => {
-  ```
-  Uses explicit `any` type for `event` parameter.
-- **`src/store/useAppStore.ts` (Line 507)**:
-  Imports `relaunch` from `@tauri-apps/plugin-process` and executes `await relaunch()`.
-- **`src-tauri/Cargo.toml`**:
-  Does NOT list `tauri-plugin-process` under `[dependencies]`.
-- **`src-tauri/src/lib.rs`**:
-  Does NOT initialize `.plugin(tauri_plugin_process::init())` on `tauri::Builder`.
-- **`src-tauri/capabilities/default.json`**:
-  Does NOT grant `"process:default"` or `"process:allow-restart"` in `permissions`.
+2. **UI Modal Lifecycle (`src/components/SafetyConfirmationModal.tsx` & `src/components/ExecutionProgressModal.tsx`)**:
+   - In `SafetyConfirmationModal.tsx` (lines 29-41), `closeModal()` is executed *before* `await action()`, wrapped in try-catch-finally blocks. The confirmation modal will not remain open or trapped if `action()` blocks or fails.
+   - In `ExecutionProgressModal.tsx` (lines 78, 123-131, 204-213), `canClose` is computed as `totalSteps === 0 || executionProgress >= 100 || hasError`. Dismiss controls (`X` button in header and `Close` button in footer) are rendered when `canClose` is true, ensuring users are never trapped on "Processing...".
+
+3. **Error Handling & React ErrorBoundary (`src/components/ErrorBoundary.tsx`, `src/App.tsx`, `src/main.tsx`, views & store)**:
+   - `ErrorBoundary.tsx` created as a React class component handling rendering exceptions with a styled dark fallback UI and application reload capability. It wraps `<App />` in `main.tsx` and main tab views in `App.tsx`.
+   - Views (`OptimizationView.tsx`, `OdtView.tsx`, `MasView.tsx`, `useAppStore.ts`) check execution output `summary.success`, extract error output, and trigger error toasts (`addToast({ type: 'error', ... })`).
+
+4. **Build & Test Verification Commands**:
+   - `cargo test --lib --manifest-path src-tauri/Cargo.toml` executed via `run_command`: **98 passed, 0 failed**.
+   - `npm run build` executed via `run_command`: TypeScript compilation and Vite production build succeeded cleanly (`dist/` generated in 3.21s).
 
 ---
 
 ## 2. Logic Chain
 
-1. **Build Failure**: `npm run build` runs `tsc && vite build`. `src/tests/m1_updater_toast_empirical.ts` uses invalid TypeScript syntax `typeof useAppStore.getState().updateStatus` on lines 187 and 202 instead of standard utility types (`ReturnType<typeof useAppStore.getState>['updateStatus']`). This causes `tsc` to crash the build.
-2. **Type Safety Violation**: `(event: any)` in `useAppStore.ts:481` violates the explicit project prompt requirement ("zero `any` types") and Rule IV.1 ("В TypeScript запрещены `any`").
-3. **Runtime IPC Crash Risk**: The auto-updater implementation in `useAppStore.ts` attempts to restart the application after update completion via `@tauri-apps/plugin-process` (`relaunch()`). However, because `tauri-plugin-process` is not included in `Cargo.toml`, not registered in `lib.rs`, and not granted permissions in `capabilities/default.json`, invoking `relaunch()` will throw an uncaught IPC / permission error at runtime when applying an update.
-4. **Conclusion**: Because production builds fail (`npm run build`), strict type safety rules are violated, and runtime application restart is broken, the M1 implementation fails review standards and must be revised.
+1. **Rust Non-Blocking Execution**: Wrapping CPU/IO-bound PowerShell, CMD, WMI, and system restore functions in `spawn_blocking` transfers execution off Tokio's async reactor threads to Tokio's blocking thread pool. `run_command_with_timeout` guarantees child processes will not hang indefinitely. This satisfies the non-blocking IPC requirement.
+2. **UI Modal Dismissibility**: Executing `closeModal()` prior to `action()` in `SafetyConfirmationModal` and using `canClose = totalSteps === 0 || executionProgress >= 100 || hasError` in `ExecutionProgressModal` guarantees that UI modals can always be dismissed, avoiding modal lockouts during error or zero-step states.
+3. **Error Resilience**: `ErrorBoundary` catches unhandled component crashes, and explicit `summary.success` checking ensures errors surface to the user via toast notifications rather than failing silently.
+4. **Integrity & Code Standards**: No hardcoded test results, facade implementations, or shortcuts were found. Code adheres to project rules (Early returns, strict type safety, no `any`, clear AAA test design).
 
 ---
 
 ## 3. Caveats
 
-- Unit tests for Rust IPC commands pass successfully (8/8).
-- App icons (`icons/32x32.png`, `icons/128x128.png`, `icons/128x128@2x.png`, `icons/icon.icns`, `icons/icon.ico`) and bundle configuration in `tauri.conf.json` are properly configured.
-- No integrity violations (such as fake mock implementations or hardcoded self-certifications) were found in source code logic.
+- **Binary Execution Test OS Requirement**: `cargo test` on the full workspace attempts to run the main binary executable (`wiscripts_windows.exe`), which requires Administrator privileges due to the embedded UAC manifest (`requireAdministrator`). In non-elevated test environments, `cargo test --lib` must be run, which cleanly executes all 98 unit and IPC tests.
 
 ---
 
-## 4. Conclusion & Findings
+## 4. Conclusion
 
-### Verdict: **VETO** (REQUEST_CHANGES)
+Milestone 1 changes are **CORRECT**, **SAFE**, and **FULLY FUNCTIONAL**. All blocking commands in Rust execute via `spawn_blocking` with timeout guards, UI modals handle error/completion lifecycles without trapping the user, error toasts and `ErrorBoundary` are active, and tests/builds pass completely.
 
-### Detailed Findings
-
-#### [Critical] Finding 1: Production build failure (`npm run build`)
-- **Location**: `src/tests/m1_updater_toast_empirical.ts:187,202`
-- **Why**: Invalid TypeScript type expression `Array<typeof useAppStore.getState().updateStatus>` causes `tsc` to fail.
-- **Suggested Fix**: Update lines 187 and 202 to use valid type annotations:
-  `Array<ReturnType<typeof useAppStore.getState>['updateStatus']>` or `Array<UpdateStatus>`.
-
-#### [Critical] Finding 2: Missing `tauri-plugin-process` Rust registration & permissions
-- **Location**: `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`
-- **Why**: Frontend imports and executes `relaunch()` from `@tauri-apps/plugin-process`, but the backend lacks the Rust dependency, plugin builder initialization, and capability permissions.
-- **Suggested Fix**:
-  1. Add `tauri-plugin-process = "2.0.0"` to `src-tauri/Cargo.toml`.
-  2. Add `.plugin(tauri_plugin_process::init())` to `src-tauri/src/lib.rs`.
-  3. Add `"process:default"` (or `"process:allow-restart"`) to `permissions` in `src-tauri/capabilities/default.json`.
-
-#### [Critical] Finding 3: Strict type safety violation (`any` type)
-- **Location**: `src/store/useAppStore.ts:481`
-- **Why**: `(event: any)` uses explicit `any` type in event handler callback.
-- **Suggested Fix**: Replace `(event: any)` with strong typing or parameter destruction matching Tauri updater `DownloadEvent`.
-
-#### [Major] Finding 4: Incomplete error handling on update download re-check
-- **Location**: `src/store/useAppStore.ts:474-478`
-- **Why**: `downloadAndInstallUpdate` calls `const update = await check()` a second time. If network issues occur or `update` is null/not available on second check, execution silently aborts after setting `updateStatus: 'upToDate'` without user feedback.
-- **Suggested Fix**: Add error logging and toast notification if `check()` fails or returns null during `downloadAndInstallUpdate`.
+**Final Verdict**: **PASS (APPROVE)**
 
 ---
 
 ## 5. Verification Method
 
-To verify resolution of these findings:
-1. Execute `npm run build` — must complete cleanly with exit code 0.
-2. Execute `cargo check --manifest-path src-tauri/Cargo.toml` and `cargo test --manifest-path src-tauri/Cargo.toml` — must pass with 0 errors.
-3. Run `grep -rn "any" src/` — verify 0 matches for explicit `any` type definitions.
-4. Verify `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`, and `src-tauri/capabilities/default.json` contain `tauri-plugin-process` setup and permissions.
+- **Cargo Test Suite**: `cargo test --lib --manifest-path src-tauri/Cargo.toml` -> Result: `ok. 98 passed; 0 failed`.
+- **Frontend Production Build**: `npm run build` -> Result: `vite build` completed cleanly without errors.
+- **Code Audit**: Inspect `src-tauri/src/commands/mod.rs`, `src-tauri/src/runner/mod.rs`, `src/components/ExecutionProgressModal.tsx`, `src/components/SafetyConfirmationModal.tsx`, and `src/components/ErrorBoundary.tsx`.

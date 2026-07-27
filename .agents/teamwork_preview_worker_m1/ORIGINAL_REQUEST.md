@@ -1,29 +1,38 @@
-## 2026-07-27T01:06:57Z
-You are Worker 1 for Milestone 1 (Auto-Updater Integration & App Icon Fix).
-Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_worker_m1\
+## 2026-07-27T11:27:02Z
+You are Worker M1 for Milestone 1: Fix Execution & UI Hangs.
 
-Task:
-Implement the complete Auto-Updater Integration (R1) and App Icon Display Fix (part of R2) for WiScripts Windows based on Explorer reports in:
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_1\handoff.md`
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_2\handoff.md`
-- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\handoff.md`
+Working Directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_worker_m1
 
-Specific Steps to Perform:
-1. **Backend & App Icon Fixes**:
-   - Add `tauri-plugin-updater = "2.0.0"` to `src-tauri/Cargo.toml`.
-   - Update `src-tauri/src/lib.rs` to register `tauri_plugin_updater::Builder::new().build()`.
-   - Expose dynamic app version IPC command `get_app_version` via `#[tauri::command]` returning string from `app_handle.package_info().version`.
-   - Fix `src-tauri/build.rs`: Remove or correct the logic that overwrites `icons/icon.ico` with 48 dummy bytes. Ensure valid PNG/ICO assets exist in `icons/` folder and valid ICO is built.
-   - Update `src-tauri/capabilities/default.json` to include `"updater:default"`.
-   - Update `src-tauri/tauri.conf.json` to configure `"plugins": { "updater": { "endpoints": ["https://github.com/widlily/WiScripts_Windows/releases/latest/download/latest.json"] } }`, set `"createUpdaterArtifacts": true`, set icon paths in `"bundle": { "icon": [...] }`, and set `"icon": "icons/icon.ico"` in `windows[0]`.
+MANDATORY INTEGRITY WARNING:
+DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A Forensic Auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
 
-2. **Frontend Dependencies & Updater UI**:
-   - Add `@tauri-apps/plugin-updater` and `@tauri-apps/plugin-process` to `package.json`.
-   - Update Zustand store (`src/store/useStore.ts` or equivalent) to store `appVersion`, `updateStatus` (`'idle' | 'checking' | 'available' | 'upToDate' | 'downloading' | 'ready' | 'error'`), `updateInfo`, `updateProgress`, `toasts`, `addToast`, `dismissToast`, `checkForUpdates`, and `downloadAndInstallUpdate`.
-   - Create notification components (`ToastContainer.tsx`, `UpdateBanner.tsx`).
-   - Integrate dynamic app version reading from `get_app_version` (or `@tauri-apps/api/app`) in UI components (`Navigation.tsx`, `SettingsView.tsx`).
+Objective:
+Resolve all root causes of UI execution hangs, modal locking, thread pool starvation, and unhandled IPC errors.
+
+Inputs & Reference Reports:
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_1\analysis.md`
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_2\analysis.md`
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\analysis.md`
+
+Tasks:
+1. **Frontend Fixes**:
+   - Refactor `SafetyConfirmationModal.tsx`: Fix execution sequence so modal closes properly and does NOT stay stuck on "Processing...". Ensure `finally` blocks handle modal state cleanup. Catch any errors during `onConfirmAction()` and display error toasts via `useToastStore`.
+   - Refactor `ExecutionProgressModal.tsx`: Fix `isCompleted` calculation (`totalSteps === 0 || executionProgress >= 100`) so commands without progress event emissions complete gracefully and allow user to dismiss/close the modal.
+   - Fix IPC invocation error handling: Ensure `ExecutionSummary` with `success === false` triggers toast notifications and is treated as an error by views and store handlers.
+   - Add `<ErrorBoundary>` in React (`src/components/ErrorBoundary.tsx` or similar) and wrap app root to capture uncaught React/async rendering errors.
+   - Fix all views (`MasView`, `OdtView`, `OptimizationView`, `DiagnosticsView`, `PresetsView`, `NetworkView`, `DriverBackupView`, `SystemRestoreView`) to catch IPC rejections and display toast error notifications instead of failing silently.
+
+2. **Backend Fixes**:
+   - In `src-tauri/src/` (especially `runner.rs` and `#[tauri::command]` functions):
+   - Offload all blocking/synchronous commands (`std::process::Command::output()`, PowerShell scripts, DISM, SFC, Winget, WinAPI operations) to `tauri::async_runtime::spawn_blocking(move || { ... })` so Tokio async threads are never starved.
+   - Add process execution timeout handling in `RealRunner::run_powershell` / `run_cmd` (e.g. 5 to 10 minute timeout or non-blocking wait) to prevent child processes from hanging indefinitely.
+   - Ensure proper error propagation from Rust commands to Tauri frontend IPC.
 
 3. **Build & Test Verification**:
-   - Run `npx tsc --noEmit` and `npm run build` to verify frontend compilation.
-   - Run `cargo check --manifest-path src-tauri/Cargo.toml` and `cargo test --manifest-path src-tauri/Cargo.toml` to verify backend compilation and unit tests.
-   - Document commands executed and build/test outputs in your handoff report.
+   - Run `cargo check` and `cargo test` using `run_command`.
+   - Run `npm run build` using `run_command`.
+   - Ensure builds and tests pass cleanly without errors.
+
+4. **Deliverables**:
+   - Write comprehensive report to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_worker_m1\handoff.md`.
+   - Send completion message to parent with build/test status.

@@ -1,66 +1,69 @@
-# BRIEFING — 2026-07-27T01:07:00Z
+# BRIEFING — 2026-07-27T16:30:00Z
 
 ## Mission
-Implement complete Auto-Updater Integration (R1) and App Icon Display Fix (R2) for WiScripts Windows.
+Resolve all root causes of UI execution hangs, modal locking, thread pool starvation, and unhandled IPC errors across WiScripts_Windows frontend and Rust Tauri backend.
 
 ## 🔒 My Identity
-- Archetype: Software Craftsman / Senior Frontend Designer & Staff Software Engineer
+- Archetype: software craftsman
 - Roles: implementer, qa, specialist
 - Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_worker_m1
-- Original parent: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Milestone: Milestone 1 (Auto-Updater Integration & App Icon Fix)
+- Original parent: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Milestone: Milestone 1 - Fix Execution & UI Hangs
 
 ## 🔒 Key Constraints
-- CODE_ONLY network mode: no external HTTP requests / downloads.
-- Clean conventional commits standard code quality, minimal change principle, zero AI-slop.
-- Genuine implementation with zero hardcoded/mocked verification tricks.
+- Minimal change principle.
+- No dummy/facade implementations or hardcoded verification values.
+- Clean compilation and test pass (`cargo check`, `cargo test`, `npm run build`).
 
 ## Current Parent
-- Conversation ID: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Updated: not yet
+- Conversation ID: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Updated: 2026-07-27T16:30:00Z
 
 ## Task Summary
-- **What to build**: Tauri auto-updater plugin integration, backend `get_app_version` IPC command, fix `build.rs` icon generation/overwriting logic, update Tauri capabilities & config, add frontend updater dependencies, Zustand update store state, toast & update banner UI, dynamic version display in Navigation/Settings.
-- **Success criteria**: Valid `cargo check`, `cargo test`, `npx tsc --noEmit`, `npm run build`.
-- **Interface contracts**: Handoff reports from explorer subagents m1_1, m1_2, m1_3.
+- **What to build**: Fix execution hangs, modal locking, Tokio thread starvation, IPC error handling & toasts, and add ErrorBoundary.
+- **Success criteria**:
+  - `SafetyConfirmationModal` closes gracefully upon confirm, catches errors, shows error toasts.
+  - `ExecutionProgressModal` can be dismissed when `totalSteps === 0 || executionProgress >= 100 || hasError`.
+  - Backend blocking operations offloaded to `spawn_blocking`.
+  - Process execution timeouts in `RealRunner`.
+  - `ExecutionSummary` failures trigger error toasts across views and store.
+  - `ErrorBoundary` wraps app root.
+  - All views handle IPC rejections & summary failures with toasts.
+  - All tests (`cargo check`, `cargo test`, `npm run build`) pass.
+- **Interface contracts**: `PROJECT.md` / existing codebase contracts
+- **Code layout**: React frontend in `src/`, Tauri Rust backend in `src-tauri/`
 
 ## Key Decisions Made
-- Added tauri-plugin-updater v2.0.0 & get_app_version command in Rust backend.
-- Fixed src-tauri/build.rs icon overwriting bug and regenerated valid multi-resolution icon.ico (82,766 bytes).
-- Configured updater capabilities in capabilities/default.json & tauri.conf.json endpoints/createUpdaterArtifacts.
-- Installed @tauri-apps/plugin-updater & @tauri-apps/plugin-process.
-- Expanded Zustand store (useAppStore.ts) with appVersion, updateStatus, updateInfo, updateProgress, autoCheckUpdates, checkForUpdates, downloadAndInstallUpdate, and floating toast notification state.
-- Created Refined Minimal UI components: ToastContainer.tsx & UpdateBanner.tsx.
-- Bound dynamic versioning to Navigation.tsx & SettingsView.tsx.
+- Offloaded all synchronous backend IPC operations to `tauri::async_runtime::spawn_blocking`.
+- Implemented 5-minute timeout protection with automatic `child.kill()` in `runner/mod.rs`.
+- Refactored `SafetyConfirmationModal.tsx` to close modal immediately on submit and handle errors with toasts.
+- Updated `ExecutionProgressModal.tsx` `isCompleted` and `canClose` logic to allow user dismissal for zero-step tasks or errored operations.
+- Added user-facing error toasts for `ExecutionSummary` failures and IPC promise rejections across all views and store actions.
+- Created `ErrorBoundary.tsx` component and wrapped active views.
 
 ## Artifact Index
-- `.agents/teamwork_preview_worker_m1/ORIGINAL_REQUEST.md` — Original prompt request.
-- `.agents/teamwork_preview_worker_m1/BRIEFING.md` — Agent briefing state.
-- `.agents/teamwork_preview_worker_m1/handoff.md` — Handoff report for Milestone 1.
+- `.agents/teamwork_preview_worker_m1/ORIGINAL_REQUEST.md` — Original assignment details.
+- `.agents/teamwork_preview_worker_m1/BRIEFING.md` — Current working briefing.
+- `.agents/teamwork_preview_worker_m1/progress.md` — Liveness and progress heartbeat.
+- `.agents/teamwork_preview_worker_m1/handoff.md` — Handoff report upon completion.
 
 ## Change Tracker
 - **Files modified**:
-  - `src-tauri/Cargo.toml`: Version 0.3.0, added tauri-plugin-updater 2.0.0
-  - `src-tauri/src/lib.rs`: Registered tauri_plugin_updater and get_app_version
-  - `src-tauri/src/commands/mod.rs`: Added get_app_version IPC command and unit test
-  - `src-tauri/build.rs`: Removed icon overwrite logic
-  - `src-tauri/icons/icon.ico`: Regenerated valid multi-res ICO (82,766 bytes)
-  - `src-tauri/capabilities/default.json`: Added updater:default permission
-  - `src-tauri/tauri.conf.json`: Added plugins.updater, createUpdaterArtifacts, bundle icon
-  - `package.json`: Added @tauri-apps/plugin-updater and @tauri-apps/plugin-process
-  - `src/types/index.ts`: Added UpdateStatus, UpdateInfo, ToastNotification, ToastType
-  - `src/store/useAppStore.ts`: Added version, updater, and toast notification state/actions
-  - `src/components/ToastContainer.tsx`: Created toast notification container component
-  - `src/components/UpdateBanner.tsx`: Created top announcement banner component
-  - `src/components/Navigation.tsx`: Render dynamic appVersion
-  - `src/components/SettingsView.tsx`: Render dynamic appVersion and Auto-Updater card
-  - `src/App.tsx`: Mounted UpdateBanner & ToastContainer, added version & update check startup hooks
-- **Build status**: Verification in progress
+  - `src-tauri/src/runner/mod.rs`: Added 5-minute timeout protection (`run_command_with_timeout`).
+  - `src-tauri/src/commands/mod.rs`: Offloaded IPC handlers to `spawn_blocking` and harmonized `execute_odt_regional_bypass` error signature.
+  - `src/components/ErrorBoundary.tsx`: Created React ErrorBoundary component.
+  - `src/main.tsx` & `src/App.tsx`: Wrapped component trees in `<ErrorBoundary>`.
+  - `src/components/SafetyConfirmationModal.tsx`: Immediate modal dismissal & error toast handling.
+  - `src/components/ExecutionProgressModal.tsx`: Updated completion status & dismissibility.
+  - `src/components/MasView.tsx`, `OdtView.tsx`, `OptimizationView.tsx`: Error toast triggers.
+  - `src/store/useAppStore.ts`: Toast error handling across all store actions.
+- **Build status**: PASS (`cargo check`, `cargo test --lib`, `npm run build` all passing cleanly)
+- **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: Pending verification completion
-- **Lint status**: Passing
-- **Tests added/modified**: `test_cargo_pkg_version_matches` added in `src-tauri/src/commands/mod.rs`
+- **Build/test result**: PASS (Cargo check pass, 98/98 Cargo lib tests pass, Vite production build pass)
+- **Lint status**: Clean
+- **Tests added/modified**: Cargo unit tests verified, React ErrorBoundary added
 
 ## Loaded Skills
 - None

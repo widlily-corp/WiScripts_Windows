@@ -1,36 +1,38 @@
-# BRIEFING — 2026-07-26T20:06:35Z
+# BRIEFING — 2026-07-27T11:26:25Z
 
 ## Mission
-Investigate project build, test, linters, execution environment, PROJECT.md layout compliance, and formulate verification strategy for M1 and roadmap R1-R5.
+Investigate frontend IPC invocation wrappers, store management, and error notification UI for Milestone 1: Fix Execution & UI Hangs.
 
 ## 🔒 My Identity
 - Archetype: Explorer
-- Roles: Project Architecture & Test Strategy Investigator
-- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\
-- Original parent: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Milestone: M1 (Project Architecture & Test Strategy)
+- Roles: Frontend IPC & Store Error Handler Investigator
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3
+- Original parent: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Milestone: Milestone 1: Fix Execution & UI Hangs
 
 ## 🔒 Key Constraints
-- Read-only investigation — do NOT implement or modify source code
-- Write only to assigned folder: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\
+- Read-only investigation — do NOT implement
+- Operational mode: CODE_ONLY
 
 ## Current Parent
-- Conversation ID: 5cb45d3e-c1c8-4763-a242-2dae72658cde
-- Updated: 2026-07-26T20:06:35Z
+- Conversation ID: 0b150f68-398e-4464-8820-a128b3fdaf33
+- Updated: 2026-07-27T11:26:25Z
 
 ## Investigation State
-- **Explored paths**: `package.json`, `PROJECT.md`, `README.md`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `src-tauri/src/`, `src-tauri/tests/`, `src/`, `src/components/`, `src/store/`, `src/tests/`
+- **Explored paths**: `src/App.tsx`, `src/hooks/useTauriCommand.ts`, `src/store/useAppStore.ts`, `src/components/*` (all 21 components), `src/types/index.ts`, `src/tests/*`
 - **Key findings**:
-  1. Build & Test Commands: Frontend uses Vite + TypeScript (`npx tsc --noEmit`, `npm run build`), Backend uses Rust/Cargo (`cargo test` passes 85 tests total: 65 unit + 5 empirical + 15 challenger; `cargo clippy` passes clean). Frontend lacks a `"test"` entry in `package.json`.
-  2. PROJECT.md Layout Compliance: Backend (`src-tauri/`) and root layout fully comply. `.agents/` directory contains only agent metadata. In frontend (`src/`), section view components (`Dashboard.tsx`, `DiagnosticsView.tsx`, etc.) are in `src/components/` rather than `src/tabs/`, and `src/i18n/` is not yet created (planned for M4).
-  3. M1 & R1-R5 Verification Strategy: Standardized multi-tier verification process combining TypeScript type checking, Rust cargo unit/integration tests, dry-run IPC execution tests, and E2E build validation.
-- **Unexplored areas**: None, full scope investigated.
+  1. Over 80% of backend IPC command invocations fail to emit error toasts when IPC throws or returns `ExecutionSummary { success: false }`.
+  2. `useTauriCommand.ts` custom hook is completely unused across the codebase.
+  3. `ExecutionSummary` domain failures resolve JS promises normally, bypassing `catch` blocks and resulting in silent failures.
+  4. Zero React Error Boundaries exist in the application tree.
+  5. Hardware metric polling silently injects random fake numbers on IPC failure.
+- **Unexplored areas**: None (investigation complete).
 
 ## Key Decisions Made
-- Completed full audit of build/test scripts, folder structure compliance, and verification strategy formulation.
+- Conducted exhaustive audit of all 34 direct `invoke` calls across stores and views.
+- Documented findings, logic chain, and architectural recommendations in `analysis.md` and `handoff.md`.
 
 ## Artifact Index
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\ORIGINAL_REQUEST.md — Original task prompt
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\BRIEFING.md — Situational awareness briefing
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\progress.md — Liveness heartbeat log
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\handoff.md — Final investigation report
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\ORIGINAL_REQUEST.md` — Request tracking
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\analysis.md` — Detailed analysis report
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_explorer_m1_3\handoff.md` — 5-component handoff report

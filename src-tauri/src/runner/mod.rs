@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Represents raw output of a executed process.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,6 +45,73 @@ pub trait CommandRunner: Send + Sync {
     fn is_dry_run(&self) -> bool;
 }
 
+fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<CommandOutput, String> {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn process: {}", e))?;
+
+    let mut stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to capture child stdout".to_string())?;
+    let mut stderr_pipe = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Failed to capture child stderr".to_string())?;
+
+    let stdout_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::copy(&mut stdout_pipe, &mut buf);
+        buf
+    });
+
+    let stderr_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::copy(&mut stderr_pipe, &mut buf);
+        buf
+    });
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let exit_code = status.code().unwrap_or(-1);
+                let stdout_bytes = stdout_handle.join().unwrap_or_default();
+                let stderr_bytes = stderr_handle.join().unwrap_or_default();
+                let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
+                let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
+
+                return Ok(CommandOutput {
+                    exit_code,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
+                    return Err(format!("Process execution timed out after {} seconds", timeout_secs));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!("Error checking process status: {}", e));
+            }
+        }
+    }
+}
+
 /// Production runner using std::process::Command to execute real PowerShell / CMD operations.
 #[derive(Debug, Default, Clone)]
 pub struct RealRunner;
@@ -65,46 +133,38 @@ impl CommandRunner for RealRunner {
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let output = cmd
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                script,
-            ])
-            .output()
-            .map_err(|e| {
-                let err_msg = format!("Failed to spawn powershell process: {}", e);
-                log::error!("[RealRunner] {}", err_msg);
-                err_msg
-            })?;
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ]);
 
-        let exit_code = output.status.code().unwrap_or(-1);
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        if output.status.success() {
-            log::info!(
-                "[RealRunner] PowerShell command completed successfully (exit code: {}). stdout: {}",
-                exit_code,
-                stdout.trim()
-            );
-        } else {
-            log::warn!(
-                "[RealRunner] PowerShell command failed (exit code: {}). stderr: {}, stdout: {}",
-                exit_code,
-                stderr.trim(),
-                stdout.trim()
-            );
+        let res = run_command_with_timeout(cmd, 300); // 5 minutes timeout
+        match &res {
+            Ok(out) => {
+                if out.exit_code == 0 {
+                    log::info!(
+                        "[RealRunner] PowerShell command completed successfully (exit code: 0). stdout: {}",
+                        out.stdout.trim()
+                    );
+                } else {
+                    log::warn!(
+                        "[RealRunner] PowerShell command failed (exit code: {}). stderr: {}, stdout: {}",
+                        out.exit_code,
+                        out.stderr.trim(),
+                        out.stdout.trim()
+                    );
+                }
+            }
+            Err(err) => {
+                log::error!("[RealRunner] {}", err);
+            }
         }
 
-        Ok(CommandOutput {
-            exit_code,
-            stdout,
-            stderr,
-        })
+        res
     }
 
     fn run_cmd(&self, command: &str) -> Result<CommandOutput, String> {
@@ -117,39 +177,31 @@ impl CommandRunner for RealRunner {
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
 
-        let output = cmd
-            .args(["/C", command])
-            .output()
-            .map_err(|e| {
-                let err_msg = format!("Failed to spawn cmd process: {}", e);
-                log::error!("[RealRunner] {}", err_msg);
-                err_msg
-            })?;
+        cmd.args(["/C", command]);
 
-        let exit_code = output.status.code().unwrap_or(-1);
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        if output.status.success() {
-            log::info!(
-                "[RealRunner] CMD command completed successfully (exit code: {}). stdout: {}",
-                exit_code,
-                stdout.trim()
-            );
-        } else {
-            log::warn!(
-                "[RealRunner] CMD command failed (exit code: {}). stderr: {}, stdout: {}",
-                exit_code,
-                stderr.trim(),
-                stdout.trim()
-            );
+        let res = run_command_with_timeout(cmd, 300); // 5 minutes timeout
+        match &res {
+            Ok(out) => {
+                if out.exit_code == 0 {
+                    log::info!(
+                        "[RealRunner] CMD command completed successfully (exit code: 0). stdout: {}",
+                        out.stdout.trim()
+                    );
+                } else {
+                    log::warn!(
+                        "[RealRunner] CMD command failed (exit code: {}). stderr: {}, stdout: {}",
+                        out.exit_code,
+                        out.stderr.trim(),
+                        out.stdout.trim()
+                    );
+                }
+            }
+            Err(err) => {
+                log::error!("[RealRunner] {}", err);
+            }
         }
 
-        Ok(CommandOutput {
-            exit_code,
-            stdout,
-            stderr,
-        })
+        res
     }
 
     fn is_dry_run(&self) -> bool {
@@ -299,4 +351,36 @@ mod tests {
         let deserialized: ExecutionSummary = serde_json::from_value(json_value).expect("Deserialization failed");
         assert_eq!(summary, deserialized);
     }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_run_command_with_large_output_no_deadlock() {
+        let runner = RealRunner::new();
+        // Generate > 64 KB of output in PowerShell (2000 lines of ~50 chars = ~100 KB)
+        let script = "1..2000 | ForEach-Object { 'Line ' + $_ + ' with padding data to exceed 64KB pipe buffer' }";
+        let res = runner.run_powershell(script).expect("PowerShell large output execution failed");
+        assert_eq!(res.exit_code, 0);
+        assert!(res.stdout.len() > 65536, "Expected stdout length > 64KB, got {}", res.stdout.len());
+        assert!(res.stdout.contains("Line 2000"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_run_command_simultaneous_large_stdout_and_stderr() {
+        let runner = RealRunner::new();
+        // Generate ~150KB on stdout AND ~150KB on stderr simultaneously in PowerShell
+        let script = r#"
+            1..3000 | ForEach-Object {
+                [Console]::Out.WriteLine("STDOUT line " + $_ + " with buffer fill text 0123456789ABCDEF")
+                [Console]::Error.WriteLine("STDERR line " + $_ + " with buffer fill text 0123456789ABCDEF")
+            }
+        "#;
+        let res = runner.run_powershell(script).expect("Simultaneous large stdout/stderr execution failed");
+        assert_eq!(res.exit_code, 0);
+        assert!(res.stdout.len() > 100000, "Expected stdout > 100KB, got {}", res.stdout.len());
+        assert!(res.stderr.len() > 100000, "Expected stderr > 100KB, got {}", res.stderr.len());
+        assert!(res.stdout.contains("STDOUT line 3000"));
+        assert!(res.stderr.contains("STDERR line 3000"));
+    }
 }
+

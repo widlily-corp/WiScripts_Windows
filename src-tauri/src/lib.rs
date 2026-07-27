@@ -1,4 +1,4 @@
-pub mod activation;
+pub mod cleaner;
 pub mod commands;
 pub mod diagnostics;
 pub mod dns_context;
@@ -14,7 +14,9 @@ pub mod profiles;
 pub mod runner;
 pub mod scheduler;
 pub mod startup;
+pub mod storage;
 pub mod system_restore;
+pub mod uninstaller;
 pub mod winapi;
 
 use std::sync::{Arc, Mutex};
@@ -65,8 +67,17 @@ pub fn run() {
             commands::create_restore_point,
             commands::get_restore_points,
             commands::restore_system_point,
+            commands::get_installed_apps,
+            commands::uninstall_app,
+            commands::scan_system_cleaner,
+            commands::clean_system_items,
+            commands::scan_duplicate_files,
+            commands::scan_large_files,
+            commands::delete_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+
 

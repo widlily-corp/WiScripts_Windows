@@ -25,7 +25,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,7 +36,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDEwNDg1NzYKUlVUTEhKbzNFbW9DbG84aUZtMkxjNGU2VnBSbVRmSzhqZWw1NWVvRmh4dkJibFR5dEl6WFl6akwK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlGQkZFODYzRTBDNkQwQzIKUldUQzBNYmdZK2kvbjZVWkk3blZEY0JIZTZFV3hsaFVhOU1DckRZdGZIbjlpREJ5UEZDNXNpcUEK",
       "endpoints": [
         "https://github.com/widlily/WiScripts_Windows/releases/latest/download/latest.json"
       ]

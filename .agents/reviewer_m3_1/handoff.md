@@ -1,109 +1,174 @@
-# Milestone 3 Handoff & Review Report — Reviewer 1
+# Handoff & Review Report — Milestone 3 Backend & Architecture
 
-## Review Summary
-
-**Verdict**: REQUEST_CHANGES
-
-Independent review of R1 (Diagnostics & Recovery), R2 (Package & Bloatware Manager), and R3 (Optimization Profiles / Presets) in `src/types/index.ts`, `src/store/useAppStore.ts`, `src/components/DiagnosticsView.tsx`, `src/components/PackageManagerView.tsx`, and `src/components/PresetsView.tsx`.
+**Reviewer**: Reviewer M3-1 (Backend & Architecture Reviewer)  
+**Target Milestone**: Milestone 3 (System Monitoring & Management Backend)  
+**Date**: 2026-07-27  
+**Verdict**: **VETO / REQUEST_CHANGES**
 
 ---
 
 ## 1. Observation
 
-- **TypeScript Compilation**: Executed `npx tsc --noEmit` at root `c:/Users/Widlily/Documents/projects/WiScripts_Windows`. Output: Exit code 0, 0 type errors.
-- **Frontend Production Build**: Executed `npm run build` at root. Output: Exit code 0. Vite built `dist/index.html` (0.57 kB), `dist/assets/index-CAezhHkE.css` (25.35 kB), `dist/assets/index-lUoI0grG.js` (297.20 kB) in 4.81s.
-- **Backend Cargo Tests**: Executed `cargo test` in `src-tauri`. Output: Exit code 0. 84 tests passed across unit tests and challenger test suites.
-- **IPC Action String Mismatch in DiagnosticsView**:
-  - `src/components/DiagnosticsView.tsx` line 174: `onClick={() => handleRunDiagnostic('dism_restore_health')}`.
-  - `src/components/DiagnosticsView.tsx` line 211: `onClick={() => handleRunDiagnostic('network_reset')}`.
-  - `src-tauri/src/diagnostics/mod.rs` line 26-41:
-    ```rust
-    let steps: Vec<DiagnosticStep> = match action.to_lowercase().as_str() {
-        "sfc_scannow" | "sfc" => vec![...],
-        "dism_restorehealth" | "dism" => vec![...],
-        "reset_tcpip" | "tcpip" | "network" => vec![...],
-        "all" => vec![...],
-        unsupported => {
-            let err_msg = format!("Unsupported diagnostics action: {}", unsupported);
-            log::error!("[DiagnosticsEngine] {}", err_msg);
-            return Err(AppError::InvalidConfig(err_msg));
-        }
-    };
-    ```
-  - When the user triggers DISM Repair, `'dism_restore_health'` is passed to Rust. Rust fails pattern matching on `"dism_restorehealth"` / `"dism"`, triggering `AppError::InvalidConfig("Unsupported diagnostics action: dism_restore_health")`.
-  - When the user triggers Network Stack Reset, `'network_reset'` is passed to Rust. Rust fails pattern matching on `"reset_tcpip"` / `"tcpip"` / `"network"`, triggering `AppError::InvalidConfig("Unsupported diagnostics action: network_reset")`.
+Direct examination of the codebase and execution of automated verification tools revealed the following facts:
+
+### A. Build and Compiler / Clippy Output
+- Executing `cargo test --manifest-path src-tauri/Cargo.toml` passed all 104 tests (84 unit tests + 20 integration tests) in 1.15s.
+- Executing `cargo clippy --manifest-path src-tauri/Cargo.toml` returned **1 warning**:
+  ```text
+  warning: you seem to want to iterate on a map's values
+     --> src\metrics\mod.rs:109:32
+      |
+  109 |         for (_pid, process) in self.sys.processes() {
+      |                                ^^^^^^^^^^^^^^^^^^^^
+      |
+      = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.96.0/index.html#for_kv_map
+      = note: `#[warn(clippy::for_kv_map)]` on by default
+  ```
+
+### B. Codebase Findings & Source Code Analysis
+
+1. **PowerShell Injection Vulnerability in Startup & Scheduler Modules**:
+   - `src-tauri/src/startup/mod.rs` (lines 154–166):
+     ```rust
+     let script = format!(
+         r#"
+     $apPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+     if (-not (Test-Path $apPath)) {{
+         New-Item -Path $apPath -Force | Out-Null
+     }}
+     $id = "{id}"
+     $parts = $id -split "_"
+     $appName = if ($parts.Length -gt 2) {{ $parts[2..($parts.Length-1)] -join "_" }} else {{ $id }}
+     $bytes = [byte[]]({byte_val})
+     Set-ItemProperty -Path $apPath -Name $appName -Value $bytes -Type Binary -ErrorAction SilentlyContinue
+     Write-Output "Toggled $appName to enabled={enable}"
+     "#,
+         id = id,
+         byte_val = byte_val,
+         enable = enable
+     );
+     ```
+   - `src-tauri/src/startup/mod.rs` (line 237): `$id = "{id}"` is interpolated directly into PowerShell script.
+   - `src-tauri/src/scheduler/mod.rs` (lines 120–126 & 193–197):
+     ```rust
+     let script = format!(
+         r#"{verb} -TaskName "{name}" -TaskPath "{path}" -ErrorAction SilentlyContinue; Write-Output "Toggled {name} enabled={enable}""#,
+         verb = verb,
+         name = task_name,
+         path = task_path,
+         enable = enable
+     );
+     ```
+     Arguments `task_name` and `task_path` are directly formatted into PowerShell strings without escaping double quotes or subexpression syntax (`$()`).
+
+2. **Data Corruption & Name Loss Bug in Startup Items**:
+   - In `src-tauri/src/startup/mod.rs` (lines 55, 77):
+     `$id = ($r.Loc + "_" + $name) -replace "[^a-zA-Z0-9_]", "_"` replaces all spaces, dots, dashes, and special characters with `_`.
+   - In `toggle_startup_item` and `remove_startup_item` (lines 162, 239):
+     `$appName = if ($parts.Length -gt 2) { $parts[2..($parts.Length-1)] -join "_" } else { $id }` attempts to reconstruct `appName` by joining split parts.
+   - Example: A startup item with registry property name `"Microsoft OneDrive"` gets `id = "hkcu_run_microsoft_onedrive"`. Reconstruction yields `$appName = "microsoft_onedrive"`.
+   - Result: `Set-ItemProperty` or `Remove-ItemProperty` operates on registry name `"microsoft_onedrive"` instead of `"Microsoft OneDrive"`, making toggling and deletion completely non-functional for real registry entries with spaces/dots.
+
+3. **Blocking Async Runtime in `get_system_temperatures`**:
+   - `src-tauri/src/commands/mod.rs` (line 657–660):
+     ```rust
+     #[tauri::command]
+     pub async fn get_system_temperatures() -> Result<metrics::SystemTemperaturesPayload, AppError> {
+         log::debug!("[IPC] get_system_temperatures request received");
+         metrics::collect_temperatures()
+     }
+     ```
+   - `src-tauri/src/metrics/mod.rs` (lines 285–344): `query_wmi_acpi_temp()` and `query_nvidia_smi_temp()` spawn external `powershell.exe` and `nvidia-smi` processes synchronously on the main Tokio async worker thread without using `tokio::task::spawn_blocking`.
+   - Polling every second spawns `powershell.exe` continuously when WMI ACPI thermal zones are unavailable, causing high CPU consumption (~300ms process spin) and blocking async IPC handlers.
+
+4. **Flawed Disk Metrics Calculation & Unused Field**:
+   - `src-tauri/src/metrics/mod.rs` (lines 49, 68, 105–115, 119): `MetricsCollector` contains `disks: Disks` which is refreshed every tick but never read.
+   - `read_disk_totals` sums `process.disk_usage()` across currently active processes. When processes exit, total read/write bytes decrease, causing `saturating_sub` to return 0 and resetting baseline counters, creating artificial rate spikes when new processes start.
+
+5. **Error Masking in Non-Dry-Run Production Mode**:
+   - `src-tauri/src/startup/mod.rs` (line 104) and `src-tauri/src/scheduler/mod.rs` (line 67): When real PowerShell execution fails (`exit_code != 0`), the code returns `Ok(get_mock_startup_items())` or `Ok(get_mock_scheduled_tasks())` instead of returning an `AppError::Execution`. Real system permission errors are hidden from the application layer.
+
+6. **Missing IPC Handler Unit Tests in `commands/mod.rs`**:
+   - `src-tauri/src/commands/mod.rs` contains zero unit tests for any of the 8 newly exposed Milestone 3 IPC commands (`get_system_metrics`, `get_system_temperatures`, `get_startup_items`, `toggle_startup_item`, `remove_startup_item`, `get_scheduled_tasks`, `toggle_scheduled_task`, `run_scheduled_task`).
 
 ---
 
 ## 2. Logic Chain
 
-1. **Premise**: Frontend UI buttons must pass action string identifiers that exactly match the backend Rust pattern match arms in `run_diagnostics`.
-2. **Observation**: `DiagnosticsView.tsx` passes `'dism_restore_health'` (with underscore between restore and health) and `'network_reset'` (with suffix `_reset`).
-3. **Rust match arms**: `diagnostics/mod.rs` expects `"dism_restorehealth"` (no underscore) and `"reset_tcpip"` (or `"network"` without `_reset`).
-4. **Execution path**: Triggering DISM Repair or Network Stack Reset results in Rust returning `AppError::InvalidConfig`, making 2 out of 3 diagnostic features non-functional at runtime.
-5. **Conclusion**: R1 UI implementation fails IPC contract alignment with the backend engine. `REQUEST_CHANGES` is required to fix the action keys in `DiagnosticsView.tsx`.
+1. **Zero Warnings Requirement**:
+   - *Observation*: `cargo clippy --manifest-path src-tauri/Cargo.toml` emits 1 warning in `src/metrics/mod.rs:109:32` (`clippy::for_kv_map`).
+   - *Deduction*: Objective explicitly mandates zero warnings. The build clean check fails.
+
+2. **Security & Injection**:
+   - *Observation*: IPC parameters (`id`, `task_name`, `task_path`) are interpolated raw into PowerShell code strings (`$id = "{id}"`, `-TaskName "{name}"`).
+   - *Deduction*: Inputs containing quotes or PowerShell commands can break out of string literals and execute arbitrary PowerShell code. Parameters passed to PowerShell scripts MUST be sanitized/escaped or passed via clean arguments.
+
+3. **Registry Name Mismatch Bug**:
+   - *Observation*: Windows Registry key names contain spaces, dashes, and dots (e.g. `"Microsoft OneDrive"`). Generating `id = "hkcu_run_microsoft_onedrive"` and later extracting `$appName = "microsoft_onedrive"` changes the property name.
+   - *Deduction*: PowerShell `Set-ItemProperty -Path $apPath -Name "microsoft_onedrive"` creates a new key rather than updating `"Microsoft OneDrive"`. `toggle_startup_item` and `remove_startup_item` fail on real Windows systems.
+
+4. **Async Runtime Thread Blocking**:
+   - *Observation*: `get_system_temperatures` is an async IPC handler that directly calls synchronous blocking process execution functions (`Command::new("powershell.exe").output()`).
+   - *Deduction*: Spawning processes inside Tokio async tasks blocks Tokio worker threads, reducing UI responsiveness and causing latency spikes during metric polling.
 
 ---
 
-## 3. Findings
+## 3. Caveats
 
-### [Critical] Finding 1: Broken IPC Action Keys for DISM and Network Reset in DiagnosticsView
-
-- **What**: Action string key mismatches in `DiagnosticsView.tsx`.
-- **Where**: `src/components/DiagnosticsView.tsx`, lines 174 & 178 (`'dism_restore_health'`), lines 211 & 215 (`'network_reset'`).
-- **Why**: Rust backend `src-tauri/src/diagnostics/mod.rs` only recognizes `"dism_restorehealth"`, `"dism"`, `"reset_tcpip"`, `"tcpip"`, `"network"`, or `"all"`. Unexpected action keys cause runtime `AppError::InvalidConfig` errors, preventing repair actions from executing.
-- **Suggestion**: In `DiagnosticsView.tsx`:
-  - Replace `'dism_restore_health'` with `'dism_restorehealth'` (or `'dism'`).
-  - Replace `'network_reset'` with `'reset_tcpip'` (or `'network'`).
-
-### [Minor] Finding 2: Tabular Number Utility Formatting on Header Counters
-
-- **What**: Package and UWP app count badges in `PackageManagerView.tsx` and rule count in `PresetsView.tsx` do not include `tabular-nums font-mono` CSS classes.
-- **Where**: `src/components/PackageManagerView.tsx` lines 196 & 310; `src/components/PresetsView.tsx` line 96.
-- **Why**: Refined Minimal UI design guidelines specify tabular numbers (`tabular-nums`) for numeric data and counts.
-- **Suggestion**: Add `font-mono tabular-nums` to count badges in header titles.
+- Unit tests (`cargo test`) pass because unit tests use `DryRunRunner` or basic non-failing cases, which bypass real PowerShell execution and real registry lookup edge cases.
+- Hardware sensor availability varies across target PCs; hardware fallbacks are intended, but spawning PowerShell every 1 second when unavailable is inefficient.
 
 ---
 
-## 4. Verified Claims
+## 4. Conclusion & Review Verdict
 
-| Claim | Method | Pass/Fail |
-| text | text | text |
-| `npx tsc --noEmit` compiles cleanly | Command execution | PASS |
-| `npm run build` generates production bundle | Command execution | PASS |
-| `cargo test` passes all backend tests | Command execution | PASS (84/84) |
-| R2 (Package Manager) IPC parameter & return types match | Static code trace of `winget_search`, `winget_install`, `winget_update`, `get_uwp_apps`, `remove_uwp_app` | PASS |
-| R3 (Optimization Profiles) IPC parameter & return types match | Static code trace of `get_optimization_profiles`, `apply_optimization_profile` | PASS |
-| Refined Minimal UI palette and dark aesthetics | Code inspection of Tailwind theme classes (`bg-surface`, `border-border`, etc.) | PASS |
-| Zero AI-slop / No dummy mocks in store | Code inspection of `useAppStore.ts` | PASS |
+**Verdict**: **VETO / REQUEST_CHANGES**
+
+### Critical & Major Findings Breakdown
+
+1. **[Critical] Security Vulnerability — PowerShell Code Injection**:
+   - **Location**: `src-tauri/src/startup/mod.rs` (lines 160, 237), `src-tauri/src/scheduler/mod.rs` (lines 122, 194).
+   - **Why**: Unescaped string interpolation allows arbitrary PowerShell execution via IPC inputs.
+   - **Suggestion**: Implement proper quote escaping (e.g., using `escape_powershell_literal` or passing parameters via encoded/escaped arguments).
+
+2. **[Critical] Functional Bug — Destructive Registry Property Name Conversion**:
+   - **Location**: `src-tauri/src/startup/mod.rs` (lines 55, 161–162, 238–239).
+   - **Why**: Reconstructing `appName` from sanitized `id` destroys original key names with spaces or dots (e.g., `"Microsoft OneDrive"` becomes `"microsoft_onedrive"`), rendering startup toggling/removal broken on Windows.
+   - **Suggestion**: Pass the raw original item name directly or encode the name cleanly (e.g., base64 or explicit separate payload fields) so `toggle_startup_item` receives the exact registry property name.
+
+3. **[Major] Compiler / Clippy Warning**:
+   - **Location**: `src-tauri/src/metrics/mod.rs` (line 109).
+   - **Why**: Violates the project requirement of zero compiler/clippy warnings.
+   - **Suggestion**: Fix line 109 to `for process in self.sys.processes().values()`.
+
+4. **[Major] Async Blocking & Heavy Process Spawning in Thermal Sensors**:
+   - **Location**: `src-tauri/src/metrics/mod.rs` (lines 285–344) & `src-tauri/src/commands/mod.rs` (line 657).
+   - **Why**: Spawning `powershell.exe` every second inside an async IPC call blocks Tokio runtime threads and creates CPU overhead.
+   - **Suggestion**: Wrap process execution in `tauri::async_runtime::spawn_blocking` or cache failed WMI/NVIDIA probes to avoid spawning processes every 1s when sensors are absent.
+
+5. **[Major] Error Masking with Mock Data in Real Execution**:
+   - **Location**: `src-tauri/src/startup/mod.rs` (line 104) & `src-tauri/src/scheduler/mod.rs` (line 67).
+   - **Why**: Returning mock data when PowerShell fails in production hides genuine errors from the user/app.
+   - **Suggestion**: Return `Err(AppError::Execution(...))` when real command execution fails.
+
+6. **[Minor] Missing Unit Tests for M3 IPC Handlers**:
+   - **Location**: `src-tauri/src/commands/mod.rs`.
+   - **Why**: M3 IPC commands lack unit tests covering dry-run command invocations.
+   - **Suggestion**: Add unit tests in `commands/mod.rs` for `get_system_metrics`, `get_system_temperatures`, `get_startup_items`, `toggle_startup_item`, `remove_startup_item`, `get_scheduled_tasks`, `toggle_scheduled_task`, and `run_scheduled_task`.
 
 ---
 
-## 5. Coverage Gaps
+## 5. Verification Method
 
-- No coverage gaps identified for R1, R2, R3 frontend review.
+To verify these findings independently:
 
----
+1. **Verify Clippy Warning**:
+   ```powershell
+   cargo clippy --manifest-path src-tauri/Cargo.toml
+   ```
+   *Result*: Emits `warning: you seem to want to iterate on a map's values` at `src/metrics/mod.rs:109:32`.
 
-## 6. Caveats
-
-- Testing was performed in `CODE_ONLY` network mode. Tauri IPC commands were tested via unit tests and dry-run execution models. Live system DISM execution requires elevated Windows environment.
-
----
-
-## 7. Conclusion
-
-The implementation of R1, R2, and R3 shows strong architecture, zero TypeScript errors, successful production builds, and compliance with the Refined Minimal design system. However, due to Critical Finding 1 (IPC action string key mismatch breaking DISM Repair and Network Stack Reset in `DiagnosticsView.tsx`), the verdict is **REQUEST_CHANGES**.
-
----
-
-## 8. Verification Method
-
-To verify the required fix after changes are applied:
-
-1. Inspect `src/components/DiagnosticsView.tsx`:
-   - Confirm lines 174 & 178 use `'dism_restorehealth'` (or `'dism'`).
-   - Confirm lines 211 & 215 use `'reset_tcpip'` (or `'network'`).
-2. Run TypeScript check: `npx tsc --noEmit`.
-3. Run frontend build: `npm run build`.
-4. Run Rust unit tests: `cargo test` in `src-tauri`.
+2. **Verify Tests**:
+   ```powershell
+   cargo test --manifest-path src-tauri/Cargo.toml
+   ```

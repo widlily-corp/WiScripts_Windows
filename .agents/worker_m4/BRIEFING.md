@@ -1,60 +1,50 @@
-# BRIEFING — 2026-07-22T19:54:59Z
+# BRIEFING — 2026-07-27
 
 ## Mission
-Frontend UI Polish & Component Implementer: Created new viewports (OdtView, MasView, DiagnosticsView, SettingsView), updated Navigation & App.tsx, adhered to Refined Minimal design guidelines, verified backend tests (`cargo test` 21/21 passed), and completed handoff.
+Implement Milestone 4 (Customization & Profiles): i18next localization (RU/EN), Settings view with persistent preferences (Zustand persist middleware, theme switching), Rust preset import/export with schema validation, UI preset import/export integration, and comprehensive Rust/Empirical tests.
 
 ## 🔒 My Identity
 - Archetype: implementer, qa, specialist
 - Roles: implementer, qa, specialist
-- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/worker_m4
-- Original parent: 0d21945e-37b9-4d3b-b317-58bbbc36f046
-- Milestone: M4 Frontend UI Polish & Component Implementation
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m4
+- Original parent: 6c6f016c-dd55-496a-91cb-59ac4d72d307
+- Milestone: Milestone 4 (Customization & Profiles)
 
 ## 🔒 Key Constraints
-- Refined Minimal design guidelines (#08090A dark theme, 1px hairlines, rounded-[6px], tabular-nums).
-- Early returns, no any in TS, explicit type safety, proper React component conventions.
-- Genuine implementations, no hardcoded cheating.
+- CODE_ONLY network mode (no external web requests)
+- Refined Minimal design style (dark `#08090A`, subtle 1px borders, clear typography)
+- Genuine implementation with no hardcoded test shortcuts or dummy mocks
+- Standardized Conventional Commits / Clean code standards
+- Pass `cargo test --manifest-path src-tauri/Cargo.toml` 100%
+- Pass `npx tsc --noEmit` and `npm run build` with 0 errors
 
 ## Current Parent
-- Conversation ID: 0d21945e-37b9-4d3b-b317-58bbbc36f046
-- Updated: 2026-07-22T19:54:59Z
+- Conversation ID: 6c6f016c-dd55-496a-91cb-59ac4d72d307
+- Updated: 2026-07-27
 
 ## Task Summary
 - **What to build**:
-  1. `src/components/OdtView.tsx` (ODT UI: product selection, arch, channel, excluded apps, live XML preview, deploy action with SafetyConfirmationModal & `execute_odt_install`).
-  2. `src/components/MasView.tsx` (Activation UI: HWID, Ohook, KMS38 methods, descriptions, safety indicators, activate action with SafetyConfirmationModal & `execute_activation`).
-  3. `src/components/DiagnosticsView.tsx` (Diagnostics dashboard: CPU/RAM metrics, OS build details, admin elevation badge, DiagTrack status, log search/export).
-  4. `src/components/SettingsView.tsx` (App settings panel: dry-run default toggle, theme info, repository credits).
-  5. `src/App.tsx` & `src/components/Navigation.tsx` (wired all 6 viewports: dashboard, optimization, odt, activation, diagnostics, settings).
-- **Success criteria**: All viewports implemented and integrated seamlessly, Refined Minimal style applied, `cargo test` passing 21/21 tests in `src-tauri`.
-- **Interface contracts**: IPC invoke calls matching backend command signatures (`execute_odt_install`, `execute_activation`, etc.).
+  1. i18next RU / EN Localization setup, locales `en.json` & `ru.json`, integration across all components.
+  2. `SettingsView.tsx` with Dark/Light/System theme toggling, Zustand persist middleware for user settings (language, themeMode, dryRunMode, autoCreateRestorePoint, pollingIntervalMs).
+  3. Preset import/export in Rust (`src-tauri/src/profiles/mod.rs`), IPC commands, and frontend UI in `PresetsView.tsx` (or modal/tab) with JSON file save/upload & schema validation.
+  4. Rust unit tests for profiles & empirical TypeScript test script (`src/tests/m4_empirical.ts`).
+- **Success criteria**: All tests pass, build clean, full functionality working.
+- **Interface contracts**: PROJECT.md / Explorer handoff reports.
 
 ## Change Tracker
-- **Files modified**:
-  - `src/types/index.ts`: Updated TabType to include `'diagnostics'`
-  - `src/components/OdtView.tsx`: Created ODT configuration & deployment view
-  - `src/components/MasView.tsx`: Created MAS activation view
-  - `src/components/DiagnosticsView.tsx`: Created diagnostics dashboard & log console
-  - `src/components/SettingsView.tsx`: Created settings panel with dry-run toggle & credits
-  - `src/components/Navigation.tsx`: Connected sidebar to switch between all 6 viewports
-  - `src/App.tsx`: Wired viewports to activeTab
-- **Build status**: `cargo test` PASS (21/21 tests passed)
+- **Files modified**: TBD
+- **Build status**: Pending initial run
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: 21/21 Rust unit & integration tests passed.
-- **Lint status**: Clean
-- **Tests added/modified**: All backend tests verified with `cargo test`.
+- **Build/test result**: Pending
+- **Lint status**: Clean expected
+- **Tests added/modified**: Pending
 
 ## Loaded Skills
-- None loaded.
-
-## Key Decisions Made
-- Implemented modular component hierarchy placing viewports in `src/components/` (OdtView, MasView, DiagnosticsView, SettingsView).
-- Adhered strictly to Refined Minimal guidelines: `#08090A` dark theme, 1px hairlines (`border border-border`), `rounded-[6px]`, `font-mono` for metrics/previews, and `tabular-nums`.
+- None
 
 ## Artifact Index
-- `.agents/worker_m4/ORIGINAL_REQUEST.md` — Original prompt for M4
-- `.agents/worker_m4/BRIEFING.md` — Agent briefing & state
-- `.agents/worker_m4/progress.md` — Liveness progress log
-- `.agents/worker_m4/handoff.md` — Final handoff report
+- `.agents/worker_m4/BRIEFING.md` — Agent working state & briefing
+- `.agents/worker_m4/progress.md` — Task progress & heartbeat
+- `.agents/worker_m4/handoff.md` — Final completion report

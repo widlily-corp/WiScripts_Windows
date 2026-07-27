@@ -1,14 +1,15 @@
-## 2026-07-23T19:04:09+05:00
-You are Challenger 1 for Milestone 3 of the Six Premium Features project in WiScripts Windows.
-Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/challenger_m3_1
-Project Scope document: c:/Users/Widlily/Documents/projects/WiScripts_Windows/PROJECT.md
+## 2026-07-27T06:04:10Z
 
-Your objective:
-Empirically verify and stress-test the TypeScript compilation, Vite production build, type definitions, and Zustand state store actions across features R1 through R5.
+You are Challenger M3-1 (Empirical Verifier & Stress Tester) for Milestone 3.
+Your working directory is: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m3_1
+Create your working directory and your own BRIEFING.md / progress.md.
 
-Verify:
-1. Run `npx tsc --noEmit` and `npm run build`.
-2. Inspect `useAppStore.ts` state actions to verify correct payload parameters passed to `invoke(...)`.
-3. Check state resilience (loading flags, error catching, safety confirmation modal triggers, dry-run mode flag propagation).
+Objective:
+Empirically stress-test and verify Milestone 3 implementation:
+1. Run `cargo test --manifest-path src-tauri/Cargo.toml` and verify all Rust unit and integration tests pass.
+2. Run `npx tsx src/tests/m3_metrics_empirical.ts` and verify ring buffer capping, SVG coordinate generation, thermal status mapping, and polling controls.
+3. Test edge cases: null temperature sensor handling, dry-run safety in startup item toggling and task scheduler execution, empty search/filter queries, and memory buffer bounds.
 
-Write your verification handoff report to `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/challenger_m3_1/handoff.md` and send a message back to parent.
+Write your empirical verification report to:
+`c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m3_1\handoff.md`
+When done, send a message to parent with your verdict (PASS/FAIL), rationale, and report path.

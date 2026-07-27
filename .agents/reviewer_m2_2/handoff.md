@@ -1,106 +1,86 @@
-# Handoff Report — Independent Review of Backend Implementation (R4 & R5)
-
-## Review Summary
-
-**Verdict**: **APPROVE**
+# Handoff Report — Reviewer M2-2 (Milestone 2 Frontend Changes)
 
 ## 1. Observation
 
-- **Command Compilation (`cargo check`)**:
-  - Command: `cargo check` in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`
-  - Result:
-    ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.72s
-    ```
-- **Unit Test Execution (`cargo test`)**:
-  - Command: `cargo test` in `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri`
-  - Result:
-    ```text
-    running 64 tests
-    test commands::tests::test_backup_drivers_ipc_dry_run ... ok
-    test commands::tests::test_set_dns_server_ipc_dry_run ... ok
-    test dns_context::tests::test_set_dns_server_adguard_dry_run ... ok
-    test dns_context::tests::test_set_dns_server_dhcp_dry_run ... ok
-    test dns_context::tests::test_set_dns_server_cloudflare_dry_run ... ok
-    test dns_context::tests::test_set_dns_server_google_dry_run ... ok
-    test dns_context::tests::test_set_dns_server_invalid_provider ... ok
-    test dns_context::tests::test_get_classic_context_menu_status ... ok
-    test dns_context::tests::test_toggle_classic_context_menu_disable_dry_run ... ok
-    test dns_context::tests::test_toggle_classic_context_menu_enable_dry_run ... ok
-    test driver_backup::tests::test_backup_drivers_empty_dir ... ok
-    test driver_backup::tests::test_backup_drivers_dry_run ... ok
-    ...
-    test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s
-    ```
-- **File Inspections**:
-  - `src-tauri/src/dns_context/mod.rs` (lines 24-89): Implements `set_dns_server` using `Set-DnsClientServerAddress` for providers `adguard` (94.140.14.14 / 94.140.15.15), `cloudflare` (1.1.1.1 / 1.0.0.1), `google` (8.8.8.8 / 8.8.4.4), and `dhcp` (`-ResetServerAddresses`).
-  - `src-tauri/src/dns_context/mod.rs` (lines 143-230): Implements `get_classic_context_menu_status` and `toggle_classic_context_menu` referencing HKCU registry key `HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32`.
-  - `src-tauri/src/driver_backup/mod.rs` (lines 7-85): Implements `backup_drivers` using `Export-WindowsDriver -Online -Destination "<dir>"`. Validates empty output directory paths.
-  - `src-tauri/src/commands/mod.rs` (lines 433-532): Exposes `#[tauri::command]` handlers for `set_dns_server`, `get_classic_context_menu_status`, `toggle_classic_context_menu`, and `backup_drivers` with `DryRunRunner` and `RealRunner` branching.
-  - `src-tauri/src/lib.rs` (lines 40-43): Registers `commands::set_dns_server`, `commands::get_classic_context_menu_status`, `commands::toggle_classic_context_menu`, and `commands::backup_drivers` in Tauri's `invoke_handler`.
-  - `src-tauri/src/odt/mod.rs` (line 134): Defines `pub fn escape_powershell_literal(input: &str) -> String`.
+### Reviewed Files & Inspection Summary:
+1. **`src/types/index.ts`**:
+   - `TabType` union (line 86) extended with `'restore_points'`.
+   - `RestorePoint` interface defined (line 99) with `sequenceNumber`, `description`, `restorePointType`, `creationTime`.
+   - No `any` types or loose type constraints found.
+
+2. **`src/store/useAppStore.ts`**:
+   - Restore Points state (`restorePoints`, `isLoadingRestorePoints`) and actions (`fetchRestorePoints`, `createRestorePoint`, `restoreSystemToPoint`) fully implemented with Tauri IPC `invoke` calls.
+   - Safety Confirmation Modal state (`pendingSafetyModal`, `openSafetyModal`, `closeSafetyModal`) implemented cleanly.
+   - ODT state management (`odtConfig`, `updateOdtConfig`, `generatedXml`) and action handlers correctly wired up.
+
+3. **`src/components/RestorePointsView.tsx`**:
+   - Full UI component featuring elevation banner, system status summary, restore point creation form, checkpoint list table, and dual-layer safety confirmations.
+   - Creation triggers `openSafetyModal` (`riskLevel: 'low'`).
+   - Rollback triggers modal prompt + `openSafetyModal` (`riskLevel: 'high'`) with restart warnings and command previews.
+   - Admin elevation restrictions enforced (`isButtonDisabled` disables actions if non-elevated and dry-run mode is OFF).
+
+4. **`src/components/Navigation.tsx`**:
+   - Added `'restore_points'` navigation item with `RotateCcw` icon.
+   - Button interaction disabled when `isExecuting` is true.
+
+5. **`src/components/OdtView.tsx`**:
+   - Multi-section form (Products, Architecture, Channel, Language, Excluded Apps, Flags) with live XML preview.
+   - Actions (`handleDeploy`, `handleBypassRegionalLock`) invoke safety confirmation modals before executing backend IPC calls.
+
+6. **`src/App.tsx`**:
+   - Renders `RestorePointsView` when `activeTab === 'restore_points'`.
+   - Listens for `odtConfig` updates and refreshes live XML preview via `generate_odt_xml`.
+
+7. **`index.html`, `public/icon.png`, `src-tauri/tauri.conf.json`**:
+   - `index.html` references `/icon.png` matching `public/icon.png`.
+   - `public/icon.png` exists and is a valid asset.
+   - `src-tauri/tauri.conf.json` configured with version `0.3.0` and proper bundle icons.
+
+### Command Execution Output:
+- Command: `npm run build` (`tsc && vite build`)
+- Executed in: `c:\Users\Widlily\Documents\projects\WiScripts_Windows`
+- Result: Clean build with 0 TypeScript compilation errors and 0 Vite bundle warnings.
+
+```
+> wiscripts-windows@0.3.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 1828 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.56 kB │ gzip:  0.36 kB
+dist/assets/index-DzIuvIdx.css   27.73 kB │ gzip:  5.79 kB
+dist/assets/index-BCGmIOEE.js   328.15 kB │ gzip: 85.67 kB
+✓ built in 3.21s
+```
 
 ## 2. Logic Chain
-
-1. **Compilation & Tests**: Executing `cargo check` and `cargo test` in `src-tauri` confirmed that all code compiles without errors or warnings and all 64 unit tests pass without failure.
-2. **Functionality & Command Accuracy**:
-   - `set_dns_server` constructs proper PowerShell cmdlets targeting specific network interfaces or all active adapters (`Get-NetAdapter | Where-Object Status -eq 'Up'`).
-   - `toggle_classic_context_menu` accurately targets the Windows 11 context menu CLSID override key (`HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}`).
-   - `backup_drivers` constructs valid `Export-WindowsDriver -Online -Destination ...` commands after ensuring target folder creation.
-3. **`CommandRunner` & Event Emission**:
-   - Both engines accept `&dyn CommandRunner`, allowing seamless testing in dry-run mode (`DryRunRunner`) and production execution (`RealRunner`).
-   - `"task-progress"` events are emitted via `app.emit("task-progress", &payload)` for step start, step completion, and step error notifications with serialized `TaskProgressPayload`.
-4. **Integrity & Code Quality**:
-   - No dummy implementations, fake return values, or hardcoded test bypasses were found.
-   - Public contract signatures match the requirements set in `PROJECT.md`.
+- **Type Safety**: All frontend state and props are strongly typed using TypeScript interfaces in `src/types/index.ts`.
+- **UI & UX Quality**: Standard dark theme aesthetic with custom design tokens (`bg-surface`, `border-border`, `text-brand`). Tables use `tabular-nums` and monospace details for sequence numbers.
+- **Safety Confirmations**: Destructive/administrative actions in `RestorePointsView` and `OdtView` route through `openSafetyModal`, preventing accidental executions and clearly presenting commands and risk levels to the user.
+- **Integrity**: No dummy/facade implementations, no hardcoded test outputs, no bypassed checks. All IPC handlers map directly to Tauri backend commands.
+- **Build Cleanliness**: `npm run build` completed cleanly without errors.
 
 ## 3. Caveats
-
-- **Parameter Escaping Recommendation**: In `dns_context/mod.rs` (line 31) and `driver_backup/mod.rs` (line 39), `alias.trim()` and `clean_dir` are formatted inside double quotes (e.g. `\"{}\"`). While standard adapter names and folder paths operate correctly, using `escape_powershell_literal` (or single-quoted literal escaping) would eliminate potential edge cases with quotes or PowerShell subexpressions (`$()`). This is a minor hardening suggestion and does not block approval.
-- **System Elevation**: Live execution of `Set-DnsClientServerAddress` or `Export-WindowsDriver` requires administrator privileges on Windows. The backend properly captures exit codes and errors from `CommandRunner`.
+- Host PowerShell System Restore execution depends on Windows OS configuration (System Restore service must be enabled on target host for live restore point creation).
+- Rust backend IPC implementations (`get_restore_points`, `create_restore_point`, `restore_system_point`, `execute_odt_install`) are verified in parallel by Reviewer M2-1.
 
 ## 4. Conclusion
+**Verdict**: **PASS**
 
-The backend implementation for R4 (DNS & Context Menu) and R5 (Driver Backup) is complete, robust, cleanly written, fully tested, and compliant with all project requirements.
-
-**Verdict**: **APPROVE**
+All Milestone 2 frontend changes satisfy UX/UI design standards, type safety, state management, modal safety confirmation requirements, asset path resolution, and build cleanliness.
 
 ## 5. Verification Method
-
-To independently verify this assessment:
-
-1. **Compilation**: Run `cargo check` in `src-tauri/`.
-2. **Test Suite**: Run `cargo test` in `src-tauri/`.
-3. **Code Inspection**:
-   - Inspect `src-tauri/src/dns_context/mod.rs` for DNS providers and registry keys.
-   - Inspect `src-tauri/src/driver_backup/mod.rs` for `Export-WindowsDriver` logic.
-   - Inspect `src-tauri/src/commands/mod.rs` and `src-tauri/src/lib.rs` for Tauri IPC registration.
-
----
-
-## Detailed Findings
-
-### Minor Finding 1: PowerShell Parameter Hardening Opportunity
-
-- **What**: `interface_alias` in `dns_context/mod.rs` and `output_dir` in `driver_backup/mod.rs` are formatted into PowerShell command strings using double-quoted string interpolation (`"..."`).
-- **Where**: `src-tauri/src/dns_context/mod.rs:31,47,63,77` and `src-tauri/src/driver_backup/mod.rs:39`.
-- **Why**: Double-quoted strings in PowerShell evaluate subexpressions `$()` if present in user input. `odt::escape_powershell_literal` exists in the codebase and provides single-quote escaping for string literals.
-- **Suggestion**: Consider moving `escape_powershell_literal` to `runner` or a shared utility module and applying it to input parameters across all commands.
-
-## Verified Claims
-
-- `cargo check` succeeds without errors → **PASS**
-- `cargo test` (64 tests) succeeds without errors → **PASS**
-- `set_dns_server` correctly handles AdGuard, Cloudflare, Google, and DHCP → **PASS**
-- `get_classic_context_menu_status` & `toggle_classic_context_menu` correctly query/modify HKCU CLSID registry → **PASS**
-- `backup_drivers` correctly validates path and invokes `Export-WindowsDriver` → **PASS**
-- `CommandRunner` abstraction & `"task-progress"` IPC emission used correctly → **PASS**
-- No dummy/facade implementations or integrity violations → **PASS**
-
-## Coverage Gaps
-
-- None.
-
-## Unverified Items
-
-- Live execution of `Export-WindowsDriver` against a physical Windows driver store (verified via `DryRunRunner` and mock execution logic).
+- **Build Verification Command**: `npm run build`
+- **File Inspection**:
+  - `src/components/RestorePointsView.tsx`
+  - `src/components/Navigation.tsx`
+  - `src/components/OdtView.tsx`
+  - `src/store/useAppStore.ts`
+  - `src/types/index.ts`
+  - `src/App.tsx`
+  - `index.html`
+  - `public/icon.png`
+  - `src-tauri/tauri.conf.json`

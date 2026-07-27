@@ -1,57 +1,62 @@
-# BRIEFING — 2026-07-23T14:07:15Z
+# BRIEFING — 2026-07-27T06:13:30Z
 
 ## Mission
-Fix the diagnostic IPC action key string mismatch between DiagnosticsView.tsx and src-tauri/src/diagnostics/mod.rs.
+Remediate Milestone 3 Backend issues (PowerShell injection, Registry name preservation, Clippy warnings, async blocking mitigation, error masking removal, and IPC handler unit tests).
 
 ## 🔒 My Identity
-- Archetype: Software Craftsman / Implementer & QA
+- Archetype: implementer, qa, specialist
 - Roles: implementer, qa, specialist
-- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/worker_m3_remediation
-- Original parent: af959d17-7dc6-48aa-b065-8f833af38b1c
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m3_remediation
+- Original parent: 6c6f016c-dd55-496a-91cb-59ac4d72d307
 - Milestone: M3 Remediation
 
 ## 🔒 Key Constraints
-- Minimal change principle.
-- No dummy/facade implementations or hardcoded values.
-- Verify through tsc, npm run build, cargo check, cargo test.
+- Fix PowerShell injection vulnerabilities in `startup/mod.rs` & `scheduler/mod.rs`.
+- Preserve exact registry property names in `StartupItem`, IPC params, and frontend `StartupView.tsx`.
+- Fix clippy warning in `src-tauri/src/metrics/mod.rs:109` (0 clippy warnings target).
+- Mitigate Tokio blocking in `get_system_temperatures` using `tokio::task::spawn_blocking`.
+- Remove error masking: return `Err(AppError::Execution(...))` when real execution fails instead of falling back to mock data.
+- Add unit tests for all 8 M3 IPC command handlers in dry-run mode in `commands/mod.rs`.
+- All tests passing, 0 clippy warnings, TypeScript check & build passing.
+- DO NOT CHEAT: genuine logic only.
 
 ## Current Parent
-- Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Updated: 2026-07-23T14:07:15Z
+- Conversation ID: 6c6f016c-dd55-496a-91cb-59ac4d72d307
+- Updated: 2026-07-27T06:13:30Z
 
 ## Task Summary
-- **What to build**: Update string action keys in DiagnosticsView.tsx and expand pattern match arms in src-tauri/src/diagnostics/mod.rs.
-- **Success criteria**:
-  1. DiagnosticsView.tsx uses 'dism_restorehealth' and 'reset_tcpip'.
-  2. src-tauri/src/diagnostics/mod.rs handles `"dism_restorehealth" | "dism_restore_health" | "dism"` and `"reset_tcpip" | "network_reset" | "network" | "tcpip"`.
-  3. `npx tsc --noEmit` & `npm run build` pass in project root.
-  4. `cargo check` & `cargo test` pass in `src-tauri/`.
-- **Interface contracts**: PROJECT.md
-- **Code layout**: PROJECT.md
-
-## Key Decisions Made
-- Updated action string literals passed in `DiagnosticsView.tsx` from `'dism_restore_health'` and `'network_reset'` to `'dism_restorehealth'` and `'reset_tcpip'`.
-- Updated activeAction state check matching in `DiagnosticsView.tsx`.
-- Expanded match arms in `src-tauri/src/diagnostics/mod.rs` to support `"dism_restorehealth" | "dism_restore_health" | "dism"` and `"reset_tcpip" | "network_reset" | "network" | "tcpip"`.
-- Added unit test `test_run_diagnostics_action_aliases` in `src-tauri/src/diagnostics/mod.rs` testing all action aliases.
-
-## Artifact Index
-- ORIGINAL_REQUEST.md — Initial user prompt backup
-- BRIEFING.md — Context briefing tracking
-- progress.md — Liveness heartbeat and step tracking
-- handoff.md — Handoff report for parent agent
+- **What to build**: Remediation fixes for M3 Backend + tests.
+- **Success criteria**: 0 clippy warnings, 100% tests pass, 0 tsc/build errors, genuine implementations.
 
 ## Change Tracker
 - **Files modified**:
-  - `src/components/DiagnosticsView.tsx`: Action key updates for DISM Repair and Network Stack Reset.
-  - `src-tauri/src/diagnostics/mod.rs`: Expanded match arms for DISM and Network Reset actions + alias test suite.
-- **Build status**: PASS (tsc, vite build, cargo check, cargo test)
+  - `src-tauri/src/startup/mod.rs`: PowerShell param escaping, added `value_name` to `StartupItem`, removed error masking, fixed toggle/remove logic.
+  - `src-tauri/src/scheduler/mod.rs`: PowerShell param escaping, removed error masking, return `Err` on non-zero exit code.
+  - `src-tauri/src/metrics/mod.rs`: Fixed `clippy::for_kv_map` warning using `.values()`.
+  - `src-tauri/src/commands/mod.rs`: `spawn_blocking` in `get_system_temperatures`, IPC handlers for `value_name` & `location`, 8 IPC unit tests added.
+  - `src/types/index.ts`: Added `valueName` to `StartupItem` interface.
+  - `src/store/useAppStore.ts`: Updated `toggleStartupItem` and `removeStartupItem` to pass `valueName` and `location`.
+  - `src/components/StartupView.tsx`: Updated calls to `toggleStartupItem` and `removeStartupItem`.
+  - `src/tests/m3_edge_cases_empirical.ts`: Wrapped stdout checks with `Boolean()` for strict TS checks.
+- **Build status**: PASS (0 warnings, 0 errors, 92/92 Rust tests pass)
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: All 85 Rust unit and integration tests passing; TypeScript and Vite builds clean.
-- **Lint status**: Clean
-- **Tests added/modified**: `test_run_diagnostics_action_aliases` added to `src-tauri/src/diagnostics/mod.rs`.
+- **Build/test result**: PASS (cargo test 92/92 passed)
+- **Lint status**: 0 warnings (cargo clippy clean)
+- **Tests added/modified**: 8 IPC unit tests added in `commands/mod.rs`
 
 ## Loaded Skills
 - None
+
+## Key Decisions Made
+- Used single-quoted PowerShell string literals with `'` escaped as `''` to prevent subexpression evaluation `$()`.
+- Preserved exact original registry property names using `value_name` field.
+- Reserved mock data strictly for dry-run mode (`runner.is_dry_run()`).
+- Used `tauri::async_runtime::spawn_blocking` for temperature collection.
+
+## Artifact Index
+- `.agents/worker_m3_remediation/ORIGINAL_REQUEST.md`
+- `.agents/worker_m3_remediation/BRIEFING.md`
+- `.agents/worker_m3_remediation/progress.md`
+- `.agents/worker_m3_remediation/handoff.md`

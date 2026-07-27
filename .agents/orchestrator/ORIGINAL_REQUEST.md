@@ -1,27 +1,53 @@
 # Original User Request
 
-## 2026-07-27T00:31:25Z
+## 2026-07-27T01:04:36Z
 
-Fix all bugs in WiScripts Windows, ensure all backend optimization and tweaking functions execute for real (not just dry-run), and implement UI warnings for functions that require Administrator privileges.
-
+You are the Project Orchestrator for WiScripts Windows.
 Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
-Integrity mode: development
+Your task: Implement the complete Roadmap outlined in c:\Users\Widlily\Documents\projects\WiScripts_Windows\ORIGINAL_REQUEST.md.
 
-## Requirements
+Requirements summary:
+- R1. Auto-Updater: Integrate tauri-plugin-updater for GitHub release checks, fetch version from tauri.conf.json for UI, implement UI notifications (Toast/Banner) & background updates.
+- R2. Safety, Tools & Fixes: Fix app icon display in system/taskbar/window, add ODT regional block bypass registry command, implement automatic System Restore point creation before optimizations, add Restore Points management tab (view & rollback).
+- R3. System Monitoring & Management: Real-time CPU, RAM, Disk, Network load graphs on Dashboard, CPU/GPU temperature sensors, Startup Apps manager tab, Task Scheduler background tasks tab.
+- R4. Customization & Profiles: Integrate i18next (RU, EN), Settings tab (theme & default parameters saving), JSON import/export for optimization presets.
+- R5. Finalization & Release: Git status clean, commit all changes using Conventional Commits, git push, create and push release tag based on version in tauri.conf.json.
 
-### R1. Real Execution
-Ensure the frontend React application correctly triggers real execution of commands (e.g., passing `dry_run: false` where appropriate or fixing any bugs in `RealRunner`/IPC handlers). All features (diagnostics, package manager, profiles, DNS, driver backup) must work properly.
+Follow team standards: strict type safety, zero AI-slop, AAA testing, proper error handling, conventional commits. Maintain your plan in .agents/orchestrator/plan.md and update progress in .agents/orchestrator/progress.md regularly. When all milestones are complete, submit your completion report.
 
-### R2. Administrator Warnings
-Implement clear and informative UI warnings (using existing Tailwind/Lucide design system) for features that require the app to be launched as Administrator. If `is_elevated` is false, warn the user and optionally disable execution buttons for actions that will fail without elevation.
+## 2026-07-27T10:40:35Z
 
-## Acceptance Criteria
+You are resuming work as the Project Orchestrator for WiScripts Windows after a server restart.
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Review `.agents/orchestrator/plan.md` and `.agents/orchestrator/progress.md`.
 
-### Execution & Build Verification
-- [ ] Execution buttons trigger real PowerShell/CMD commands.
-- [ ] `cargo check` and `cargo test` pass without errors.
-- [ ] `npm run build` succeeds (no TypeScript errors).
+Status:
+- Milestone 1 (Auto-Updater, App Icon Fix, Version IPC) is COMPLETED and verified CLEAN by forensic audit (.agents/teamwork_preview_auditor_m1/handoff.md).
+- Continue execution starting with Milestone 2 (Safety, Tools & Fixes: ODT regional block bypass registry command, automatic Restore Point before optimizations, Restore Points management tab with view & rollback), followed by Milestone 3 (System Monitoring & Management), Milestone 4 (Customization & Profiles), and Milestone 5 (Finalization, Conventional Commits, git push, release tag).
 
-### UI / Admin Checks
-- [ ] Visual indicators clearly communicate when Admin privileges are missing for system-level operations.
-- [ ] No `any` types or "AI-slop" in the new code; strict adherence to the project's coding standards.
+Follow team standards: strict type safety, zero AI-slop, AAA testing, proper error handling, conventional commits. Update progress.md regularly in .agents/orchestrator/progress.md. When all remaining milestones are complete, submit your completion report.
+
+## 2026-07-27T10:59:42Z
+
+Resume work as Project Orchestrator for WiScripts Windows at c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator. Read handoff.md, BRIEFING.md, ORIGINAL_REQUEST.md, plan.md, and progress.md for current state.
+Your parent is 29193971-77e3-4553-9e9e-890be95dcafe — use this ID for all escalation and status reporting (send_message).
+
+Current status:
+- Milestone 1 (Auto-Updater) and Milestone 2 (Safety, Tools & Fixes) are COMPLETED and verified CLEAN by Forensic Audit.
+- Continue execution starting with Milestone 3 (System Monitoring & Management: Real-time CPU/RAM/Disk/Network graphs on Dashboard, CPU/GPU temperature sensors, Startup Apps manager tab, Task Scheduler background tasks tab), followed by Milestone 4 (Customization & Profiles), and Milestone 5 (Finalization, Conventional Commits, git push, release tag).
+- Follow team standards: strict type safety, zero AI-slop, AAA testing, proper error handling, conventional commits. Start your own 10-minute heartbeat cron and update progress.md regularly.
+
+## 2026-07-27T11:52:51Z
+
+You are resuming work as the Project Orchestrator for WiScripts Windows after a server restart.
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+
+Status:
+- Milestones 1, 2, 3, and 4 are COMPLETED and verified CLEAN by forensic audits (.agents/auditor_m4/handoff.md).
+- Execute Milestone 5 (Finalization & Release):
+  1. Verify full build & tests: cargo test in src-tauri, npx tsc --noEmit, npm run build.
+  2. Commit all changes using Conventional Commits (feat, fix, etc.).
+  3. Git push to origin/main.
+  4. Inspect tauri.conf.json version (v0.3.0), create release tag (v0.3.0), and push release tag to remote repository.
+- Submit completion report when Milestone 5 is finished.
+

@@ -1,151 +1,118 @@
-# Review Handoff Report: Milestone 3 Frontend Implementation (R4, R5, Navigation & Store)
-
-**Reviewer**: Reviewer 2 (Milestone 3 Frontend & Navigation Reviewer)  
-**Date**: 2026-07-23  
-**Working Directory**: `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m3_2`  
-**Verdict**: **APPROVE**  
-
----
+# Milestone 3 Frontend & UI Review Report (Reviewer M3-2)
 
 ## 1. Observation
 
-Direct tool executions and code inspections were performed on the following target files:
-- `src/components/DnsContextMenuView.tsx`
-- `src/components/DriverBackupView.tsx`
-- `src/components/Navigation.tsx`
-- `src/components/Header.tsx`
-- `src/App.tsx`
-- `src/store/useAppStore.ts`
+### Build & Type Verification Commands & Results
+- Command: `npx tsc --noEmit`
+  - Exit code: 0
+  - Output: Clean compilation, 0 errors.
+- Command: `npm run build`
+  - Exit code: 0
+  - Output:
+    ```
+    vite v5.4.21 building for production...
+    transforming...
+    ✓ 1833 modules transformed.
+    rendering chunks...
+    computing gzip size...
+    dist/index.html                   0.56 kB │ gzip:  0.36 kB
+    dist/assets/index-DxlNXS97.css   29.84 kB │ gzip:  6.07 kB
+    dist/assets/index-zP1ohMov.js   360.38 kB │ gzip: 91.47 kB
+    ✓ built in 3.06s
+    ```
 
-### Command Execution Results
+### Source Code Inspection Findings
 
-1. **TypeScript Type Compilation (`npx tsc --noEmit`)**:
-   ```
-   Command: npx tsc --noEmit
-   Result: Completed successfully with 0 errors.
-   ```
+1. **`src/types/index.ts` & `src/store/useAppStore.ts`**:
+   - `SystemMetricsPayload`, `SystemTemperaturesPayload`, `MetricSnapshot`, `ThermalStatus`, `StartupItem`, `ScheduledTaskItem` interfaces strictly typed in `src/types/index.ts` (lines 101–175).
+   - Zustand store manages metrics history (capped at 30 snapshots in `pushMetricSnapshot`, line 1084), current metrics, polling intervals, and startup/scheduler items.
+   - Polling fallback handles dev/browser environments safely (`fetchLatestMetrics`, lines 1116–1136).
 
-2. **Production Bundle Build (`npm run build`)**:
-   ```
-   Command: npm run build
-   Output:
-   > wiscripts-windows@0.1.0 build
-   > tsc && vite build
+2. **`src/hooks/useMetricsPoller.ts`**:
+   - Clean lifecycle hook setup using Zustand selectors (lines 5–7).
+   - Triggers immediate metric fetch upon mount/enable, sets up `setInterval`, and returns cleanup handler `clearInterval` (lines 10–26).
 
-   vite v5.4.21 building for production...
-   transforming...
-   ✓ 1822 modules transformed.
-   rendering chunks...
-   computing gzip size...
-   dist/index.html                   0.57 kB │ gzip:  0.37 kB
-   dist/assets/index-CAezhHkE.css   25.35 kB │ gzip:  5.49 kB
-   dist/assets/index-lUoI0grG.js   297.20 kB │ gzip: 79.06 kB
-   ✓ built in 3.28s
-   ```
+3. **`src/components/SparklineAreaGraph.tsx`**:
+   - Lightweight inline SVG area graph with stroke, gradient fill (`linearGradient`), hairline grid lines, and live pulsing endpoint dot (`animate-ping`, lines 119–125).
+   - Handled empty/insufficient data gracefully (`data.length < 2`, lines 20–28) with fallback animated placeholder.
+   - Numerics formatted with `tabular-nums` class (line 59).
 
-3. **Backend Unit & Integration Suite (`cargo test` in `src-tauri`)**:
-   ```
-   Command: cargo test (in src-tauri)
-   Result: 84 passed, 0 failed, 0 ignored (64 unit + 5 empirical + 15 challenger tests).
-   ```
+4. **`src/components/TemperatureSensorWidget.tsx`**:
+   - CPU/GPU thermal badge color mapping (`normal` -> emerald, `warm` -> amber, `hot` -> red, fallback -> muted) (lines 20–44).
+   - Null temperature handling (`tempC ?? null`) displaying `-- °C` fallback and `Unavailable` badge label (lines 70, 62).
+   - Thermal percentage progress bar gauge and metadata source footer (lines 78–97).
+
+5. **`src/components/StartupView.tsx`**:
+   - Header with `AdminElevationBanner`, Dry-Run mode badge, and Refresh trigger.
+   - Metric summary cards (Total, Enabled, Disabled).
+   - Search filter and Location dropdown filter (HKCU, HKLM, Folders).
+   - Interactive enable/disable toggle switch and Safety Confirmation Modal integration before deletion (`handleRemoveClick`, lines 51–61).
+
+6. **`src/components/SchedulerView.tsx`**:
+   - Elevation warning header, summary metric cards (Total, Ready, Disabled, Running).
+   - Search bar and State filter dropdown.
+   - Quick "Telemetry Only" filter toggle to isolate CEIP/DiagTrack scheduled tasks (lines 45–56, 172–181).
+   - Enable/disable task toggle switch (`toggleScheduledTask`) and instant "Run" action button (`runScheduledTask`, line 260).
+
+7. **`src/components/Navigation.tsx` & `src/App.tsx`**:
+   - `Navigation.tsx` updated with `Power` icon (`startup`) and `Clock` icon (`scheduler`) nav items (lines 34–35).
+   - `App.tsx` imports and renders `<StartupView />` and `<SchedulerView />` dynamically based on `activeTab` (lines 92–93).
 
 ---
 
 ## 2. Logic Chain
 
-1. **Observation**: `npx tsc --noEmit` and `npm run build` executed with 0 errors and zero warnings, producing a optimized JavaScript bundle (`dist/assets/index-lUoI0grG.js`).
-   **Deduction**: All TypeScript interfaces, store action parameters, and React components strictly comply with the TypeScript compiler constraints and Vite bundler pipeline.
-
-2. **Observation**: In `src/store/useAppStore.ts`, the Zustand store defines state and IPC actions for features R4 and R5:
-   - `setDnsServer` invokes `'set_dns_server'` with `{ provider, interfaceAlias: interfaceAlias || null, dryRun: dryRunMode }`.
-   - `fetchClassicContextMenuStatus` invokes `'get_classic_context_menu_status'`.
-   - `toggleClassicContextMenu` invokes `'toggle_classic_context_menu'` with `{ enable, dryRun: dryRunMode }`.
-   - `backupDrivers` invokes `'backup_drivers'` with `{ outputDir, dryRun: dryRunMode }`.
-   **Deduction**: All parameter names and types map 1:1 with Tauri IPC command handlers in `src-tauri/src/commands/mod.rs` (where Rust expects camelCase-to-snake_case deserialization: `interfaceAlias` -> `interface_alias`, `dryRun` -> `dry_run`, `outputDir` -> `output_dir`).
-
-3. **Observation**: Inspection of `DnsContextMenuView.tsx` shows:
-   - Queries classic context menu registry state on mount via `useEffect(() => { fetchClassicContextMenuStatus(); }, [])`.
-   - Renders real-time status badge (`Classic Win10 Active` vs `Modern Win11 Active`) with a manual refresh button.
-   - Provides action buttons to enable/restore context menu, locking UI with loading spinners while `isExecuting` or `isTogglingMenu` is true.
-   - Provides DNS Provider selection grid (AdGuard, Cloudflare, Google, DHCP) with custom interface alias text field input.
-   **Deduction**: R4 feature requirement is completely implemented, wired to Zustand store actions, and properly safe-guarded against concurrent execution.
-
-4. **Observation**: Inspection of `DriverBackupView.tsx` shows:
-   - Controlled path input initialized from `driverBackupPath` state in Zustand store.
-   - Preset buttons (`C:\DriverBackup`, `D:\DriverBackup`, `C:\Users\Public\Documents\DriverBackup`) for single-click path selection.
-   - "Start Driver Backup" button invoking `backupDrivers(driverBackupPath.trim())` with loading states.
-   - Informational cards detailing `Export-WindowsDriver` behavior and administrator elevation status.
-   **Deduction**: R5 feature requirement is completely implemented and user-friendly.
-
-5. **Observation**: Inspection of `Navigation.tsx`, `Header.tsx`, and `App.tsx` shows:
-   - `Navigation.tsx` lists all 10 application tabs (`dashboard`, `optimization`, `package_manager`, `presets`, `dns_context`, `driver_backup`, `diagnostics`, `odt`, `activation`, `settings`).
-   - `Header.tsx` maps `activeTab` to readable tab titles using `TAB_TITLES` dictionary, includes an interactive Safety Dry-Run toggle switch (`role="switch"`, `aria-checked`), and real-time CPU/RAM stats.
-   - `App.tsx` conditionally mounts views based on `activeTab` and displays safety and progress modals.
-   **Deduction**: The shell navigation, header title mapping, dry-run safety toggle, and view rendering operate cohesively.
-
-6. **Observation**: Checking for integrity violations:
-   - Source code contained no hardcoded mock returns, fake state shortcuts, or dummy facades.
-   - All actions invoke real Tauri backend commands with safety flags intact.
-   **Deduction**: No integrity violations exist in the implementation.
+1. **Type Safety & Build Cleanliness**:
+   - `npx tsc --noEmit` and `npm run build` executed without warnings or errors. No `any` type escapes or compiler overrides were found in M3 components.
+2. **Refined Minimal UI Conformance**:
+   - Dark theme styling (`bg-surface`, `bg-surface-subtle`, `border-border`, hairlines `1px solid`, `rounded-[6px]` / `rounded-[4px]`), monospace typography (`font-mono`), tabular numeric alignment (`tabular-nums`), and single accent color (`text-brand`, `bg-brand`) adhere strictly to Refined Minimal guidelines.
+3. **Accessibility & User Feedback**:
+   - Interactive elements have explicit hover/focus transition states, disabled states during execution, visual badges, and modal safety prompts for destructive actions.
+4. **Error Handling & Fallbacks**:
+   - Missing hardware sensors or unreadable telemetry data render non-breaking `-- °C` / `Unavailable` fallbacks.
+   - Dev mode browser execution gracefully falls back to simulated metrics rather than throwing IPC errors.
+5. **Integrity Violations Check**:
+   - No hardcoded test results, facade components, or shortcuts were found. All frontend state actions trigger underlying Tauri `invoke` IPC calls.
 
 ---
 
 ## 3. Caveats
 
-- **Host Privilege Execution**: Actual execution of `set_dns_server`, `toggle_classic_context_menu`, and `backup_drivers` without dry-run requires administrative privileges on a live Windows machine. In dry-run mode, commands simulate execution without modifying host system state, which has been verified by the backend unit and empirical test suites.
+- Hardware thermal reading accuracy is subject to OS/hardware sensor support (e.g. NVIDIA SMI or ACPI WMI endpoints). The frontend correctly renders fallback indicators (`Unavailable` / `-- °C`) when hardware sensors return null.
 
 ---
 
 ## 4. Conclusion
 
-The React frontend components (`DnsContextMenuView.tsx`, `DriverBackupView.tsx`), navigation shell (`Navigation.tsx`, `Header.tsx`, `App.tsx`), and state store (`useAppStore.ts`) are completely implemented, fully typed, aesthetically compliant with Refined Minimal / Swiss design standards, and functionally verified.
+**Verdict**: **APPROVE / PASS**
 
-Verdict: **APPROVE**
+The Milestone 3 frontend React TypeScript implementation is clean, robust, fully typed, aesthetically compliant with Refined Minimal design standards, and passes all build & type checks with zero errors.
 
 ---
 
 ## 5. Verification Method
 
-To independently verify this work product:
+To independently verify the review findings:
 
-1. **TypeScript Compiler Check**:
+1. Run TypeScript compiler check:
    ```bash
    npx tsc --noEmit
    ```
-   *Expected Output*: Exit code 0, 0 errors.
+   (Expected: Exit code 0, no errors)
 
-2. **Production Bundle Build**:
+2. Run Vite production build:
    ```bash
    npm run build
    ```
-   *Expected Output*: Build completes successfully, generating `dist/index.html` and assets in `dist/assets/`.
+   (Expected: Successful production bundle output in `dist/`)
 
-3. **Backend Integration & Serde Verification**:
-   ```bash
-   cd src-tauri
-   cargo test
-   ```
-   *Expected Output*: 84 tests pass with 0 failures.
-
----
-
-## Review Summary
-
-**Verdict**: **APPROVE**
-
-### Verified Claims
-
-- TypeScript compilation (`npx tsc --noEmit`) → verified via tool execution → **PASS**
-- Production bundle build (`npm run build`) → verified via tool execution → **PASS**
-- Navigation routing and tab switching → verified via `Navigation.tsx` & `Header.tsx` inspection → **PASS**
-- Dynamic tab titles → verified via `Header.tsx` `TAB_TITLES` dictionary → **PASS**
-- Dry-run safety toggle interaction → verified via `Header.tsx` switch control → **PASS**
-- R4 (DNS & Context Menu) UI & store actions → verified via `DnsContextMenuView.tsx` & `useAppStore.ts` → **PASS**
-- R5 (Driver Backup) UI & store actions → verified via `DriverBackupView.tsx` & `useAppStore.ts` → **PASS**
-- Integrity violation audit → verified via codebase audit → **PASS**
-
-### Coverage Gaps
-- None.
-
-### Unverified Items
-- None.
+3. Inspect files:
+   - `src/components/SparklineAreaGraph.tsx`
+   - `src/components/TemperatureSensorWidget.tsx`
+   - `src/components/StartupView.tsx`
+   - `src/components/SchedulerView.tsx`
+   - `src/hooks/useMetricsPoller.ts`
+   - `src/store/useAppStore.ts`
+   - `src/types/index.ts`
+   - `src/components/Navigation.tsx`
+   - `src/App.tsx`

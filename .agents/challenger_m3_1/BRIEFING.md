@@ -1,44 +1,45 @@
-# BRIEFING — 2026-07-23T19:05:30+05:00
+# BRIEFING — 2026-07-27T06:08:56Z
 
 ## Mission
-Empirically verify and stress-test TypeScript compilation, Vite production build, type definitions, and Zustand state store actions across features R1 through R5.
+Empirically stress-test and verify Milestone 3 implementation (Rust tests, TS empirical tests, edge cases).
 
 ## 🔒 My Identity
-- Archetype: EMPIRICAL CHALLENGER
+- Archetype: Challenger
 - Roles: critic, specialist
-- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/challenger_m3_1
-- Original parent: af959d17-7dc6-48aa-b065-8f833af38b1c
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m3_1
+- Original parent: 6c6f016c-dd55-496a-91cb-59ac4d72d307
 - Milestone: Milestone 3
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
-- Empirical verification required: must run `tsc` and `npm run build`
-- Adversarial challenge: stress-test assumptions, find failure modes, propose counter-examples
+- Run empirical tests directly and verify output
 
 ## Current Parent
-- Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Updated: 2026-07-23T19:05:30+05:00
+- Conversation ID: 6c6f016c-dd55-496a-91cb-59ac4d72d307
+- Updated: 2026-07-27T06:08:56Z
 
 ## Review Scope
-- **Files to review**: PROJECT.md, src/store/useAppStore.ts, src/types/index.ts, src/components/*
-- **Interface contracts**: PROJECT.md
-- **Review criteria**: TypeScript compilation, Vite build, invoke payloads, loading/error flags, modal triggers, dry-run propagation
+- **Files to review**: `src-tauri/`, `src/tests/m3_metrics_empirical.ts`, `src/tests/m3_views_empirical.ts`, `src/tests/m3_edge_cases_empirical.ts`, metrics & sysinfo modules, startup/task toggles, thermal status, ring buffers
+- **Interface contracts**: Milestone 3 specifications
+- **Review criteria**: Pass/fail verification of cargo tests, tsx stress harnesses, edge cases (null temperature, dry-run safety, search queries, ring buffer limits)
+
+## Key Decisions Made
+- Executed `cargo test --manifest-path src-tauri/Cargo.toml` -> 104 passed, 0 failed.
+- Executed `npx --yes tsx src/tests/m3_metrics_empirical.ts` -> 100% passed.
+- Executed `npx --yes tsx src/tests/m3_views_empirical.ts` -> 100% passed.
+- Executed `npx --yes tsx src/tests/m3_edge_cases_empirical.ts` -> 100% passed (null temps, dry-run safety, search queries, memory bounds).
+- Verdict: PASS.
+
+## Artifact Index
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m3_1\handoff.md` — Final empirical verification report
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m3_1\progress.md` — Heartbeat and step log
+- `c:\Users\Widlily\Documents\projects\WiScripts_Windows\src\tests\m3_edge_cases_empirical.ts` — Empirical edge cases stress test suite
 
 ## Attack Surface
-- **Hypotheses tested**: Checked TypeScript types, Zustand store actions, Tauri IPC parameter mapping, state resilience, loading/error states, and UI action triggers.
-- **Vulnerabilities found**: 
-  - Action string mismatch in `DiagnosticsView.tsx` (lines 174 & 211): DISM button passes `'dism_restore_health'` (Rust expects `'dism_restorehealth'` or `'dism'`) and Network Reset button passes `'network_reset'` (Rust expects `'reset_tcpip'`, `'tcpip'`, or `'network'`).
-- **Untested angles**: Native Windows API execution of SFC/DISM under real non-elevated user runtime (covered in M4 E2E).
+- **Hypotheses tested**: 104 Rust unit/integration tests, 4 TS metrics empirical tests, 8 TS view state tests, 4 edge-case stress dimensions.
+- **Vulnerabilities found**: None. All edge cases handled cleanly without panics, memory leaks, NaN calculations, or dry-run leaks.
+- **Untested angles**: All targeted Milestone 3 components fully tested.
 
 ## Loaded Skills
 - None
-
-## Key Decisions Made
-- Executed `npx tsc --noEmit` -> PASSED (0 errors).
-- Executed `npm run build` -> PASSED (built dist in 5.06s).
-- Executed `cargo test` -> PASSED (84 unit/integration tests).
-- Inspected `useAppStore.ts` and `src/components/*`. Identified 1 critical UI string mismatch in `DiagnosticsView.tsx`.
-
-## Artifact Index
-- handoff.md — Verification Handoff Report

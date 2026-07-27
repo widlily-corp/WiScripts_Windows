@@ -1,47 +1,63 @@
-# BRIEFING — 2026-07-23T19:00:10Z
+# BRIEFING — 2026-07-27T10:58:50Z
 
 ## Mission
-Independently review the backend implementation of R4 (DNS & Context Menu) and R5 (Driver Backup) in WiScripts Windows.
+Review Milestone 2 Frontend changes in WiScripts Windows (RestorePointsView, Navigation, OdtView, useAppStore, types, App, index.html, public/icon.png, tauri.conf.json), verify safety/design/types, run npm run build, and report verdict.
 
 ## 🔒 My Identity
-- Archetype: Reviewer & Adversarial Critic
+- Archetype: reviewer & critic
 - Roles: reviewer, critic
-- Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m2_2
-- Original parent: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Milestone: Milestone 2
-- Instance: 2 of 2
+- Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m2_2
+- Original parent: 614a7be8-ec36-447c-90af-2fc5f42bd7da
+- Milestone: Milestone 2: Safety, Tools & Fixes
+- Instance: Reviewer M2-2
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
-- Perform independent code analysis, verification, testing, and stress testing
+- Codebase must maintain high engineering and UX/UI standards
+- Verify integrity, build cleanliness, TypeScript type safety, state management, modal safety confirmations, and icon path resolution
 
 ## Current Parent
-- Conversation ID: af959d17-7dc6-48aa-b065-8f833af38b1c
-- Updated: 2026-07-23T19:00:10Z
+- Conversation ID: 614a7be8-ec36-447c-90af-2fc5f42bd7da
+- Updated: 2026-07-27T10:58:50Z
 
 ## Review Scope
-- **Files to review**: `src-tauri/src/dns_context/`, `src-tauri/src/driver_backup/`, `src-tauri/src/commands/mod.rs`, `src-tauri/src/lib.rs`
-- **Interface contracts**: `PROJECT.md`
-- **Review criteria**: `cargo check`, `cargo test`, PowerShell parameter escaping (`escape_powershell_literal`), registry/command syntax, `CommandRunner` usage, `"task-progress"` emission, code safety/quality, detection of dummy/hardcoded logic or integrity violations.
-
-## Key Decisions Made
-- `cargo check` and `cargo test` pass cleanly with zero errors/warnings.
-- Confirmed robust implementation of real system operations (DNS configuration via `Set-DnsClientServerAddress`, context menu registry keys via `New-Item`/`Remove-Item`, driver export via `Export-WindowsDriver`).
-- Verified abstract `CommandRunner` integration, dry-run support, and Tauri `"task-progress"` event payload emissions.
-- Noted minor recommendation regarding PowerShell string escaping in `dns_context` and `driver_backup` (using `escape_powershell_literal` for user inputs instead of double-quoted interpolation).
-- Verdict: **APPROVE**.
-
-## Artifact Index
-- `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m2_2/ORIGINAL_REQUEST.md` — Initial task request
-- `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m2_2/progress.md` — Heartbeat and progress tracking
-- `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m2_2/handoff.md` — Review handoff report
+- **Files to review**:
+  - `src/components/RestorePointsView.tsx`
+  - `src/components/Navigation.tsx`
+  - `src/components/OdtView.tsx`
+  - `src/store/useAppStore.ts`
+  - `src/types/index.ts`
+  - `src/App.tsx`
+  - `index.html`
+  - `public/icon.png`
+  - `src-tauri/tauri.conf.json`
+- **Review criteria**: UI design, TypeScript type safety, state management, modal safety confirmations, icon path resolution, zero build errors, zero integrity violations.
 
 ## Review Checklist
-- **Items reviewed**: `dns_context/mod.rs`, `driver_backup/mod.rs`, `commands/mod.rs`, `lib.rs`
-- **Verdict**: APPROVE
+- **Items reviewed**:
+  - `src/types/index.ts` — Verified type safety and `RestorePoint` interface
+  - `src/store/useAppStore.ts` — Verified state management, safety modal actions, IPC calls
+  - `src/components/RestorePointsView.tsx` — Verified layout, elevation checks, safety modal calls
+  - `src/components/Navigation.tsx` — Verified nav item addition & disabled state during execution
+  - `src/components/OdtView.tsx` — Verified deployment form & safety modal handlers
+  - `src/App.tsx` — Verified component rendering & live ODT XML generation effect
+  - `index.html` & `public/icon.png` — Verified icon path resolution
+  - `src-tauri/tauri.conf.json` — Verified app config & updater settings
+- **Verdict**: PASS
 - **Unverified claims**: None
 
 ## Attack Surface
-- **Hypotheses tested**: Checked for command injection via double quotes in `interface_alias` and `output_dir`.
-- **Vulnerabilities found**: Low risk — input parameters are wrapped in double quotes rather than single-quoted literal escaping (`escape_powershell_literal`). Standard inputs work fine, but single-quote literal escaping is recommended for complete robustness.
-- **Untested angles**: Execution on live non-elevated host without admin rights (handled via `RealRunner` exit code / error return).
+- **Hypotheses tested**: Checked for unhandled errors, missing modal confirmation paths, invalid icon paths, type mismatches, build failures.
+- **Vulnerabilities found**: None.
+- **Untested angles**: Live host system restore execution (dependent on Windows host system restore service enabled status).
+
+## Key Decisions Made
+- Initialized request metadata and briefing.
+- Conducted code & asset inspection.
+- Ran `npm run build` with 0 errors.
+- Issued PASS verdict and produced handoff report.
+
+## Artifact Index
+- `.agents/reviewer_m2_2/ORIGINAL_REQUEST.md` — Original prompt request record
+- `.agents/reviewer_m2_2/BRIEFING.md` — Agent working memory
+- `.agents/reviewer_m2_2/handoff.md` — Final Handoff Review Report

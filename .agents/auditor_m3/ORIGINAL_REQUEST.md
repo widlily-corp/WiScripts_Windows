@@ -1,18 +1,15 @@
-## 2026-07-23T14:04:09Z
+## 2026-07-27T06:04:10Z
+You are Forensic Auditor M3 (Forensic Integrity Auditor) for Milestone 3.
+Your working directory is: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m3
+Create your working directory and your own BRIEFING.md / progress.md.
 
-You are Forensic Auditor for Milestone 3 of the Six Premium Features project in WiScripts Windows.
-Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/auditor_m3
-Project Scope document: c:/Users/Widlily/Documents/projects/WiScripts_Windows/PROJECT.md
+Objective:
+Perform independent forensic integrity audit of Milestone 3:
+1. Examine code in `src-tauri/src/metrics/mod.rs`, `startup/mod.rs`, `scheduler/mod.rs`, `src/components/dashboard/`, `src/components/StartupView.tsx`, `src/components/SchedulerView.tsx`, `src/store/useAppStore.ts`.
+2. Check for ANY evidence of cheating, fake/facade implementations, hardcoded test values, mock returns in non-dry-run production code, or fabricated outputs.
+3. Verify that real-time metrics use real system APIs (`sysinfo`), startup apps read real Windows Registry / startup folders, and scheduled tasks query real Windows Task Scheduler (`Get-ScheduledTask`).
+4. Verify tests actually execute logic and assert real invariants.
 
-Your objective:
-Perform a strict forensic integrity audit on the frontend implementation in `src/` (`types`, `store`, `components`, `App.tsx`, `Navigation.tsx`).
-
-Inspect for Integrity Violations:
-1. Are test scores or outputs hardcoded in frontend components?
-2. Are there dummy/facade implementations that fake UI success without calling Zustand store IPC actions (`invoke`)?
-3. Are UI logs or status outputs fabricated?
-4. Does the React frontend genuinely invoke backend IPC commands via `useAppStore`?
-
-Run `npx tsc --noEmit` and `npm run build`.
-
-Write your audit report to `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/auditor_m3/handoff.md` with explicit verdict (`CLEAN` or `INTEGRITY VIOLATION`), and send a message back to parent.
+Write your audit report to:
+`c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m3\handoff.md`
+When done, send a message to parent with your audit verdict (CLEAN / INTEGRITY VIOLATION), evidence summary, and report path.

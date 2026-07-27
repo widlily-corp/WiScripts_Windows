@@ -1,15 +1,18 @@
-## 2026-07-23T14:04:08Z
-You are Reviewer 1 for Milestone 3 of the Six Premium Features project in WiScripts Windows.
-Working directory: c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m3_1
-Project Scope document: c:/Users/Widlily/Documents/projects/WiScripts_Windows/PROJECT.md
+## 2026-07-27T06:04:10Z
 
-Your objective:
-Independently review the frontend implementation of R1 (Diagnostics), R2 (Packages & Bloatware), and R3 (Profiles) in `src/types/index.ts`, `src/store/useAppStore.ts`, `src/components/DiagnosticsView.tsx`, `src/components/PackageManagerView.tsx`, and `src/components/PresetsView.tsx`.
+You are Reviewer M3-1 (Backend & Architecture Reviewer) for Milestone 3.
+Your working directory is: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m3_1
+Create your working directory and your own BRIEFING.md / progress.md.
 
-Verify:
-1. TypeScript compilation (`npx tsc --noEmit`).
-2. Frontend build (`npm run build`).
-3. Alignment with Rust backend IPC command signatures.
-4. Refined Minimal (Linear/Stripe) UI design system compliance, tabular numbers, accessibility, and zero AI-slop or dummy shortcuts.
+Objective:
+Review the backend Rust implementation of Milestone 3:
+- `src-tauri/src/metrics/mod.rs` (MetricsCollector, rate calculation deltas, temperature sensors, error handling)
+- `src-tauri/src/startup/mod.rs` (Registry HKCU/HKLM keys, Startup folders, StartupApproved flags)
+- `src-tauri/src/scheduler/mod.rs` (Get-ScheduledTask integration)
+- `src-tauri/src/commands/mod.rs` & `lib.rs` (IPC command handlers & state registration)
 
-Write your review handoff report to `c:/Users/Widlily/Documents/projects/WiScripts_Windows/.agents/reviewer_m3_1/handoff.md` and send a message back to parent.
+Verify build, run `cargo test --manifest-path src-tauri/Cargo.toml`, verify zero warnings/errors, and evaluate code quality, safety, thread safety, dry-run protection, and error handling.
+
+Write your review report to:
+`c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m3_1\handoff.md`
+When done, send a message to parent with your verdict (PASS/VETO), rationale, and report path.

@@ -1,31 +1,19 @@
-## 2026-07-22T15:04:27Z
-You are Worker M5 (Milestone 5 Full Automated Testing & Tauri Build Implementer).
-Your working directory is: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m5
+## 2026-07-27T06:53:33Z
+You are the Worker subagent for Milestone 5 (Finalization & Release) of WiScripts Windows.
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m5
 
-Objective: Execute Milestone 5 — Full Automated Testing, E2E Integration, and Tauri Build Verification.
+Your task:
+Execute Milestone 5 (Finalization & Release):
+1. Verify full build & tests:
+   - Run `cargo test` in `src-tauri` directory (c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri).
+   - Run `npx tsc --noEmit` in root directory (c:\Users\Widlily\Documents\projects\WiScripts_Windows).
+   - Run `npm run build` in root directory (c:\Users\Widlily\Documents\projects\WiScripts_Windows).
+2. Inspect `git status` and commit all uncommitted changes across the codebase using Conventional Commits (e.g. `feat:`, `fix:`, `docs:`, `refactor:`). Make sure git working directory is clean.
+3. Push commits to remote: `git push origin main` (or `git push origin HEAD`).
+4. Inspect `src-tauri/tauri.conf.json` to verify the exact application version (expecting `0.3.0`).
+5. Create the release tag: `git tag v0.3.0` (or corresponding version tag `v<version>`).
+6. Push the release tag to remote repository: `git push origin v0.3.0` (or `git push origin --tags`).
 
-Context:
-- Project root: c:\Users\Widlily\Documents\projects\WiScripts_Windows
-- Backend path: c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri
-- Frontend path: c:\Users\Widlily\Documents\projects\WiScripts_Windows\src
+MANDATORY INTEGRITY WARNING: DO NOT CHEAT. All implementations and git/build operations must be genuine. DO NOT hardcode test results or fabricate command outputs. A Forensic Auditor will independently verify your work.
 
-Tasks for Milestone 5:
-1. **Full Backend Test Verification**:
-   - Run `cargo test` in `src-tauri` and capture full output log.
-   - Verify all 21+ backend unit tests across `optimization`, `odt`, `mas`, `runner`, `commands`, and `error` modules pass 100% cleanly with 0 failures and 0 warnings.
-2. **Frontend Production Build Compilation**:
-   - Run `npm run build` (or `npx vite build`) in project root.
-   - Verify TypeScript compilation and Vite bundling succeed without errors, generating production assets in `dist/`.
-3. **Tauri App Compilation Verification**:
-   - Run `cargo check` (or `cargo build`) in `src-tauri`.
-   - Verify Rust compilation completes cleanly for the desktop binary.
-4. **Integration & Safety Audit Check**:
-   - Verify that all `DryRunRunner` commands (Sophia-Script rules, ODT XML install, MAS HWID/Ohook/KMS38 activations) record clean command vectors in `ExecutionSummary` without host system side effects.
-
-MANDATORY INTEGRITY WARNING:
-DO NOT CHEAT. All build commands and test runs must be genuinely executed and documented.
-
-Output Requirements:
-- Record exact outputs of `cargo test`, `npm run build`, and `cargo check`.
-- Write handoff report to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m5\handoff.md`.
-- Send message back to parent orchestrator when complete.
+Write your completion report and handoff details to `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m5\handoff.md` and report back when finished.

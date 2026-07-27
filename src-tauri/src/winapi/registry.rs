@@ -164,13 +164,13 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
             Some(&mut buf_size),
         );
 
-        let mut read_buf = vec![0u8; buf_size as usize];
+        let mut read_buf = vec![0u16; (buf_size as usize + 1) / 2];
         let query_res = RegQueryValueExW(
             key_handle,
             PCWSTR(val_u16.as_ptr()),
             None,
             Some(&mut read_type),
-            Some(read_buf.as_mut_ptr()),
+            Some(read_buf.as_mut_ptr() as *mut u8),
             Some(&mut buf_size),
         );
 
@@ -184,11 +184,8 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
             return Err(format!("Read-back verification failed: type mismatch for '{}'\\'{}' (expected SZ, got {:?})", key_path, value_name, read_type));
         }
 
-        let u16_slice = std::slice::from_raw_parts(
-            read_buf.as_ptr() as *const u16,
-            read_buf.len() / 2,
-        );
-        let read_str = String::from_utf16_lossy(u16_slice);
+        let u16_len = (buf_size as usize) / 2;
+        let read_str = String::from_utf16_lossy(&read_buf[..u16_len]);
         let trimmed_read_str = read_str.trim_matches('\0');
 
         if trimmed_read_str != data {

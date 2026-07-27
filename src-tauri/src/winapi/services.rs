@@ -61,7 +61,7 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
         let mut bytes_needed = 0u32;
         let _ = QueryServiceConfigW(svc_handle, None, 0, &mut bytes_needed);
 
-        let mut config_buf = vec![0u8; bytes_needed as usize];
+        let mut config_buf = vec![0u64; (bytes_needed as usize + 7) / 8];
         let config_ptr = config_buf.as_mut_ptr() as *mut windows::Win32::System::Services::QUERY_SERVICE_CONFIGW;
 
         let query_res = QueryServiceConfigW(

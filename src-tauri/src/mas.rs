@@ -40,7 +40,7 @@ pub fn get_activation_script_command(method: &ActivationMethod) -> String {
         ActivationMethod::TsForge => "/TSforge",
     };
     format!(
-        "$cmd = Invoke-RestMethod https://get.activated.win; & ([scriptblock]::Create($cmd)) {}",
+        "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'Stop'; $cmd = Invoke-RestMethod https://get.activated.win; & ([scriptblock]::Create($cmd)) {} -Confirm:$false",
         arg
     )
 }
@@ -145,10 +145,22 @@ mod tests {
 
     #[test]
     fn test_activation_script_commands() {
-        assert!(get_activation_script_command(&ActivationMethod::Hwid).contains("/HWID"));
-        assert!(get_activation_script_command(&ActivationMethod::Ohook).contains("/Ohook"));
-        assert!(get_activation_script_command(&ActivationMethod::Kms38).contains("/KMS38"));
-        assert!(get_activation_script_command(&ActivationMethod::TsForge).contains("/TSforge"));
+        // Arrange & Act
+        let hwid_cmd = get_activation_script_command(&ActivationMethod::Hwid);
+        let ohook_cmd = get_activation_script_command(&ActivationMethod::Ohook);
+        let kms38_cmd = get_activation_script_command(&ActivationMethod::Kms38);
+        let tsforge_cmd = get_activation_script_command(&ActivationMethod::TsForge);
+
+        // Assert
+        assert!(hwid_cmd.contains("/HWID"));
+        assert!(ohook_cmd.contains("/Ohook"));
+        assert!(kms38_cmd.contains("/KMS38"));
+        assert!(tsforge_cmd.contains("/TSforge"));
+
+        // Verify non-interactive and auto-confirm flags (R2 compliance)
+        assert!(hwid_cmd.contains("$ProgressPreference = 'SilentlyContinue'"));
+        assert!(hwid_cmd.contains("$ErrorActionPreference = 'Stop'"));
+        assert!(hwid_cmd.contains("-Confirm:$false"));
     }
 
     #[test]

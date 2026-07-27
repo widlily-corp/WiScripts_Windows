@@ -113,7 +113,7 @@ pub fn create_restore_point(
     if runner.is_dry_run() {
         let escaped_desc = escape_powershell_literal(description);
         let ps_command = format!(
-            "Checkpoint-Computer -Description {} -RestorePointType \"MODIFY_SETTINGS\" -ErrorAction Stop",
+            "Checkpoint-Computer -Description {} -RestorePointType \"MODIFY_SETTINGS\" -Confirm:$false -ErrorAction Stop",
             escaped_desc
         );
         let output = runner.run_powershell(&ps_command)?;
@@ -151,7 +151,7 @@ pub fn create_restore_point(
 
     let escaped_desc = escape_powershell_literal(description);
     let ps_command = format!(
-        "Checkpoint-Computer -Description {} -RestorePointType \"MODIFY_SETTINGS\" -ErrorAction Stop",
+        "Checkpoint-Computer -Description {} -RestorePointType \"MODIFY_SETTINGS\" -Confirm:$false -ErrorAction Stop",
         escaped_desc
     );
 
@@ -300,6 +300,7 @@ mod tests {
         assert_eq!(action.id, "create_restore_point");
         assert!(action.name.contains(description));
         assert!(action.command.contains("Checkpoint-Computer"));
+        assert!(action.command.contains("-Confirm:$false"));
         assert!(action.command.contains("'Pre-Optimization Snapshot'"));
         assert_eq!(action.output.exit_code, 0);
 

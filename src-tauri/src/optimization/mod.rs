@@ -57,8 +57,8 @@ pub fn get_rule_catalog() -> Vec<OptimizationItem> {
             description: "Disables Customer Experience Improvement Program scheduled tasks in Task Scheduler.".to_string(),
             risk_level: "low".to_string(),
             is_reversible: true,
-            powershell_command: "Disable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator', 'UsbCeip'".to_string(),
-            undo_command: "Enable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator', 'UsbCeip'".to_string(),
+            powershell_command: "Disable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator' -ErrorAction SilentlyContinue; Disable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'UsbCeip' -ErrorAction SilentlyContinue".to_string(),
+            undo_command: "Enable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator' -ErrorAction SilentlyContinue; Enable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'UsbCeip' -ErrorAction SilentlyContinue".to_string(),
             is_recommended: true,
         },
         // Category 2: bloatware
@@ -742,5 +742,25 @@ mod tests {
         assert_eq!(summary.executed_actions[0].id, "create_restore_point");
         assert_eq!(summary.executed_actions[1].id, "telemetry_diagtrack");
     }
+
+    #[test]
+    fn test_ceip_telemetry_tasks_command_format() {
+        // Arrange
+        let items = get_rule_catalog();
+
+        // Act
+        let ceip_item = items.iter().find(|i| i.id == "telemetry_ceip_tasks").expect("CEIP item missing");
+
+        // Assert
+        assert!(ceip_item.powershell_command.contains("-TaskName 'Consolidator'"));
+        assert!(ceip_item.powershell_command.contains("-TaskName 'UsbCeip'"));
+        assert!(ceip_item.powershell_command.contains("; Disable-ScheduledTask"), "Sequential cmdlet invocation required (R3)");
+        assert!(!ceip_item.powershell_command.contains("'Consolidator', 'UsbCeip'"), "Array syntax for TaskName is prohibited (R3)");
+        assert!(ceip_item.undo_command.contains("-TaskName 'Consolidator'"));
+        assert!(ceip_item.undo_command.contains("-TaskName 'UsbCeip'"));
+        assert!(ceip_item.undo_command.contains("; Enable-ScheduledTask"), "Sequential cmdlet invocation required (R3)");
+        assert!(!ceip_item.undo_command.contains("'Consolidator', 'UsbCeip'"), "Array syntax for TaskName is prohibited (R3)");
+    }
 }
+
 

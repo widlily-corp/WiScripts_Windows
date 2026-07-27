@@ -288,6 +288,7 @@ fn query_wmi_acpi_temp() -> Option<f32> {
         let mut cmd = std::process::Command::new("powershell.exe");
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
+        cmd.stdin(std::process::Stdio::null());
         let output = cmd
             .args([
                 "-NoProfile",
@@ -299,7 +300,7 @@ fn query_wmi_acpi_temp() -> Option<f32> {
             .ok()?;
 
         if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = crate::runner::decode_bytes(&output.stdout);
             for line in stdout.lines() {
                 let trimmed = line.trim();
                 if let Ok(raw_deci_k) = trimmed.parse::<f32>() {
@@ -323,13 +324,14 @@ fn query_nvidia_smi_temp() -> Option<f32> {
         let mut cmd = std::process::Command::new("nvidia-smi");
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
+        cmd.stdin(std::process::Stdio::null());
         let output = cmd
             .args(["--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"])
             .output()
             .ok()?;
 
         if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = crate::runner::decode_bytes(&output.stdout);
             for line in stdout.lines() {
                 let trimmed = line.trim();
                 if let Ok(val) = trimmed.parse::<f32>() {

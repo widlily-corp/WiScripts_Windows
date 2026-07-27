@@ -45,8 +45,18 @@ pub trait CommandRunner: Send + Sync {
     fn is_dry_run(&self) -> bool;
 }
 
+/// Decodes raw process output bytes attempting UTF-8 first, falling back to CP866 for Cyrillic console output.
+pub fn decode_bytes(bytes: &[u8]) -> String {
+    if let Ok(utf8_str) = std::str::from_utf8(bytes) {
+        return utf8_str.to_string();
+    }
+    let (decoded, _, _) = encoding_rs::IBM866.decode(bytes);
+    decoded.into_owned()
+}
+
 fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<CommandOutput, String> {
     let mut child = cmd
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -82,8 +92,8 @@ fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<Comma
                 let exit_code = status.code().unwrap_or(-1);
                 let stdout_bytes = stdout_handle.join().unwrap_or_default();
                 let stderr_bytes = stderr_handle.join().unwrap_or_default();
-                let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
-                let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
+                let stdout = decode_bytes(&stdout_bytes);
+                let stderr = decode_bytes(&stderr_bytes);
 
                 return Ok(CommandOutput {
                     exit_code,
@@ -126,6 +136,11 @@ impl CommandRunner for RealRunner {
     fn run_powershell(&self, script: &str) -> Result<CommandOutput, String> {
         log::info!("[RealRunner] Executing PowerShell command: {}", script);
 
+        let utf8_script = format!(
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; {}",
+            script
+        );
+
         let mut cmd = Command::new("powershell.exe");
         #[cfg(target_os = "windows")]
         {
@@ -139,7 +154,7 @@ impl CommandRunner for RealRunner {
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            script,
+            &utf8_script,
         ]);
 
         let res = run_command_with_timeout(cmd, 300); // 5 minutes timeout
@@ -382,5 +397,75 @@ mod tests {
         assert!(res.stdout.contains("STDOUT line 3000"));
         assert!(res.stderr.contains("STDERR line 3000"));
     }
+
+    #[test]
+    fn test_decode_bytes_utf8() {
+        // Arrange
+        let input_bytes = "Привет, мир!".as_bytes();
+
+        // Act
+        let result = decode_bytes(input_bytes);
+
+        // Assert
+        assert_eq!(result, "Привет, мир!");
+    }
+
+    #[test]
+    fn test_decode_bytes_cp866_cyrillic() {
+        // Arrange: CP866 bytes for "Привет" -> [0x8f, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2]
+        let cp866_bytes = [0x8f, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2];
+
+        // Act
+        let result = decode_bytes(&cp866_bytes);
+
+        // Assert
+        assert_eq!(result, "Привет");
+    }
+
+    #[test]
+    fn test_decode_bytes_empty() {
+        // Arrange
+        let empty_bytes: &[u8] = &[];
+
+        // Act
+        let result = decode_bytes(empty_bytes);
+
+        // Assert
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_decode_bytes_ascii() {
+        // Arrange
+        let ascii_bytes = b"Hello, World! 12345";
+
+        // Act
+        let result = decode_bytes(ascii_bytes);
+
+        // Assert
+        assert_eq!(result, "Hello, World! 12345");
+    }
+
+    #[test]
+    fn test_decode_bytes_arbitrary_invalid_utf8() {
+        // Arrange: non-UTF-8 bytes [0xC0, 0xC1, 0xC2, 0x80]
+        let invalid_bytes = [0xC0, 0xC1, 0xC2, 0x80];
+
+        // Act
+        let result = decode_bytes(&invalid_bytes);
+
+        // Assert: decodes to CP866 characters without panicking or producing replacement chars U+FFFD
+        assert_eq!(result, "└┴┬А");
+        assert!(!result.contains('\u{FFFD}'));
+    }
 }
+
+
+
+
+
+
+
+
+
 

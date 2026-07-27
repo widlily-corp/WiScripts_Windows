@@ -9,13 +9,14 @@ use crate::odt::{self, OdtConfig};
 use crate::optimization::{self, OptimizationItem};
 use crate::packages::{self, UwpAppInfo, WingetPackage};
 use crate::profiles::{self, OptimizationProfile};
-use crate::runner::{CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
+use crate::runner::{decode_bytes, CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
 use crate::scheduler;
 use crate::startup;
 use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
 use serde::{Deserialize, Serialize};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -40,7 +41,8 @@ fn check_is_elevated() -> bool {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
-        cmd.arg("session")
+        cmd.stdin(Stdio::null())
+            .arg("session")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
@@ -61,6 +63,7 @@ fn probe_telemetry_status() -> String {
             cmd.creation_flags(0x08000000);
         }
         let output = cmd
+            .stdin(Stdio::null())
             .args([
                 "-NoProfile",
                 "-NonInteractive",
@@ -70,7 +73,7 @@ fn probe_telemetry_status() -> String {
             .output();
         match output {
             Ok(out) => {
-                let status_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let status_str = decode_bytes(&out.stdout).trim().to_string();
                 if status_str.eq_ignore_ascii_case("Running") {
                     "Active".to_string()
                 } else if status_str.eq_ignore_ascii_case("Stopped") || status_str.is_empty() {

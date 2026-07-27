@@ -274,7 +274,10 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
         full_command
     );
 
-    let spawn_res = std::process::Command::new(&program).args(&args).spawn();
+    let spawn_res = std::process::Command::new(&program)
+        .stdin(std::process::Stdio::null())
+        .args(&args)
+        .spawn();
 
     match spawn_res {
         Ok(_child) => Ok(ExecutionSummary {

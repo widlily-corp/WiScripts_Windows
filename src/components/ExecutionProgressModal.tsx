@@ -73,7 +73,9 @@ export function ExecutionProgressModal() {
 
   if (!isExecuting) return null;
 
-  const isCompleted = executionProgress >= 100 && totalSteps > 0;
+  const hasError = logs.some((l) => l.level === 'error');
+  const isCompleted = executionProgress >= 100 || (totalSteps === 0 && executionProgress === 100);
+  const canClose = totalSteps === 0 || executionProgress >= 100 || hasError;
   const progressPercent = Math.min(Math.max(executionProgress, 0), 100);
 
   return (
@@ -90,13 +92,15 @@ export function ExecutionProgressModal() {
             <div className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-brand-subtle text-brand border border-brand/30 shrink-0">
               {isCompleted ? (
                 <CheckCircle2 className="h-5 w-5 text-status-success" />
+              ) : hasError ? (
+                <AlertOctagon className="h-5 w-5 text-red-400" />
               ) : (
                 <Loader2 className="h-5 w-5 animate-spin text-brand" />
               )}
             </div>
             <div>
               <h3 id="progress-modal-title" className="text-base font-semibold text-text-primary">
-                {isCompleted ? 'Execution Complete' : 'Executing Task Operations...'}
+                {isCompleted ? 'Execution Complete' : hasError ? 'Execution Completed with Errors' : 'Executing Task Operations...'}
               </h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] font-mono text-text-muted">
@@ -116,7 +120,7 @@ export function ExecutionProgressModal() {
               {totalSteps > 0 ? `Step ${currentStep} of ${totalSteps}` : 'Processing...'}
             </div>
           </div>
-          {isCompleted && (
+          {canClose && (
             <button
               onClick={() => setIsExecuting(false)}
               className="absolute -top-2 -right-2 p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
@@ -138,7 +142,7 @@ export function ExecutionProgressModal() {
           <div className="w-full bg-surface-active h-2.5 rounded-full overflow-hidden border border-border-subtle">
             <div
               className={`h-full transition-all duration-300 ease-out ${
-                isCompleted ? 'bg-status-success' : 'bg-brand'
+                isCompleted ? 'bg-status-success' : hasError ? 'bg-red-500' : 'bg-brand'
               }`}
               style={{ width: `${progressPercent}%` }}
             />
@@ -196,8 +200,8 @@ export function ExecutionProgressModal() {
           </div>
         </div>
 
-        {/* Footer actions when completed */}
-        {isCompleted && (
+        {/* Footer actions when completed or canClose */}
+        {canClose && (
           <div className="flex justify-end pt-2">
             <button
               onClick={() => setIsExecuting(false)}

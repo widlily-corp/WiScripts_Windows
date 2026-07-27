@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import {
   Settings,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 export function SettingsView() {
+  const { t, i18n } = useTranslation();
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const setDryRunMode = useAppStore((s) => s.setDryRunMode);
   const appVersion = useAppStore((s) => s.appVersion);
@@ -145,6 +147,41 @@ export function SettingsView() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Card 3: Language & Localization */}
+          <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+            <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
+              <Sparkles className="h-4 w-4 text-brand" />
+              <h3 className="text-sm font-semibold text-text-primary">Language & Localization</h3>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-text-secondary leading-relaxed">
+                Choose the interface language.
+              </div>
+              <div className="flex bg-surface-active rounded-[6px] p-1 border border-border">
+                <button
+                  onClick={() => i18n.changeLanguage('en')}
+                  className={`px-3 py-1 text-xs font-medium rounded-[4px] transition-colors ${
+                    i18n.language.startsWith('en')
+                      ? 'bg-brand text-white shadow-sm'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => i18n.changeLanguage('ru')}
+                  className={`px-3 py-1 text-xs font-medium rounded-[4px] transition-colors ${
+                    i18n.language.startsWith('ru')
+                      ? 'bg-brand text-white shadow-sm'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  RU
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Card 3: Environment Info */}

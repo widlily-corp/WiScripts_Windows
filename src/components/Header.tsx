@@ -8,12 +8,18 @@ const TAB_TITLES: Record<string, string> = {
   dashboard: 'System Overview Dashboard',
   optimization: 'Windows Optimizations & Debloat',
   package_manager: 'Package & Bloatware Manager (Winget / UWP)',
+  app_uninstaller: 'Application Uninstaller',
   presets: 'Curated Optimization Profiles & Presets',
+  system_cleaner: 'System Junk & Cache Cleaner',
+  storage_utilities: 'Duplicate File & Large Space Analyzer',
+  startup: 'Windows Startup Applications Manager',
+  scheduler: 'Windows Task Scheduler Manager',
   dns_context: 'DNS Server & Win11 Context Menu Manager',
   driver_backup: 'Windows Device Driver Export & Backup',
   diagnostics: 'Advanced Diagnostics & System Health Stream',
   odt: 'Office Deployment Tool (ODT) Configurator',
   activation: 'Microsoft Activation Scripts (MAS)',
+  restore_points: 'Windows System Restore Checkpoints',
   settings: 'Global Configuration & Preferences',
 };
 

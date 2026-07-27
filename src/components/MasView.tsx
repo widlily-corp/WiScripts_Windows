@@ -109,10 +109,32 @@ export function MasView() {
               commandExecuted: action.command,
             });
           });
+
+          if (!summary.success) {
+            const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+            const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'MAS activation returned failure status';
+            useAppStore.getState().addToast({
+              type: 'error',
+              title: 'MAS Activation Failed',
+              message: errMsg,
+            });
+          } else {
+            useAppStore.getState().addToast({
+              type: 'success',
+              title: 'MAS Activation Complete',
+              message: `Activation method ${selectedMasMethod} completed successfully.`,
+            });
+          }
         } catch (err) {
+          const errMsg = typeof err === 'string' ? err : String(err);
           addLog({
             level: 'error',
-            message: `IPC execute_activation failed: ${String(err)}`,
+            message: `IPC execute_activation failed: ${errMsg}`,
+          });
+          useAppStore.getState().addToast({
+            type: 'error',
+            title: 'MAS Activation Error',
+            message: errMsg,
           });
         } finally {
           setIsExecuting(false);

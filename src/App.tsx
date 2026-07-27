@@ -6,7 +6,10 @@ import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { OptimizationView } from './components/OptimizationView';
 import { PackageManagerView } from './components/PackageManagerView';
+import { UninstallerView } from './views/UninstallerView';
 import { PresetsView } from './components/PresetsView';
+import { SystemCleaner } from './components/SystemCleaner';
+import { StorageUtilities } from './components/StorageUtilities';
 import { DnsContextMenuView } from './components/DnsContextMenuView';
 import { DriverBackupView } from './components/DriverBackupView';
 import { OdtView } from './components/OdtView';
@@ -20,6 +23,7 @@ import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ToastContainer } from './components/ToastContainer';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SystemInfo } from './types';
 
 export function App() {
@@ -85,19 +89,24 @@ export function App() {
         <Header />
 
         <main className="flex-1 overflow-auto">
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'optimization' && <OptimizationView />}
-          {activeTab === 'package_manager' && <PackageManagerView />}
-          {activeTab === 'presets' && <PresetsView />}
-          {activeTab === 'startup' && <StartupView />}
-          {activeTab === 'scheduler' && <SchedulerView />}
-          {activeTab === 'dns_context' && <DnsContextMenuView />}
-          {activeTab === 'driver_backup' && <DriverBackupView />}
-          {activeTab === 'diagnostics' && <DiagnosticsView />}
-          {activeTab === 'odt' && <OdtView />}
-          {activeTab === 'activation' && <MasView />}
-          {activeTab === 'restore_points' && <RestorePointsView />}
-          {activeTab === 'settings' && <SettingsView />}
+          <ErrorBoundary>
+            {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'optimization' && <OptimizationView />}
+            {activeTab === 'package_manager' && <PackageManagerView />}
+            {activeTab === 'app_uninstaller' && <UninstallerView />}
+            {activeTab === 'presets' && <PresetsView />}
+            {activeTab === 'system_cleaner' && <SystemCleaner />}
+            {activeTab === 'storage_utilities' && <StorageUtilities />}
+            {activeTab === 'startup' && <StartupView />}
+            {activeTab === 'scheduler' && <SchedulerView />}
+            {activeTab === 'dns_context' && <DnsContextMenuView />}
+            {activeTab === 'driver_backup' && <DriverBackupView />}
+            {activeTab === 'diagnostics' && <DiagnosticsView />}
+            {activeTab === 'odt' && <OdtView />}
+            {activeTab === 'activation' && <MasView />}
+            {activeTab === 'restore_points' && <RestorePointsView />}
+            {activeTab === 'settings' && <SettingsView />}
+          </ErrorBoundary>
         </main>
       </div>
 

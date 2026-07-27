@@ -5,7 +5,9 @@ import {
   LayoutDashboard,
   Sliders,
   Package,
+  Trash2,
   Sparkles,
+  FolderSearch,
   Globe,
   HardDrive,
   Activity,
@@ -30,7 +32,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'optimization', label: 'Optimizations', icon: Sliders },
   { id: 'package_manager', label: 'Package Manager', icon: Package },
+  { id: 'app_uninstaller', label: 'App Uninstaller', icon: Trash2 },
   { id: 'presets', label: 'Optimization Presets', icon: Sparkles },
+  { id: 'system_cleaner', label: 'System Cleaner', icon: Sparkles },
+  { id: 'storage_utilities', label: 'Storage Utilities', icon: FolderSearch },
   { id: 'startup', label: 'Startup Apps', icon: Power },
   { id: 'scheduler', label: 'Task Scheduler', icon: Clock },
   { id: 'dns_context', label: 'DNS & Context Menu', icon: Globe },
@@ -41,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'restore_points', label: 'Restore Points', icon: RotateCcw },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
+
 
 
 export function Navigation() {

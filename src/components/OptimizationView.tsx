@@ -111,10 +111,32 @@ export function OptimizationView() {
               commandExecuted: action.command,
             });
           });
+
+          if (!summary.success) {
+            const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+            const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Optimization execution failed';
+            useAppStore.getState().addToast({
+              type: 'error',
+              title: 'Optimizations Failed',
+              message: errMsg,
+            });
+          } else {
+            useAppStore.getState().addToast({
+              type: 'success',
+              title: 'Optimizations Applied',
+              message: `Successfully executed ${selectedCount} optimization rules.`,
+            });
+          }
         } catch (err) {
+          const errMsg = typeof err === 'string' ? err : String(err);
           addLog({
             level: 'error',
-            message: `IPC execute_optimizations failed: ${String(err)}`,
+            message: `IPC execute_optimizations failed: ${errMsg}`,
+          });
+          useAppStore.getState().addToast({
+            type: 'error',
+            title: 'Optimization Error',
+            message: errMsg,
           });
         } finally {
           setIsExecuting(false);

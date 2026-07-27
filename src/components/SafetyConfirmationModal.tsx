@@ -26,8 +26,21 @@ export function SafetyConfirmationModal() {
     if (!isInputValid || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await modal.onConfirmAction();
+      const action = modal.onConfirmAction;
       closeModal();
+      await action();
+    } catch (err) {
+      console.error('Safety modal execution error:', err);
+      const errMsg = typeof err === 'string' ? err : (err as Error)?.message || String(err);
+      useAppStore.getState().addToast({
+        type: 'error',
+        title: 'Action Execution Failed',
+        message: errMsg,
+      });
+      useAppStore.getState().addLog({
+        level: 'error',
+        message: `Action execution error: ${errMsg}`,
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -87,16 +87,83 @@ export type TabType =
   | 'dashboard'
   | 'optimization'
   | 'package_manager'
+  | 'app_uninstaller'
   | 'presets'
+  | 'system_cleaner'
+  | 'storage_utilities'
+  | 'startup'
+  | 'scheduler'
   | 'dns_context'
   | 'driver_backup'
   | 'diagnostics'
   | 'odt'
   | 'activation'
   | 'restore_points'
-  | 'startup'
-  | 'scheduler'
   | 'settings';
+
+export interface CleanerCategoryItem {
+  id: string;
+  name: string;
+  description: string;
+  paths: string[];
+  totalSizeBytes: number;
+  fileCount: number;
+}
+
+export interface CleanerScanResult {
+  categories: CleanerCategoryItem[];
+  totalBytes: number;
+  totalFiles: number;
+}
+
+export interface CleanerCleanResult {
+  bytesFreed: number;
+  filesRemoved: number;
+  skippedFilesCount: number;
+  errors: string[];
+}
+
+export interface DuplicateFileItem {
+  path: string;
+  sizeBytes: number;
+  modifiedTimestamp: number;
+}
+
+export interface DuplicateGroup {
+  hash: string;
+  sizeBytes: number;
+  files: DuplicateFileItem[];
+}
+
+export interface LargeFileItem {
+  path: string;
+  name: string;
+  sizeBytes: number;
+  extension: string;
+  modifiedTimestamp: number;
+}
+
+export interface StorageDeleteResult {
+  filesDeleted: number;
+  bytesFreed: number;
+  errors: string[];
+}
+
+
+export interface InstalledApp {
+  id: string;
+  name: string;
+  version?: string | null;
+  publisher?: string | null;
+  uninstallString?: string | null;
+  displayIcon?: string | null;
+  estimatedSizeKb?: number | null;
+  installDate?: string | null;
+  registryPath: string;
+  isSystemComponent: boolean;
+  quietUninstallString?: string | null;
+  installLocation?: string | null;
+}
 
 export interface SystemMetricsPayload {
   cpuUsagePercent: number;

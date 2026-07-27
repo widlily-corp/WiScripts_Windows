@@ -113,10 +113,32 @@ export function OdtView() {
               commandExecuted: action.command,
             });
           });
+
+          if (!summary.success) {
+            const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+            const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'ODT deployment failed';
+            useAppStore.getState().addToast({
+              type: 'error',
+              title: 'ODT Deployment Failed',
+              message: errMsg,
+            });
+          } else {
+            useAppStore.getState().addToast({
+              type: 'success',
+              title: 'ODT Deployment Complete',
+              message: `Office suite deployment completed successfully.`,
+            });
+          }
         } catch (err) {
+          const errMsg = typeof err === 'string' ? err : String(err);
           addLog({
             level: 'error',
-            message: `IPC execute_odt_install failed: ${String(err)}`,
+            message: `IPC execute_odt_install failed: ${errMsg}`,
+          });
+          useAppStore.getState().addToast({
+            type: 'error',
+            title: 'ODT Deployment Error',
+            message: errMsg,
           });
         } finally {
           setIsExecuting(false);
@@ -163,10 +185,32 @@ export function OdtView() {
               commandExecuted: action.command,
             });
           });
+
+          if (!summary.success) {
+            const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+            const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Regional bypass failed';
+            useAppStore.getState().addToast({
+              type: 'error',
+              title: 'Regional Bypass Failed',
+              message: errMsg,
+            });
+          } else {
+            useAppStore.getState().addToast({
+              type: 'success',
+              title: 'Regional Bypass Active',
+              message: `Office regional restriction bypass applied.`,
+            });
+          }
         } catch (err) {
+          const errMsg = typeof err === 'string' ? err : String(err);
           addLog({
             level: 'error',
-            message: `IPC execute_odt_regional_bypass failed: ${String(err)}`,
+            message: `IPC execute_odt_regional_bypass failed: ${errMsg}`,
+          });
+          useAppStore.getState().addToast({
+            type: 'error',
+            title: 'Regional Bypass Error',
+            message: errMsg,
           });
         } finally {
           setIsExecuting(false);

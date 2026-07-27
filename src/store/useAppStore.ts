@@ -27,6 +27,7 @@ import {
   ThermalStatus,
   StartupItem,
   ScheduledTaskItem,
+  InstalledApp,
 } from '../types';
 
 export interface PendingSafetyModal {
@@ -153,6 +154,13 @@ interface AppState {
   fetchScheduledTasks: () => Promise<ScheduledTaskItem[]>;
   toggleScheduledTask: (taskName: string, taskPath: string, enable: boolean) => Promise<ExecutionSummary | null>;
   runScheduledTask: (taskName: string, taskPath: string) => Promise<ExecutionSummary | null>;
+
+  // Milestone 2: Application Uninstaller
+  installedApps: InstalledApp[];
+  isAppsLoading: boolean;
+  appsError: string | null;
+  fetchInstalledApps: () => Promise<InstalledApp[]>;
+  uninstallApp: (app: InstalledApp, dryRun?: boolean) => Promise<ExecutionSummary | null>;
 
   // ODT State
   odtConfig: OdtConfig;
@@ -656,7 +664,7 @@ export const useAppStore = create<AppState>()(
         // Feature R1: Diagnostics
         runDiagnostics: async (action: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({
             level: 'cmd',
@@ -671,10 +679,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Diagnostics ${action} finished: ${summary.success ? 'Success' : 'Failed'} (${summary.totalDurationMs}ms)`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Diagnostics ${action} returned failure status`;
+              addToast({ type: 'error', title: 'Diagnostics Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'Diagnostics Completed', message: `Diagnostics action ${action} completed successfully.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Diagnostics ${action} failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Diagnostics Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -698,6 +714,7 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             get().addLog({ level: 'error', message: `Winget search failed: ${errMsg}` });
+            get().addToast({ type: 'error', title: 'Winget Search Error', message: errMsg });
             set({ wingetPackages: [] });
             return [];
           } finally {
@@ -707,7 +724,7 @@ export const useAppStore = create<AppState>()(
 
         wingetInstall: async (packageId: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Installing Winget package "${packageId}" (dryRun: ${currentDryRun})` });
           try {
@@ -719,10 +736,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Winget install ${packageId} result: ${summary.success ? 'Success' : 'Failed'}`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Failed to install Winget package ${packageId}`;
+              addToast({ type: 'error', title: 'Winget Install Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'Package Installed', message: `Package ${packageId} installed successfully.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Winget install failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Winget Install Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -731,7 +756,7 @@ export const useAppStore = create<AppState>()(
 
         wingetUpdate: async (packageId: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Updating Winget package "${packageId}" (dryRun: ${currentDryRun})` });
           try {
@@ -743,10 +768,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Winget update ${packageId} result: ${summary.success ? 'Success' : 'Failed'}`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Failed to update Winget package ${packageId}`;
+              addToast({ type: 'error', title: 'Winget Update Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'Package Updated', message: `Package ${packageId} updated successfully.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Winget update failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Winget Update Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -764,6 +797,7 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             get().addLog({ level: 'error', message: `Fetch UWP apps failed: ${errMsg}` });
+            get().addToast({ type: 'error', title: 'Fetch UWP Apps Error', message: errMsg });
             set({ uwpApps: [] });
             return [];
           } finally {
@@ -773,7 +807,7 @@ export const useAppStore = create<AppState>()(
 
         removeUwpApp: async (packageFullName: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Removing UWP App: ${packageFullName} (dryRun: ${currentDryRun})` });
           try {
@@ -789,11 +823,17 @@ export const useAppStore = create<AppState>()(
               set((state) => ({
                 uwpApps: state.uwpApps.filter((a) => a.packageFullName !== packageFullName),
               }));
+              addToast({ type: 'success', title: 'UWP App Removed', message: `Removed AppX package ${packageFullName}` });
+            } else if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Failed to remove UWP package ${packageFullName}`;
+              addToast({ type: 'error', title: 'Remove UWP App Failed', message: errMsg });
             }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Remove UWP app failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Remove UWP Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -815,6 +855,7 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             get().addLog({ level: 'error', message: `Fetch profiles failed: ${errMsg}` });
+            get().addToast({ type: 'error', title: 'Fetch Profiles Error', message: errMsg });
             set({ optimizationProfiles: [] });
             return [];
           } finally {
@@ -824,7 +865,7 @@ export const useAppStore = create<AppState>()(
 
         applyOptimizationProfile: async (profileId: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Applying optimization profile "${profileId}" (dryRun: ${currentDryRun})` });
           try {
@@ -836,10 +877,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Profile ${profileId} applied: ${summary.success ? 'Success' : 'Failed'} (${summary.executedActions.length} actions)`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Failed to apply optimization profile ${profileId}`;
+              addToast({ type: 'error', title: 'Profile Application Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'Profile Applied', message: `Applied profile ${profileId} successfully.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Apply profile failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Apply Profile Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -855,7 +904,7 @@ export const useAppStore = create<AppState>()(
 
         setDnsServer: async (provider: string, interfaceAlias?: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({
             level: 'cmd',
@@ -871,10 +920,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Set DNS server (${provider}) completed: ${summary.success ? 'Success' : 'Failed'}`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `Set DNS server ${provider} failed`;
+              addToast({ type: 'error', title: 'DNS Configuration Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'DNS Server Updated', message: `DNS resolver updated to ${provider}.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Set DNS server failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'DNS Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -899,7 +956,7 @@ export const useAppStore = create<AppState>()(
 
         toggleClassicContextMenu: async (enable: boolean, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Toggling classic context menu: ${enable} (dryRun: ${currentDryRun})` });
           try {
@@ -913,11 +970,17 @@ export const useAppStore = create<AppState>()(
             });
             if (summary.success && !currentDryRun) {
               set({ classicContextMenuEnabled: enable });
+              addToast({ type: 'success', title: 'Context Menu Updated', message: enable ? 'Classic Windows 10 context menu enabled.' : 'Modern Windows 11 context menu restored.' });
+            } else if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Context menu modification failed';
+              addToast({ type: 'error', title: 'Context Menu Toggle Failed', message: errMsg });
             }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Toggle classic context menu failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Context Menu Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -931,7 +994,7 @@ export const useAppStore = create<AppState>()(
 
         backupDrivers: async (outputDir: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Exporting drivers to "${outputDir}" (dryRun: ${currentDryRun})` });
           try {
@@ -943,10 +1006,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `Driver export to "${outputDir}" result: ${summary.success ? 'Success' : 'Failed'}`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Driver export failed';
+              addToast({ type: 'error', title: 'Driver Backup Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'Driver Backup Complete', message: `Exported drivers to "${outputDir}".` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Backup drivers failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Driver Backup Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -968,6 +1039,7 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             get().addLog({ level: 'error', message: `Fetch restore points failed: ${errMsg}` });
+            get().addToast({ type: 'error', title: 'Fetch Restore Points Error', message: errMsg });
             set({ restorePoints: [] });
             return [];
           } finally {
@@ -977,7 +1049,7 @@ export const useAppStore = create<AppState>()(
 
         createRestorePoint: async (description: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Creating restore point "${description}" (dryRun: ${currentDryRun})` });
           try {
@@ -991,11 +1063,17 @@ export const useAppStore = create<AppState>()(
             });
             if (summary.success) {
               await get().fetchRestorePoints();
+              addToast({ type: 'success', title: 'Restore Point Created', message: `Created restore point "${description}".` });
+            } else {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Create restore point failed';
+              addToast({ type: 'error', title: 'Create Restore Point Failed', message: errMsg });
             }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Create restore point failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'Create Restore Point Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -1004,7 +1082,7 @@ export const useAppStore = create<AppState>()(
 
         restoreSystemToPoint: async (sequenceNumber: number, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
-          const { addLog, setIsExecuting } = get();
+          const { addLog, setIsExecuting, addToast } = get();
           setIsExecuting(true);
           addLog({ level: 'cmd', message: `Restoring system to point #${sequenceNumber} (dryRun: ${currentDryRun})` });
           try {
@@ -1016,10 +1094,18 @@ export const useAppStore = create<AppState>()(
               level: summary.success ? 'info' : 'error',
               message: `System restore to #${sequenceNumber} result: ${summary.success ? 'Success' : 'Failed'}`,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || `System restore to #${sequenceNumber} failed`;
+              addToast({ type: 'error', title: 'System Rollback Failed', message: errMsg });
+            } else {
+              addToast({ type: 'success', title: 'System Rollback Initiated', message: `System rollback to checkpoint #${sequenceNumber} started.` });
+            }
             return summary;
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `System restore to #${sequenceNumber} failed: ${errMsg}` });
+            addToast({ type: 'error', title: 'System Rollback Error', message: errMsg });
             return null;
           } finally {
             setIsExecuting(false);
@@ -1178,6 +1264,13 @@ export const useAppStore = create<AppState>()(
               enable,
               dryRun: get().dryRunMode,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Toggle startup app failed';
+              get().addToast({ type: 'error', title: 'Toggle Startup App Failed', message: errMsg });
+            } else {
+              get().addToast({ type: 'success', title: 'Startup App Updated', message: `Startup item status updated.` });
+            }
             await get().fetchStartupItems();
             return summary;
           } catch (e) {
@@ -1204,6 +1297,13 @@ export const useAppStore = create<AppState>()(
               location,
               dryRun: get().dryRunMode,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Remove startup app failed';
+              get().addToast({ type: 'error', title: 'Remove Startup App Failed', message: errMsg });
+            } else {
+              get().addToast({ type: 'success', title: 'Startup App Removed', message: `Startup item removed.` });
+            }
             await get().fetchStartupItems();
             return summary;
           } catch (e) {
@@ -1236,6 +1336,13 @@ export const useAppStore = create<AppState>()(
               enable,
               dryRun: get().dryRunMode,
             });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Toggle scheduled task failed';
+              get().addToast({ type: 'error', title: 'Toggle Task Failed', message: errMsg });
+            } else {
+              get().addToast({ type: 'success', title: 'Scheduled Task Updated', message: `Task '${taskName}' ${enable ? 'enabled' : 'disabled'}.` });
+            }
             await get().fetchScheduledTasks();
             return summary;
           } catch (e) {
@@ -1250,16 +1357,89 @@ export const useAppStore = create<AppState>()(
               taskPath,
               dryRun: get().dryRunMode,
             });
-            get().addToast({
-              type: 'success',
-              title: 'Task Execution Triggered',
-              message: `Triggered '${taskName}' successfully.`,
-            });
+            if (!summary.success) {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Run scheduled task failed';
+              get().addToast({ type: 'error', title: 'Run Task Failed', message: errMsg });
+            } else {
+              get().addToast({
+                type: 'success',
+                title: 'Task Execution Triggered',
+                message: `Triggered '${taskName}' successfully.`,
+              });
+            }
             await get().fetchScheduledTasks();
             return summary;
           } catch (e) {
             get().addToast({ type: 'error', title: 'Run Task Failed', message: String(e) });
             return null;
+          }
+        },
+
+        // Milestone 2: Application Uninstaller
+        installedApps: [],
+        isAppsLoading: false,
+        appsError: null,
+
+        fetchInstalledApps: async () => {
+          set({ isAppsLoading: true, appsError: null });
+          get().addLog({ level: 'cmd', message: 'Scanning Windows registry for installed desktop applications...' });
+          try {
+            const apps = await invoke<InstalledApp[]>('get_installed_apps');
+            set({ installedApps: apps });
+            get().addLog({ level: 'info', message: `Retrieved ${apps.length} installed applications from host registry.` });
+            return apps;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            set({ appsError: errMsg, installedApps: [] });
+            get().addLog({ level: 'error', message: `Failed to fetch installed applications: ${errMsg}` });
+            get().addToast({ type: 'error', title: 'Scan Error', message: errMsg });
+            return [];
+          } finally {
+            set({ isAppsLoading: false });
+          }
+        },
+
+        uninstallApp: async (app, dryRun) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting, addToast } = get();
+          setIsExecuting(true);
+          addLog({
+            level: 'cmd',
+            message: `Initiating uninstallation of "${app.name}" (ID: ${app.id}, dryRun: ${currentDryRun})`,
+          });
+          try {
+            const summary = await invoke<ExecutionSummary>('uninstall_app', {
+              app,
+              dryRun: currentDryRun,
+            });
+
+            if (summary.success) {
+              addLog({ level: 'info', message: `Successfully launched uninstaller for "${app.name}"` });
+              addToast({
+                type: 'success',
+                title: 'Uninstaller Triggered',
+                message: `Uninstaller for "${app.name}" has been launched.`,
+              });
+              // Refresh installed apps list
+              await get().fetchInstalledApps();
+            } else {
+              const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
+              const errMsg =
+                errAction?.output.stderr.trim() ||
+                errAction?.output.stdout.trim() ||
+                'Uninstall process failed';
+              addLog({ level: 'error', message: `Uninstallation of "${app.name}" failed: ${errMsg}` });
+              addToast({ type: 'error', title: 'Uninstall Failed', message: errMsg });
+            }
+            return summary;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            addLog({ level: 'error', message: `Uninstall command error: ${errMsg}` });
+            addToast({ type: 'error', title: 'Uninstall Error', message: errMsg });
+            return null;
+          } finally {
+            setIsExecuting(false);
           }
         },
       }),

@@ -43,7 +43,21 @@ Implement the WiScripts Windows "Deep System Engine": native Rust WinAPI refacto
 | Explorer M6-1 | teamwork_preview_explorer | WinAPI Registry/Services Explorer | completed | 84bc9db2-b89d-4291-b5e2-8876cea54efb |
 | Explorer M6-2 | teamwork_preview_explorer | UAC & app.manifest Explorer | completed | a6e3244a-462c-4303-9e59-9c5a970a741e |
 | Explorer M6-3 | teamwork_preview_explorer | System Restore WinAPI Explorer | completed | 0f2f073a-6370-4165-92ba-2621918e0917 |
-| Worker M6 | teamwork_preview_worker | Deep System Engine Implementer | in-progress | 61040ab7-602e-47f8-89a0-e0256cb157a2 |
+| Worker M6 | teamwork_preview_worker | Deep System Engine Implementer | completed | 61040ab7-602e-47f8-89a0-e0256cb157a2 |
+| Reviewer M6-1 | teamwork_preview_reviewer | Code & Architecture Reviewer | completed (VETO) | e7ba914a-561a-416a-b929-e3f0b813b160 |
+| Reviewer M6-2 | teamwork_preview_reviewer | WinAPI & Security Reviewer | completed (PASS) | a79202ca-28f9-4d30-b299-9b0d4975c3b7 |
+
+| Challenger M6 | teamwork_preview_challenger | Empirical WinAPI Challenger | completed (PASS) | 87404988-d156-4053-ba6b-7b8ec349ba69 |
+
+| Auditor M6 | teamwork_preview_auditor | Forensic Integrity Auditor | completed (CLEAN) | ab1f5518-ab79-4e8a-acd5-83b660457afa |
+
+| Worker M6 Rem | teamwork_preview_worker | WinAPI Remediation Worker | completed | dbf39f58-c028-4e62-b0d4-fb47c52448d1 |
+| Reviewer M6-1 Rem | teamwork_preview_reviewer | Code Alignment Reviewer | completed (PASS) | 49529022-323b-4bd5-8753-b73110865687 |
+
+
+
+
+
 
 
 

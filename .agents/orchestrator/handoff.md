@@ -1,49 +1,43 @@
-# Orchestrator Final Handoff Report — WiScripts Windows Roadmap Implementation
+# Deep System Engine Handoff & Completion Report
 
-**Project**: WiScripts Windows
-**Status**: COMPLETED
-**Release Version**: v0.3.0
-**Working Directory**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows`
+**Project**: WiScripts Windows  
+**Role**: Project Orchestrator  
+**Milestone**: M6 — Deep System Engine & v0.4.0 Release  
+**Working Directory**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator`  
+**Date**: 2026-07-27  
 
 ---
 
 ## 1. Milestone State
 
-| # | Milestone | Scope | Audit Verdict | Status |
-|---|-----------|-------|---------------|--------|
-| 1 | M1: Auto-Updater | `tauri-plugin-updater` integration, version API, update UI Toast/Banner | CLEAN | DONE |
-| 2 | M2: Safety, Tools & Fixes | App icon fix, ODT registry bypass, auto restore points, restore point manager UI | CLEAN | DONE |
-| 3 | M3: System Monitoring & Management | Dashboard real-time charts (CPU/RAM/Disk/Net), CPU/GPU temps, Startup Apps, Task Scheduler | CLEAN | DONE |
-| 4 | M4: Customization & Profiles | i18next RU/EN, Settings tab (theme & defaults), JSON preset import/export | CLEAN | DONE |
-| 5 | M5: Finalization & Release | Clean git, Conventional Commits, git push, release tag `v0.3.0` push | CLEAN | DONE |
+| # | Requirement / Feature | Status | Verification Summary |
+|---|-----------------------|--------|----------------------|
+| R1 | **Deep System Integration (Rust WinAPI)** | **DONE** | Refactored core optimization logic to direct Windows API calls (`windows` crate 0.58.0) in `src-tauri/src/winapi/registry.rs` (`RegSetValueExW`, `RegQueryValueExW`) and `services.rs` (`OpenSCManagerW`, `ChangeServiceConfigW`, `QueryServiceConfigW`, `ControlService`). 12 optimization rules converted. |
+| R2 | **Automatic Administrator Privileges (UAC Manifest)** | **DONE** | Created `src-tauri/app.manifest` with `<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>` and linked via `src-tauri/build.rs`. Confirmed OS kernel execution restriction (OS Error 740) without elevation. |
+| R3 | **Safe Execution (Native System Restore Point)** | **DONE** | Implemented C-FFI `SRSetRestorePointW` dynamic binding from `srclient.dll` in `src-tauri/src/system_restore/mod.rs` with `RESTOREPOINTINFOW` / `STATEMGRSTATUS` struct alignment. Pre-tweak execution anchored at Step 0 in `optimization::execute()`. |
+| R4 | **Robust Read-Back Verification & Error Handling** | **DONE** | Programmatically queries `RegQueryValueExW` and `QueryServiceConfigW` immediately after mutations. Fixed 2 buffer alignment UB issues (`Vec<u16>` for string read-back, `Vec<u64>` for `QUERY_SERVICE_CONFIGW`). |
+| R5 | **Version 0.4.0 Release & Tagging** | **DONE** | Version bumped to `0.4.0` in `tauri.conf.json`, `Cargo.toml`, `package.json`, and `app.manifest`. Conventional Commit (`61499a6`) pushed to `origin/main` and release tag `v0.4.0` pushed to `origin/v0.4.0`. |
 
 ---
 
 ## 2. Active Subagents
-- **None**. All dispatched subagents (Explorers, Workers, Reviewers, Challengers, Auditors) have completed their tasks and delivered reports.
+
+- **None** — All subagents have completed their tasks and delivered their handoffs.
 
 ---
 
-## 3. Pending Decisions
-- **None**. All technical and roadmap requirements satisfied.
+## 3. Pending Decisions & Remaining Work
+
+- **Pending Decisions**: None.
+- **Remaining Work**: None. All 5 requirements R1–R5 are implemented, tested, reviewed, empirically challenged, forensically audited, committed, and released as tag `v0.4.0`.
 
 ---
 
-## 4. Key Verification Results
-1. **Rust Backend Tests (`cargo test`)**: 112/112 tests passed (92 unit + 5 empirical + 15 challenger tests).
-2. **TypeScript Compiler (`npx tsc --noEmit`)**: 0 errors.
-3. **Frontend Vite Build (`npm run build`)**: Static bundle built cleanly in `dist/`.
-4. **Git Repository Status**:
-   - Clean working tree.
-   - Commits follow Conventional Commits standard (`feat:`, `fix:`, `docs:`).
-   - Pushed to remote `origin/main`.
-   - Release tag `v0.3.0` created and pushed to `origin`.
-5. **Forensic Integrity Verification**: Verified **CLEAN** by Forensic Auditor (`.agents/auditor_m5/handoff.md`) with zero cheating, facade implementations, or hardcoded test results.
+## 4. Key Verification Artifacts
 
----
-
-## 5. Artifact Index
-- `PROJECT.md` — Global architecture and milestone index.
-- `.agents/orchestrator/progress.md` — Detailed progress log and execution history.
-- `.agents/orchestrator/BRIEFING.md` — Orchestrator state and subagent roster.
-- `.agents/auditor_m5/handoff.md` — Final forensic audit report for Milestone 5 and v0.3.0 release.
+- **Forensic Auditor Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m6\handoff.md` (**Verdict**: **CLEAN**)
+- **Reviewer 1 Remediation Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m6_1_remediation\handoff.md` (**Verdict**: **PASS**)
+- **Empirical Challenger Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m6\handoff.md` (**Verdict**: **PASS**, 98/98 unit tests pass)
+- **Worker Remediation Handoff**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m6_remediation\handoff.md`
+- **Orchestrator Progress Log**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\progress.md`
+- **Orchestrator Briefing**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\BRIEFING.md`

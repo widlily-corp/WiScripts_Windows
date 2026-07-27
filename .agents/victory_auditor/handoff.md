@@ -1,42 +1,48 @@
-# Victory Auditor Handoff Report — WiScripts Windows
+# Handoff Report — Victory Auditor
 
 ## 1. Observation
-- **Phase A Audit**: Evaluated project timeline, `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `orchestrator/handoff.md`. Workspace modifications cleanly implement R1 (Real Execution) and R2 (Administrator UI Warnings).
-- **Phase B Integrity Inspection**:
-  - `src-tauri/src/runner/mod.rs`: `RealRunner` executes real `powershell.exe` / `cmd.exe` processes (`CREATE_NO_WINDOW: 0x08000000`).
-  - `src/store/useAppStore.ts`: `dryRunMode` defaults to `false`. All async action triggers accept optional `dryRun?: boolean`, falling back to `get().dryRunMode`.
-  - `src/components/AdminElevationBanner.tsx`: Created and imported into all views (`DiagnosticsView`, `PackageManagerView`, `PresetsView`, `DnsContextMenuView`, `DriverBackupView`). Displays alert banner when `!isElevated` and provides a quick toggle to safety dry-run mode. Action buttons disable live execution when non-elevated.
-  - Code search: 0 occurrences of `@ts-ignore`, `@ts-nocheck`, or `: any` type annotations in `src/`.
-- **Phase C Independent Execution**:
-  - `cargo check`: Executed in `src-tauri`. Output: `Finished dev profile [unoptimized + debuginfo] target(s) in 0.58s` (0 errors).
-  - `cargo test`: Executed in `src-tauri`. Output: 85 tests total (65 lib tests, 5 empirical verification tests, 15 challenger tests) passed cleanly (0 failed, 0 ignored).
-  - `npx tsc --noEmit`: Executed in project root. Output: 0 errors.
-  - `npm run build`: Executed in project root. Output: Built in 3.33s generating `dist/` bundle.
+- **Git Commit History**: Commit `61499a64df0b5eb3dfa45aea2c3d14df36522796` (`fix(winapi): resolve unsafe buffer alignment in registry and service readback`) is on `main` and tagged `v0.4.0`. Remote tag verified via `git ls-remote --tags origin` (`61499a6` -> `refs/tags/v0.4.0^{}`).
+- **Version Configuration**:
+  - `package.json`: line 4 `"version": "0.4.0"`
+  - `src-tauri/Cargo.toml`: line 3 `version = "0.4.0"`
+  - `src-tauri/tauri.conf.json`: line 4 `"version": "0.4.0"`
+  - `src-tauri/app.manifest`: line 4 `version="0.4.0.0"`
+- **WinAPI Integration**:
+  - `src-tauri/src/winapi/registry.rs`: implements `set_dword`, `set_string`, `set_binary`, `delete_key`, `delete_value` using `windows::Win32::System::Registry`. Each function performs post-execution `RegQueryValueExW` / `RegOpenKeyExW` read-back verification.
+  - `src-tauri/src/winapi/services.rs`: implements `configure_service` and `stop_service` using `windows::Win32::System::Services`. Includes `QueryServiceConfigW` and `QueryServiceStatusEx` read-back verification.
+  - `src-tauri/src/winapi/tests.rs`: contains 4 unit tests (`test_winapi_registry_set_dword_and_readback`, `test_winapi_registry_set_string_and_readback`, `test_winapi_registry_set_binary_and_readback`, `test_winapi_registry_delete_key_and_readback`).
+- **UAC Privilege Elevation**:
+  - `src-tauri/app.manifest`: contains `<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>`.
+  - `src-tauri/build.rs`: embeds manifest via `tauri_build::WindowsAttributes::new().app_manifest(include_str!("app.manifest"))`.
+- **System Restore Point**:
+  - `src-tauri/src/system_restore/mod.rs`: implements `create_restore_point_native` dynamically invoking `SRSetRestorePointW` from `srclient.dll`.
+  - `src-tauri/src/optimization/mod.rs`: `execute` automatically triggers `create_restore_point` before running selected optimization rules.
+- **Independent Build & Test Execution**:
+  - `cargo check --manifest-path src-tauri/Cargo.toml`: Passed in 1.23s with exit code 0.
+  - `cargo test --lib --manifest-path src-tauri/Cargo.toml`: 98 passed, 0 failed, 0 ignored in 1.14s.
+  - `cargo build --manifest-path src-tauri/Cargo.toml`: Passed in 1.19s with exit code 0.
 
 ## 2. Logic Chain
-1. Observed `ORIGINAL_REQUEST.md` requirements: R1 requires default real execution (`dry_run: false`), and R2 requires Administrator UI warnings for non-elevated users.
-2. Verified that `useAppStore.ts` initial state sets `dryRunMode: false` and routes IPC calls directly to `RealRunner` when elevated or when dry-run is false.
-3. Verified that `AdminElevationBanner.tsx` and button disabled states (`isButtonDisabled = isExecuting || (!isElevated && !dryRunMode)`) safely protect non-elevated users while communicating missing admin rights.
-4. Independently ran all build and test suites (`cargo check`, `cargo test`, `npx tsc --noEmit`, `npm run build`). All suites passed 100% without errors.
-5. Reconciled independent execution output against orchestrator claims and found a 100% match with zero discrepancies or integrity violations.
+1. R1 was verified by inspecting native WinAPI implementations in `registry.rs` and `services.rs`. Every state-changing function contains explicit read-back validation logic.
+2. R2 was verified by validating `app.manifest` and `build.rs`. The compiled binary embeds the UAC manifest, requiring administrator privileges at the OS kernel level.
+3. R3 was verified by reviewing `system_restore/mod.rs` and `optimization/mod.rs`. `SRSetRestorePointW` is loaded dynamically from `srclient.dll` and invoked prior to applying optimizations.
+4. R4 was verified by executing `cargo test --lib`. All 98 unit tests passed cleanly with zero errors.
+5. R5 was verified by checking version tags across `package.json`, `Cargo.toml`, `tauri.conf.json`, `app.manifest`, as well as `git tag -l v0.4.0` and `git log`.
 
 ## 3. Caveats
-No caveats. All requirements verified independently on the target Windows environment.
+No caveats. All 5 acceptance criteria were independently verified with raw tool outputs and compilation runs.
 
 ## 4. Conclusion
-The team's claimed project completion is 100% authentic, robust, and cleanly implemented.
-**Final Verdict**: **VICTORY CONFIRMED**.
+**Verdict: VICTORY CONFIRMED.**
+The implementation team has fully and genuinely satisfied all acceptance criteria (R1–R5) for the WiScripts Windows v0.4.0 "Deep System Engine" release.
 
 ## 5. Verification Method
-Re-run independent verification commands from root and `src-tauri`:
+To independently verify:
 ```powershell
-# Rust Backend Verification
-cd c:\Users\Widlily\Documents\projects\WiScripts_Windows\src-tauri
-cargo check
-cargo test
-
-# Frontend Verification
 cd c:\Users\Widlily\Documents\projects\WiScripts_Windows
-npx tsc --noEmit
-npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+cargo test --lib --manifest-path src-tauri/Cargo.toml
+cargo build --manifest-path src-tauri/Cargo.toml
+git tag -l v0.4.0
 ```
+Inspect `.agents/victory_auditor/audit_report.md` for full detailed report.

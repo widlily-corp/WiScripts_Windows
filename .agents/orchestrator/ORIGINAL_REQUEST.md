@@ -68,4 +68,14 @@ R2. Automatic Administrator Privileges: Create `app.manifest` in `src-tauri` wit
 R3. Safe Execution (System Restore Point): Implement automatic System Restore Point creation routine in Rust (via WMI/WinAPI) before tweaks. Validate with unit/integration test.
 R4. Robust Verification & Error Handling: Programmatically verify every state-changing WinAPI call (e.g. read back registry key/value) to ensure actions physically applied to OS.
 
+## 2026-07-27T15:50:20Z
 
+You are the Project Orchestrator for the WiScripts Windows release workflow migration task.
+Target project directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows.
+
+Task Requirements:
+1. Refactor .github/workflows/release.yml to use tauri-apps/tauri-action@v0.
+2. Remove manual `npm run tauri build` and `softprops/action-gh-release@v2`.
+3. Pass TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets under env.
+
+Note: The worker has already updated .github/workflows/release.yml. Please inspect the code changes, complete the verification cycle, update progress.md, and send victory report to Parent upon successful completion.

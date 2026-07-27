@@ -1,80 +1,67 @@
-# BRIEFING — 2026-07-27T12:50:00Z
+# BRIEFING — 2026-07-27T15:50:20Z
 
 ## Mission
-Implement the WiScripts Windows "Deep System Engine": native Rust WinAPI refactoring for registry, services, and debloat, app.manifest with requireAdministrator embedded via build.rs, native Rust System Restore Point routines, and WinAPI read-back verification with unit tests.
+Migrate `.github/workflows/release.yml` to use `tauri-apps/tauri-action@v0` with signing secrets, remove manual build/release steps, run complete verification cycle (2 Reviewers, 2 Challengers, 1 Auditor), update `progress.md`, and send victory report to Parent upon successful completion.
 
 ## 🔒 My Identity
 - Archetype: self
 - Roles: orchestrator, user_liaison, human_reporter, successor
 - Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator
 - Original parent: parent
-- Original parent conversation ID: fc4ad612-77ae-4f3b-8cc4-ab8aee1e6e30
+- Original parent conversation ID: b0da9980-d85a-4772-82d6-e158f06039db
 
 ## 🔒 My Workflow
 - **Pattern**: Project Pattern
-- **Scope document**: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\plan.md
-1. **Decompose**: Decompose Deep System Engine into Exploration, Implementation (WinAPI, manifest, restore point, read-back verification), Verification (Reviewers & Challenger), and Forensic Audit.
+- **Scope document**: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\PROJECT.md
+1. **Decompose**: Assessed task scope (single file workflow migration). Fits 1 Explorer -> Worker -> Reviewer -> Challenger -> Auditor cycle.
 2. **Dispatch & Execute**:
-   - Explorer investigation -> Worker implementation -> Reviewer verification -> Challenger verification -> Forensic Auditor verification.
-3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign -> Escalate.
-4. **Succession**: Threshold 16 subagents. On succession: write handoff.md, cancel timers, spawn successor.
+   - Iteration loop for Milestone Release Migration.
+3. **On failure**: Retry -> Replace -> Skip -> Redistribute -> Redesign -> Escalate
+4. **Succession**: Spawn count threshold: 16
 - **Work items**:
-  1. Exploration (WinAPI backend refactoring, manifest, restore point) [in-progress]
-  2. Deep System Engine Implementation (Worker) [pending]
-  3. Code Review & Challenger Verification [pending]
-  4. Forensic Integrity Audit [pending]
+  1. Release Workflow Migration [in-progress]
+- **Current phase**: 2
+- **Current focus**: Verification Cycle (2 Reviewers, 2 Challengers, 1 Forensic Auditor)
 
 ## 🔒 Key Constraints
-- NEVER write source code directly.
-- NEVER run build/test commands yourself — delegate to subagents.
-- Maintain strict type safety, zero AI-slop, AAA testing, proper error handling, conventional commits.
-- Absolute verification: Forensic Auditor binary veto on integrity violations.
+- NEVER write, modify, or create source code files directly.
+- NEVER run build/test commands yourself — require workers to do so.
+- Audit is a binary veto.
 
 ## Current Parent
-- Conversation ID: fc4ad612-77ae-4f3b-8cc4-ab8aee1e6e30
-- Updated: 2026-07-27T12:50:00Z
+- Conversation ID: b0da9980-d85a-4772-82d6-e158f06039db
+- Updated: 2026-07-27T15:50:20Z
 
 ## Key Decisions Made
-- Project pattern selected for Deep System Engine: 3 parallel Explorers -> 1 Worker -> 2 Reviewers + 1 Challenger + 1 Forensic Auditor.
+- Worker implementation verified complete.
+- Launching complete verification cycle: 2 Reviewers, 2 Challengers, 1 Forensic Auditor.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| Explorer M6-1 | teamwork_preview_explorer | WinAPI Registry/Services Explorer | completed | 84bc9db2-b89d-4291-b5e2-8876cea54efb |
-| Explorer M6-2 | teamwork_preview_explorer | UAC & app.manifest Explorer | completed | a6e3244a-462c-4303-9e59-9c5a970a741e |
-| Explorer M6-3 | teamwork_preview_explorer | System Restore WinAPI Explorer | completed | 0f2f073a-6370-4165-92ba-2621918e0917 |
-| Worker M6 | teamwork_preview_worker | Deep System Engine Implementer | completed | 61040ab7-602e-47f8-89a0-e0256cb157a2 |
-| Reviewer M6-1 | teamwork_preview_reviewer | Code & Architecture Reviewer | completed (VETO) | e7ba914a-561a-416a-b929-e3f0b813b160 |
-| Reviewer M6-2 | teamwork_preview_reviewer | WinAPI & Security Reviewer | completed (PASS) | a79202ca-28f9-4d30-b299-9b0d4975c3b7 |
-
-| Challenger M6 | teamwork_preview_challenger | Empirical WinAPI Challenger | completed (PASS) | 87404988-d156-4053-ba6b-7b8ec349ba69 |
-
-| Auditor M6 | teamwork_preview_auditor | Forensic Integrity Auditor | completed (CLEAN) | ab1f5518-ab79-4e8a-acd5-83b660457afa |
-
-| Worker M6 Rem | teamwork_preview_worker | WinAPI Remediation Worker | completed | dbf39f58-c028-4e62-b0d4-fb47c52448d1 |
-| Reviewer M6-1 Rem | teamwork_preview_reviewer | Code Alignment Reviewer | completed (PASS) | 49529022-323b-4bd5-8753-b73110865687 |
-
-
-
-
-
-
-
-
+| Explorer 1 | teamwork_preview_explorer | Workflow analysis | completed | 0c7c2f08-9c46-4110-ae63-94b562204237 |
+| Explorer 2 | teamwork_preview_explorer | Actions & Security analysis | completed | f5229ac5-4a91-49ae-a6e8-a47bffce4cbe |
+| Explorer 3 | teamwork_preview_explorer | Soundness & Edge case analysis | completed | f504e4f8-4992-477d-92ed-c57a9582683e |
+| Worker | teamwork_preview_worker | Refactor release workflow | completed | 8ba71629-8a2e-4dd0-ae42-516b3e043e77 |
+| Reviewer 1 | teamwork_preview_reviewer | Specification Verification | completed | 331753bd-442f-4db0-a6da-9cd8d959d971 |
+| Reviewer 2 | teamwork_preview_reviewer | Security & Integration Verification | completed | 52f1ef61-85ca-46ee-98ff-aba6225bdddc |
+| Challenger 1 | teamwork_preview_challenger | Empirical Workflow Validation | completed | 22af8293-23e1-4d4a-861e-348cb651ab16 |
+| Challenger 2 | teamwork_preview_challenger | Adversarial Edge Case Verification | completed | bf946a00-2c21-4afa-b342-0068c94194ea |
+| Auditor | teamwork_preview_auditor | Forensic Integrity Audit | completed | eb1ddc66-9253-489b-b8b4-61629b2440c6 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 0 / 16
+- Spawn count: 9 / 16
 - Pending subagents: none
-- Predecessor: Gen 2
-- Current Generation: Gen 3
+- Predecessor: none
+- Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: task-23
+- Heartbeat cron: task-15
 - Safety timer: none
 
 ## Artifact Index
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\ORIGINAL_REQUEST.md — Original User Request
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\plan.md — Detailed Execution Plan
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\progress.md — Progress Heartbeat
-
+- `.agents/orchestrator/plan.md` — Execution plan
+- `.agents/orchestrator/progress.md` — Progress tracker
+- `.agents/orchestrator/context.md` — Task context summary
+- `.agents/orchestrator/PROJECT.md` — Project scope and milestone status

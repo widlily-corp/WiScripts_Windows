@@ -1,17 +1,16 @@
-# Architectural Context: Persistent Debug Logging System
+# Task Context
 
-## Objective
-Implement a robust persistent file-based logging mechanism in the Rust backend of WiScripts Windows.
+## Overview
+Migrate Tauri release pipeline in `.github/workflows/release.yml` from manual `npm run tauri build` + `softprops/action-gh-release@v2` to `tauri-apps/tauri-action@v0`.
 
-## Key Requirements & Specifications
-1. **Target File**: `debug.log` in the application executable directory / current working directory.
-2. **Log Content**:
-   - Application initialization & shutdown events.
-   - Command execution logs (PowerShell / CMD commands executed by `RealRunner` or `DryRunRunner`).
-   - Dry-run actions and simulation logs.
-   - Command stdout, stderr, exit codes, and error logs.
-   - Timestamps and explicit log levels (`INFO`, `WARN`, `ERROR`, `DEBUG`).
-3. **Crate Selection**: `simplelog`, `env_logger`, or standard `log` crate combined with `CombinedLogger` / `WriteLogger` or custom thread-safe file appender.
-4. **Verification**:
-   - `cargo test` passes cleanly and produces valid `debug.log` entries during test execution.
-   - `cargo check` / build passes without errors.
+## Target Requirements
+1. Use `tauri-apps/tauri-action@v0` for build and release step.
+2. Remove manual `npm run tauri build` step.
+3. Remove `softprops/action-gh-release@v2` step.
+4. Configure `env` for `tauri-apps/tauri-action@v0` with:
+   - `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}`
+   - `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` (or standard secret token)
+
+## Target Files
+- `.github/workflows/release.yml`

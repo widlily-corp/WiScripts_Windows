@@ -1,8 +1,8 @@
-# Deep System Engine Handoff & Completion Report
+# Release Workflow Migration Handoff & Completion Report
 
 **Project**: WiScripts Windows  
 **Role**: Project Orchestrator  
-**Milestone**: M6 — Deep System Engine & v0.4.0 Release  
+**Milestone**: Release Workflow Migration (`.github/workflows/release.yml`)  
 **Working Directory**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator`  
 **Date**: 2026-07-27  
 
@@ -12,32 +12,32 @@
 
 | # | Requirement / Feature | Status | Verification Summary |
 |---|-----------------------|--------|----------------------|
-| R1 | **Deep System Integration (Rust WinAPI)** | **DONE** | Refactored core optimization logic to direct Windows API calls (`windows` crate 0.58.0) in `src-tauri/src/winapi/registry.rs` (`RegSetValueExW`, `RegQueryValueExW`) and `services.rs` (`OpenSCManagerW`, `ChangeServiceConfigW`, `QueryServiceConfigW`, `ControlService`). 12 optimization rules converted. |
-| R2 | **Automatic Administrator Privileges (UAC Manifest)** | **DONE** | Created `src-tauri/app.manifest` with `<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>` and linked via `src-tauri/build.rs`. Confirmed OS kernel execution restriction (OS Error 740) without elevation. |
-| R3 | **Safe Execution (Native System Restore Point)** | **DONE** | Implemented C-FFI `SRSetRestorePointW` dynamic binding from `srclient.dll` in `src-tauri/src/system_restore/mod.rs` with `RESTOREPOINTINFOW` / `STATEMGRSTATUS` struct alignment. Pre-tweak execution anchored at Step 0 in `optimization::execute()`. |
-| R4 | **Robust Read-Back Verification & Error Handling** | **DONE** | Programmatically queries `RegQueryValueExW` and `QueryServiceConfigW` immediately after mutations. Fixed 2 buffer alignment UB issues (`Vec<u16>` for string read-back, `Vec<u64>` for `QUERY_SERVICE_CONFIGW`). |
-| R5 | **Version 0.4.0 Release & Tagging** | **DONE** | Version bumped to `0.4.0` in `tauri.conf.json`, `Cargo.toml`, `package.json`, and `app.manifest`. Conventional Commit (`61499a6`) pushed to `origin/main` and release tag `v0.4.0` pushed to `origin/v0.4.0`. |
+| R1 | **Refactor `.github/workflows/release.yml` to `tauri-apps/tauri-action@v0`** | **DONE** | Refactored release step to `uses: tauri-apps/tauri-action@v0`. Verified by Reviewer 1, Reviewer 2, Challenger 1, Challenger 2, and Forensic Auditor. |
+| R2 | **Remove manual `npm run tauri build` and `softprops/action-gh-release@v2`** | **DONE** | Legacy steps completely removed. Single atomic step handles compilation, bundle packaging, code signing, and GitHub Release asset publishing. |
+| R3 | **Pass signing secrets under `env` block** | **DONE** | `TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}` passed under `env` alongside `GITHUB_TOKEN`. |
 
 ---
 
 ## 2. Active Subagents
 
-- **None** — All subagents have completed their tasks and delivered their handoffs.
+- **None** — All 9 subagents (3 Explorers, 1 Worker, 2 Reviewers, 2 Challengers, 1 Forensic Auditor) have completed their tasks and delivered handoff reports with PASS/CLEAN verdicts.
 
 ---
 
 ## 3. Pending Decisions & Remaining Work
 
 - **Pending Decisions**: None.
-- **Remaining Work**: None. All 5 requirements R1–R5 are implemented, tested, reviewed, empirically challenged, forensically audited, committed, and released as tag `v0.4.0`.
+- **Remaining Work**: None. Task complete.
 
 ---
 
 ## 4. Key Verification Artifacts
 
-- **Forensic Auditor Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m6\handoff.md` (**Verdict**: **CLEAN**)
-- **Reviewer 1 Remediation Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\reviewer_m6_1_remediation\handoff.md` (**Verdict**: **PASS**)
-- **Empirical Challenger Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\challenger_m6\handoff.md` (**Verdict**: **PASS**, 98/98 unit tests pass)
-- **Worker Remediation Handoff**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\worker_m6_remediation\handoff.md`
+- **Forensic Auditor Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_auditor_release_1\handoff.md` (**Verdict**: **CLEAN**)
+- **Reviewer 1 Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_reviewer_release_1\handoff.md` (**Verdict**: **PASS**)
+- **Reviewer 2 Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_reviewer_release_2\handoff.md` (**Verdict**: **PASS**)
+- **Challenger 1 Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_challenger_release_1\handoff.md` (**Verdict**: **PASS**, 18/18 tests pass)
+- **Challenger 2 Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_challenger_release_2\handoff.md` (**Verdict**: **PASS**, edge cases verified)
+- **Worker Handoff Report**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\teamwork_preview_worker_release\handoff.md`
 - **Orchestrator Progress Log**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\progress.md`
 - **Orchestrator Briefing**: `c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\orchestrator\BRIEFING.md`

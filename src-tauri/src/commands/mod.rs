@@ -1,3 +1,4 @@
+use crate::cleaner;
 use crate::diagnostics;
 use crate::dns_context;
 use crate::driver_backup;
@@ -11,7 +12,9 @@ use crate::profiles::{self, OptimizationProfile};
 use crate::runner::{CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
 use crate::scheduler;
 use crate::startup;
+use crate::storage;
 use crate::system_restore::{self, RestorePoint};
+use crate::uninstaller;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -93,45 +96,46 @@ pub fn get_app_version(app: tauri::AppHandle) -> String {
 #[tauri::command]
 pub async fn get_system_info() -> Result<SystemInfo, AppError> {
     log::info!("[IPC] get_system_info request received");
-    let mut sys = sysinfo::System::new_all();
-    sys.refresh_all();
-    let _ = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_all();
         std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+        sys.refresh_cpu();
+
+        let os_name = sysinfo::System::name().unwrap_or_else(|| "Windows".to_string());
+        let os_version = sysinfo::System::os_version().unwrap_or_else(|| "Unknown".to_string());
+        let os_build = sysinfo::System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
+
+        let is_elevated = check_is_elevated();
+        let cpu_usage_percent = sys.global_cpu_info().cpu_usage().round() as u32;
+        let memory_used_mb = sys.used_memory() / (1024 * 1024);
+        let memory_total_mb = sys.total_memory() / (1024 * 1024);
+        let telemetry_status = probe_telemetry_status();
+
+        log::info!(
+            "[IPC] get_system_info completed: OS='{} {}', CPU={}%, RAM={}/{}MB, Telemetry='{}', Elevated={}",
+            os_name,
+            os_version,
+            cpu_usage_percent,
+            memory_used_mb,
+            memory_total_mb,
+            telemetry_status,
+            is_elevated
+        );
+
+        Ok(SystemInfo {
+            os_name,
+            os_version,
+            os_build,
+            is_elevated,
+            cpu_usage_percent,
+            memory_used_mb,
+            memory_total_mb,
+            telemetry_status,
+        })
     })
-    .await;
-    sys.refresh_cpu();
-
-    let os_name = sysinfo::System::name().unwrap_or_else(|| "Windows".to_string());
-    let os_version = sysinfo::System::os_version().unwrap_or_else(|| "Unknown".to_string());
-    let os_build = sysinfo::System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
-
-    let is_elevated = check_is_elevated();
-    let cpu_usage_percent = sys.global_cpu_info().cpu_usage().round() as u32;
-    let memory_used_mb = sys.used_memory() / (1024 * 1024);
-    let memory_total_mb = sys.total_memory() / (1024 * 1024);
-    let telemetry_status = probe_telemetry_status();
-
-    log::info!(
-        "[IPC] get_system_info completed: OS='{} {}', CPU={}%, RAM={}/{}MB, Telemetry='{}', Elevated={}",
-        os_name,
-        os_version,
-        cpu_usage_percent,
-        memory_used_mb,
-        memory_total_mb,
-        telemetry_status,
-        is_elevated
-    );
-
-    Ok(SystemInfo {
-        os_name,
-        os_version,
-        os_build,
-        is_elevated,
-        cpu_usage_percent,
-        memory_used_mb,
-        memory_total_mb,
-        telemetry_status,
-    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in get_system_info: {}", e)))?
 }
 
 #[tauri::command]
@@ -168,25 +172,29 @@ pub async fn execute_optimizations(
         dry_run,
         should_create
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        optimization::execute(Some(&app), &runner, &selected_keys, should_create)
-    } else {
-        let runner = RealRunner::new();
-        optimization::execute(Some(&app), &runner, &selected_keys, should_create)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            optimization::execute(Some(&app), &runner, &selected_keys, should_create)
+        } else {
+            let runner = RealRunner::new();
+            optimization::execute(Some(&app), &runner, &selected_keys, should_create)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] execute_optimizations completed: success={}, actions={}, duration={}ms",
-            summary.success,
-            summary.executed_actions.len(),
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] execute_optimizations failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] execute_optimizations completed: success={}, actions={}, duration={}ms",
+                summary.success,
+                summary.executed_actions.len(),
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] execute_optimizations failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in execute_optimizations: {}", e)))?
 }
 
 #[tauri::command]
@@ -212,53 +220,61 @@ pub async fn execute_odt_install(
         setup_path,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        odt::execute_odt_install(Some(&app), &runner, &config, setup_path, true).map_err(AppError::Execution)
-    } else {
-        let runner = RealRunner::new();
-        odt::execute_odt_install(Some(&app), &runner, &config, setup_path, false).map_err(AppError::Execution)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, true).map_err(AppError::Execution)
+        } else {
+            let runner = RealRunner::new();
+            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, false).map_err(AppError::Execution)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] execute_odt_install completed: success={}, total_duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] execute_odt_install failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] execute_odt_install completed: success={}, total_duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] execute_odt_install failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in execute_odt_install: {}", e)))?
 }
 
 #[tauri::command]
 pub async fn execute_odt_regional_bypass(
     app: tauri::AppHandle,
     dry_run: bool,
-) -> Result<ExecutionSummary, String> {
+) -> Result<ExecutionSummary, AppError> {
     log::info!(
         "[IPC] execute_odt_regional_bypass request received: dry_run={}",
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        odt::execute_odt_regional_bypass(Some(&app), &runner, true)
-    } else {
-        let runner = RealRunner::new();
-        odt::execute_odt_regional_bypass(Some(&app), &runner, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            odt::execute_odt_regional_bypass(Some(&app), &runner, true).map_err(AppError::Execution)
+        } else {
+            let runner = RealRunner::new();
+            odt::execute_odt_regional_bypass(Some(&app), &runner, false).map_err(AppError::Execution)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] execute_odt_regional_bypass completed: success={}, total_duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] execute_odt_regional_bypass failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] execute_odt_regional_bypass completed: success={}, total_duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] execute_odt_regional_bypass failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in execute_odt_regional_bypass: {}", e)))?
 }
 
 #[tauri::command]
@@ -272,24 +288,28 @@ pub async fn execute_activation(
         method,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        mas::execute_activation(Some(&app), &runner, method, true).map_err(AppError::Execution)
-    } else {
-        let runner = RealRunner::new();
-        mas::execute_activation(Some(&app), &runner, method, false).map_err(AppError::Execution)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            mas::execute_activation(Some(&app), &runner, method, true).map_err(AppError::Execution)
+        } else {
+            let runner = RealRunner::new();
+            mas::execute_activation(Some(&app), &runner, method, false).map_err(AppError::Execution)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] execute_activation completed: success={}, total_duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] execute_activation failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] execute_activation completed: success={}, total_duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] execute_activation failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in execute_activation: {}", e)))?
 }
 
 // ---------------------------------------------------------------------------
@@ -307,31 +327,39 @@ pub async fn run_diagnostics(
         action,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        diagnostics::run_diagnostics(Some(&app), &runner, &action, true)
-    } else {
-        let runner = RealRunner::new();
-        diagnostics::run_diagnostics(Some(&app), &runner, &action, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            diagnostics::run_diagnostics(Some(&app), &runner, &action, true)
+        } else {
+            let runner = RealRunner::new();
+            diagnostics::run_diagnostics(Some(&app), &runner, &action, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] run_diagnostics completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] run_diagnostics failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] run_diagnostics completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] run_diagnostics failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in run_diagnostics: {}", e)))?
 }
 
 #[tauri::command]
 pub async fn winget_search(query: String) -> Result<Vec<WingetPackage>, AppError> {
     log::info!("[IPC] winget_search request received for query '{}'", query);
-    let runner = RealRunner::new();
-    packages::winget_search(&runner, &query)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner = RealRunner::new();
+        packages::winget_search(&runner, &query)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in winget_search: {}", e)))?
 }
 
 #[tauri::command]
@@ -345,24 +373,28 @@ pub async fn winget_install(
         package_id,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        packages::winget_install(Some(&app), &runner, &package_id, true)
-    } else {
-        let runner = RealRunner::new();
-        packages::winget_install(Some(&app), &runner, &package_id, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            packages::winget_install(Some(&app), &runner, &package_id, true)
+        } else {
+            let runner = RealRunner::new();
+            packages::winget_install(Some(&app), &runner, &package_id, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] winget_install completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] winget_install failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] winget_install completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] winget_install failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in winget_install: {}", e)))?
 }
 
 #[tauri::command]
@@ -376,31 +408,39 @@ pub async fn winget_update(
         package_id,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        packages::winget_update(Some(&app), &runner, &package_id, true)
-    } else {
-        let runner = RealRunner::new();
-        packages::winget_update(Some(&app), &runner, &package_id, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            packages::winget_update(Some(&app), &runner, &package_id, true)
+        } else {
+            let runner = RealRunner::new();
+            packages::winget_update(Some(&app), &runner, &package_id, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] winget_update completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] winget_update failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] winget_update completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] winget_update failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in winget_update: {}", e)))?
 }
 
 #[tauri::command]
 pub async fn get_uwp_apps() -> Result<Vec<UwpAppInfo>, AppError> {
     log::info!("[IPC] get_uwp_apps request received");
-    let runner = RealRunner::new();
-    packages::get_uwp_apps(&runner)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner = RealRunner::new();
+        packages::get_uwp_apps(&runner)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_uwp_apps: {}", e)))?
 }
 
 #[tauri::command]
@@ -414,24 +454,28 @@ pub async fn remove_uwp_app(
         package_full_name,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        packages::remove_uwp_app(Some(&app), &runner, &package_full_name, true)
-    } else {
-        let runner = RealRunner::new();
-        packages::remove_uwp_app(Some(&app), &runner, &package_full_name, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            packages::remove_uwp_app(Some(&app), &runner, &package_full_name, true)
+        } else {
+            let runner = RealRunner::new();
+            packages::remove_uwp_app(Some(&app), &runner, &package_full_name, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] remove_uwp_app completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] remove_uwp_app failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] remove_uwp_app completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] remove_uwp_app failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in remove_uwp_app: {}", e)))?
 }
 
 #[tauri::command]
@@ -451,24 +495,28 @@ pub async fn apply_optimization_profile(
         profile_id,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, true)
-    } else {
-        let runner = RealRunner::new();
-        profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, true)
+        } else {
+            let runner = RealRunner::new();
+            profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] apply_optimization_profile completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] apply_optimization_profile failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] apply_optimization_profile completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] apply_optimization_profile failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in apply_optimization_profile: {}", e)))?
 }
 
 #[tauri::command]
@@ -484,31 +532,39 @@ pub async fn set_dns_server(
         interface_alias,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), true)
-    } else {
-        let runner = RealRunner::new();
-        dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), true)
+        } else {
+            let runner = RealRunner::new();
+            dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] set_dns_server completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] set_dns_server failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] set_dns_server completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] set_dns_server failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in set_dns_server: {}", e)))?
 }
 
 #[tauri::command]
 pub async fn get_classic_context_menu_status() -> Result<bool, AppError> {
     log::info!("[IPC] get_classic_context_menu_status request received");
-    let runner = RealRunner::new();
-    dns_context::get_classic_context_menu_status(&runner)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner = RealRunner::new();
+        dns_context::get_classic_context_menu_status(&runner)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_classic_context_menu_status: {}", e)))?
 }
 
 #[tauri::command]
@@ -522,24 +578,28 @@ pub async fn toggle_classic_context_menu(
         enable,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        dns_context::toggle_classic_context_menu(Some(&app), &runner, enable, true)
-    } else {
-        let runner = RealRunner::new();
-        dns_context::toggle_classic_context_menu(Some(&app), &runner, enable, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            dns_context::toggle_classic_context_menu(Some(&app), &runner, enable, true)
+        } else {
+            let runner = RealRunner::new();
+            dns_context::toggle_classic_context_menu(Some(&app), &runner, enable, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] toggle_classic_context_menu completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] toggle_classic_context_menu failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] toggle_classic_context_menu completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] toggle_classic_context_menu failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in toggle_classic_context_menu: {}", e)))?
 }
 
 #[tauri::command]
@@ -553,24 +613,28 @@ pub async fn backup_drivers(
         output_dir,
         dry_run
     );
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        driver_backup::backup_drivers(Some(&app), &runner, &output_dir, true)
-    } else {
-        let runner = RealRunner::new();
-        driver_backup::backup_drivers(Some(&app), &runner, &output_dir, false)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            driver_backup::backup_drivers(Some(&app), &runner, &output_dir, true)
+        } else {
+            let runner = RealRunner::new();
+            driver_backup::backup_drivers(Some(&app), &runner, &output_dir, false)
+        };
 
-    match &res {
-        Ok(summary) => log::info!(
-            "[IPC] backup_drivers completed: success={}, duration={}ms",
-            summary.success,
-            summary.total_duration_ms
-        ),
-        Err(err) => log::error!("[IPC] backup_drivers failed: {:?}", err),
-    }
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] backup_drivers completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] backup_drivers failed: {:?}", err),
+        }
 
-    res
+        res
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in backup_drivers: {}", e)))?
 }
 
 #[tauri::command]
@@ -584,31 +648,39 @@ pub async fn create_restore_point(
         description,
         dry_run
     );
-    let start_time = std::time::Instant::now();
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
-    } else {
-        let runner = RealRunner::new();
-        system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let start_time = std::time::Instant::now();
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
+        } else {
+            let runner = RealRunner::new();
+            system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
+        };
 
-    match res {
-        Ok(action) => Ok(ExecutionSummary {
-            success: true,
-            executed_actions: vec![action],
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
-            is_dry_run: dry_run,
-        }),
-        Err(e) => Err(e),
-    }
+        match res {
+            Ok(action) => Ok(ExecutionSummary {
+                success: true,
+                executed_actions: vec![action],
+                total_duration_ms: start_time.elapsed().as_millis() as u64,
+                is_dry_run: dry_run,
+            }),
+            Err(e) => Err(e),
+        }
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in create_restore_point: {}", e)))?
 }
 
 #[tauri::command]
 pub async fn get_restore_points() -> Result<Vec<RestorePoint>, AppError> {
     log::info!("[IPC] get_restore_points request received");
-    let runner = RealRunner::new();
-    system_restore::get_restore_points(&runner).map_err(AppError::Execution)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner = RealRunner::new();
+        system_restore::get_restore_points(&runner).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_restore_points: {}", e)))?
 }
 
 #[tauri::command]
@@ -622,24 +694,28 @@ pub async fn restore_system_point(
         sequence_number,
         dry_run
     );
-    let start_time = std::time::Instant::now();
-    let res = if dry_run {
-        let runner = DryRunRunner::new();
-        system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
-    } else {
-        let runner = RealRunner::new();
-        system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let start_time = std::time::Instant::now();
+        let res = if dry_run {
+            let runner = DryRunRunner::new();
+            system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+        } else {
+            let runner = RealRunner::new();
+            system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+        };
 
-    match res {
-        Ok(action) => Ok(ExecutionSummary {
-            success: true,
-            executed_actions: vec![action],
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
-            is_dry_run: dry_run,
-        }),
-        Err(e) => Err(e),
-    }
+        match res {
+            Ok(action) => Ok(ExecutionSummary {
+                success: true,
+                executed_actions: vec![action],
+                total_duration_ms: start_time.elapsed().as_millis() as u64,
+                is_dry_run: dry_run,
+            }),
+            Err(e) => Err(e),
+        }
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in restore_system_point: {}", e)))?
 }
 
 #[tauri::command]
@@ -647,10 +723,15 @@ pub async fn get_system_metrics(
     state: tauri::State<'_, Arc<Mutex<metrics::MetricsCollector>>>,
 ) -> Result<metrics::SystemMetricsPayload, AppError> {
     log::debug!("[IPC] get_system_metrics request received");
-    let mut collector = state
-        .lock()
-        .map_err(|e| AppError::System(format!("Failed to lock metrics collector: {}", e)))?;
-    collector.collect()
+    let state_clone = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut collector = state_clone
+            .lock()
+            .map_err(|e| AppError::System(format!("Failed to lock metrics collector: {}", e)))?;
+        collector.collect()
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_system_metrics: {}", e)))?
 }
 
 #[tauri::command]
@@ -666,12 +747,16 @@ pub async fn get_startup_items(
     dry_run: Option<bool>,
 ) -> Result<Vec<startup::StartupItem>, AppError> {
     log::debug!("[IPC] get_startup_items request received, dry_run={:?}", dry_run);
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    startup::get_startup_items(runner.as_ref())
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        startup::get_startup_items(runner.as_ref())
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_startup_items: {}", e)))?
 }
 
 #[tauri::command]
@@ -686,14 +771,18 @@ pub async fn toggle_startup_item(
         "[IPC] toggle_startup_item id={}, value_name={:?}, location={:?}, enable={}, dry_run={:?}",
         id, value_name, location, enable, dry_run
     );
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    let v_name = value_name.as_deref().unwrap_or(&id);
-    let loc = location.as_deref().unwrap_or("");
-    startup::toggle_startup_item(runner.as_ref(), &id, v_name, loc, enable)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        let v_name = value_name.as_deref().unwrap_or(&id);
+        let loc = location.as_deref().unwrap_or("");
+        startup::toggle_startup_item(runner.as_ref(), &id, v_name, loc, enable)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in toggle_startup_item: {}", e)))?
 }
 
 #[tauri::command]
@@ -707,14 +796,18 @@ pub async fn remove_startup_item(
         "[IPC] remove_startup_item id={}, value_name={:?}, location={:?}, dry_run={:?}",
         id, value_name, location, dry_run
     );
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    let v_name = value_name.as_deref().unwrap_or(&id);
-    let loc = location.as_deref().unwrap_or("");
-    startup::remove_startup_item(runner.as_ref(), &id, v_name, loc)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        let v_name = value_name.as_deref().unwrap_or(&id);
+        let loc = location.as_deref().unwrap_or("");
+        startup::remove_startup_item(runner.as_ref(), &id, v_name, loc)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in remove_startup_item: {}", e)))?
 }
 
 #[tauri::command]
@@ -722,12 +815,16 @@ pub async fn get_scheduled_tasks(
     dry_run: Option<bool>,
 ) -> Result<Vec<scheduler::ScheduledTaskItem>, AppError> {
     log::debug!("[IPC] get_scheduled_tasks request received, dry_run={:?}", dry_run);
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    scheduler::get_scheduled_tasks(runner.as_ref())
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        scheduler::get_scheduled_tasks(runner.as_ref())
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_scheduled_tasks: {}", e)))?
 }
 
 #[tauri::command]
@@ -741,12 +838,16 @@ pub async fn toggle_scheduled_task(
         "[IPC] toggle_scheduled_task name={}, path={}, enable={}, dry_run={:?}",
         task_name, task_path, enable, dry_run
     );
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    scheduler::toggle_scheduled_task(runner.as_ref(), &task_name, &task_path, enable)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        scheduler::toggle_scheduled_task(runner.as_ref(), &task_name, &task_path, enable)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in toggle_scheduled_task: {}", e)))?
 }
 
 #[tauri::command]
@@ -759,14 +860,89 @@ pub async fn run_scheduled_task(
         "[IPC] run_scheduled_task name={}, path={}, dry_run={:?}",
         task_name, task_path, dry_run
     );
-    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
-        Box::new(DryRunRunner::new())
-    } else {
-        Box::new(RealRunner::new())
-    };
-    scheduler::run_scheduled_task(runner.as_ref(), &task_name, &task_path)
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+            Box::new(DryRunRunner::new())
+        } else {
+            Box::new(RealRunner::new())
+        };
+        scheduler::run_scheduled_task(runner.as_ref(), &task_name, &task_path)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in run_scheduled_task: {}", e)))?
 }
 
+#[tauri::command]
+pub async fn get_installed_apps() -> Result<Vec<uninstaller::InstalledApp>, AppError> {
+    log::info!("[IPC] get_installed_apps request received");
+    tauri::async_runtime::spawn_blocking(move || uninstaller::get_installed_apps())
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in get_installed_apps: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn uninstall_app(
+    app: uninstaller::InstalledApp,
+    dry_run: Option<bool>,
+) -> Result<ExecutionSummary, AppError> {
+    let is_dry_run = dry_run.unwrap_or(false);
+    log::info!(
+        "[IPC] uninstall_app request received: app_id={}, name={}, dry_run={}",
+        app.id,
+        app.name,
+        is_dry_run
+    );
+    tauri::async_runtime::spawn_blocking(move || uninstaller::uninstall_app(&app, is_dry_run))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in uninstall_app: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn scan_system_cleaner() -> Result<cleaner::CleanerScanResult, AppError> {
+    log::info!("[IPC] scan_system_cleaner request received");
+    tauri::async_runtime::spawn_blocking(cleaner::scan_system)
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in scan_system_cleaner: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn clean_system_items(
+    category_ids: Vec<String>,
+) -> Result<cleaner::CleanerCleanResult, AppError> {
+    log::info!("[IPC] clean_system_items request received for {} categories", category_ids.len());
+    tauri::async_runtime::spawn_blocking(move || cleaner::clean_items(category_ids))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in clean_system_items: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn scan_duplicate_files(
+    target_dir: Option<String>,
+) -> Result<Vec<storage::DuplicateGroup>, AppError> {
+    log::info!("[IPC] scan_duplicate_files request received: target_dir={:?}", target_dir);
+    tauri::async_runtime::spawn_blocking(move || storage::scan_duplicate_files(target_dir))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in scan_duplicate_files: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn scan_large_files(
+    target_dir: Option<String>,
+    limit: Option<usize>,
+) -> Result<Vec<storage::LargeFileItem>, AppError> {
+    log::info!("[IPC] scan_large_files request received: target_dir={:?}, limit={:?}", target_dir, limit);
+    tauri::async_runtime::spawn_blocking(move || storage::scan_large_files(target_dir, limit))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in scan_large_files: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn delete_files(paths: Vec<String>) -> Result<storage::DeleteResult, AppError> {
+    log::info!("[IPC] delete_files request received for {} paths", paths.len());
+    tauri::async_runtime::spawn_blocking(move || storage::delete_target_files(paths))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in delete_files: {}", e)))?
+}
 
 #[cfg(test)]
 
@@ -776,7 +952,7 @@ mod tests {
     #[test]
     fn test_cargo_pkg_version_matches() {
         let ver = env!("CARGO_PKG_VERSION");
-        assert_eq!(ver, "0.4.0");
+        assert_eq!(ver, "0.5.0");
     }
 
     #[test]

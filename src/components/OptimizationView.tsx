@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { OptimizationCategory, PresetType, ExecutionSummary } from '../types';
@@ -33,6 +34,7 @@ const CATEGORIES: { id: OptimizationCategory; label: string }[] = [
 ];
 
 export function OptimizationView() {
+  const { t } = useTranslation();
   const optimizations = useAppStore((s) => s.optimizations);
   const selectedCategory = useAppStore((s) => s.selectedCategory);
   const searchQuery = useAppStore((s) => s.searchQuery);
@@ -77,10 +79,8 @@ export function OptimizationView() {
       : 'low';
 
     openSafetyModal({
-      title: `Execute ${selectedCount} Selected Optimization Rules`,
-      description: `Targeting Windows telemetry, services, and debloat configurations. Dry-run safety mode is currently ${
-        dryRunMode ? 'ACTIVE' : 'DISABLED'
-      }.`,
+      title: `Execute ${selectedCount} {t('optimization.selected')} Optimization Rules`,
+      description: t('optimization.safetyModalDesc', { mode: dryRunMode ? t('optimization.active') : t('optimization.disabled') }),
       riskLevel: highestRisk,
       commandsToRun: selectedRules.map((r) => r.powershellCommand),
       onConfirmAction: async () => {
@@ -117,14 +117,14 @@ export function OptimizationView() {
             const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Optimization execution failed';
             useAppStore.getState().addToast({
               type: 'error',
-              title: 'Optimizations Failed',
-              message: errMsg,
+              title: t('optimization.toastFailedTitle'),
+              message: t('optimization.toastFailedMsg', { msg: errMsg }),
             });
           } else {
             useAppStore.getState().addToast({
               type: 'success',
-              title: 'Optimizations Applied',
-              message: `Successfully executed ${selectedCount} optimization rules.`,
+              title: t('optimization.toastSuccessTitle'),
+              message: t('optimization.toastSuccessMsg', { count: selectedCount }),
             });
           }
         } catch (err) {
@@ -136,7 +136,7 @@ export function OptimizationView() {
           useAppStore.getState().addToast({
             type: 'error',
             title: 'Optimization Error',
-            message: errMsg,
+            message: t('optimization.toastFailedMsg', { msg: errMsg }),
           });
         } finally {
           setIsExecuting(false);
@@ -150,19 +150,19 @@ export function OptimizationView() {
       case 'high':
         return (
           <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-status-danger bg-status-danger/10 border border-status-danger/30">
-            <ShieldAlert className="h-3 w-3" /> High Risk
+            <ShieldAlert className="h-3 w-3" /> {t('optimization.highRisk')}
           </span>
         );
       case 'medium':
         return (
           <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-status-warning bg-status-warning/10 border border-status-warning/30">
-            <Shield className="h-3 w-3" /> Medium Risk
+            <Shield className="h-3 w-3" /> {t('optimization.mediumRisk')}
           </span>
         );
       default:
         return (
           <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-status-success bg-status-success/10 border border-status-success/30">
-            <ShieldCheck className="h-3 w-3" /> Low Risk
+            <ShieldCheck className="h-3 w-3" /> {t('optimization.lowRisk')}
           </span>
         );
     }
@@ -177,27 +177,27 @@ export function OptimizationView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Sliders className="h-5 w-5 text-brand" />
-            <h2 className="text-lg font-semibold text-text-primary">System Optimization & Debloat Engine</h2>
+            <h2 className="text-lg font-semibold text-text-primary">{t('optimization.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Sophia-Script inspired rule catalog. Granular telemetry removal, bloatware cleanup, and system service hardening.
+            {t('optimization.desc')}
           </p>
         </div>
 
         {/* Quick Stats Pills */}
         <div className="flex items-center gap-3">
           <div className="rounded-[6px] border border-border bg-surface px-3 py-1.5 text-center">
-            <div className="text-[10px] font-mono uppercase text-text-muted">Total Catalog</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('optimization.totalCatalog')}</div>
             <div className="text-sm font-semibold text-text-primary font-mono tabular-nums">{optimizations.length}</div>
           </div>
           <div className="rounded-[6px] border border-border bg-surface px-3 py-1.5 text-center">
-            <div className="text-[10px] font-mono uppercase text-text-muted">Selected</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('optimization.selected')}</div>
             <div className="text-sm font-semibold text-brand font-mono tabular-nums">{selectedCount}</div>
           </div>
           <button
             onClick={handleExecuteSelected}
             disabled={isButtonDisabled}
-            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+            title={!isElevated && !dryRunMode ? t('optimization.adminRequired') : ''}
             className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium transition-all ${
               !isButtonDisabled
                 ? 'bg-brand text-white hover:bg-brand-hover shadow-sm'
@@ -209,7 +209,7 @@ export function OptimizationView() {
             ) : (
               <Play className="h-3.5 w-3.5 fill-current" />
             )}
-            <span>{isExecuting ? 'Executing Optimizations...' : `Execute Selected (${selectedCount})`}</span>
+            <span>{isExecuting ? 'Executing Optimizations...' : `Execute ${t('optimization.selected')} (${selectedCount})`}</span>
           </button>
         </div>
       </div>
@@ -219,35 +219,35 @@ export function OptimizationView() {
         {/* Preset Selector Buttons */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
           <span className="text-xs font-medium text-text-muted flex items-center gap-1">
-            <Sparkles className="h-3.5 w-3.5 text-brand" /> Presets:
+            <Sparkles className="h-3.5 w-3.5 text-brand" /> {t('optimization.presets')}
           </span>
           <button
             onClick={() => applyPreset('recommended')}
             disabled={isExecuting}
             className="px-3 py-1.5 rounded-[6px] border border-border bg-surface text-xs text-text-primary hover:bg-surface-hover transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Recommended ({optimizations.filter((o) => o.isRecommended).length})
+            {t('optimization.recommended')} ({optimizations.filter((o) => o.isRecommended).length})
           </button>
           <button
             onClick={() => applyPreset('telemetry_only')}
             disabled={isExecuting}
             className="px-3 py-1.5 rounded-[6px] border border-border bg-surface text-xs text-text-primary hover:bg-surface-hover transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Telemetry-Only ({optimizations.filter((o) => o.category === 'telemetry').length})
+            {t('optimization.telemetryOnly')} ({optimizations.filter((o) => o.category === 'telemetry').length})
           </button>
           <button
             onClick={() => applyPreset('full_debloat')}
             disabled={isExecuting}
             className="px-3 py-1.5 rounded-[6px] border border-border bg-surface text-xs text-text-primary hover:bg-surface-hover transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Full Debloat ({optimizations.length})
+            {t('optimization.fullDebloat')} ({optimizations.length})
           </button>
           <button
             onClick={deselectAllOptimizations}
             disabled={isExecuting}
             className="px-3 py-1.5 rounded-[6px] border border-border-subtle text-xs text-text-muted hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Clear Selection
+            {t('optimization.clearSelection')}
           </button>
         </div>
 
@@ -256,7 +256,7 @@ export function OptimizationView() {
           <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-text-muted" />
           <input
             type="text"
-            placeholder="Search rules, commands..."
+            placeholder={t('optimization.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-[6px] border border-border bg-surface pl-9 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
@@ -283,7 +283,7 @@ export function OptimizationView() {
                   : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
               }`}
             >
-              <span>{cat.label}</span>
+              <span>{t(`optimization.categories.${cat.id}`)}</span>
               <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle border border-border-subtle text-text-muted">
                 {count}
               </span>
@@ -297,8 +297,8 @@ export function OptimizationView() {
         {filteredOptimizations.length === 0 ? (
           <div className="rounded-[6px] border border-border bg-surface p-8 text-center space-y-2">
             <Info className="h-6 w-6 text-text-muted mx-auto" />
-            <p className="text-sm font-medium text-text-primary">No optimization rules match your filter</p>
-            <p className="text-xs text-text-secondary">Try adjusting your search keyword or selected category tab.</p>
+            <p className="text-sm font-medium text-text-primary">{t('optimization.noRulesMatch')}</p>
+            <p className="text-xs text-text-secondary">{t('optimization.adjustSearch')}</p>
           </div>
         ) : (
           filteredOptimizations.map((item) => {
@@ -318,7 +318,7 @@ export function OptimizationView() {
                     onClick={() => toggleOptimizationSelected(item.id)}
                     disabled={isExecuting}
                     className="mt-0.5 text-brand focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label={`Select rule ${item.title}`}
+                    aria-label={t('optimization.selectRule', { title: item.title })}
                   >
                     {item.isSelected ? (
                       <CheckSquare className="h-4 w-4 text-brand fill-brand/10" />
@@ -340,7 +340,7 @@ export function OptimizationView() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="rounded bg-surface-subtle px-2 py-0.5 font-mono text-[10px] uppercase text-text-muted border border-border-subtle">
-                          {item.category}
+                          {t(`optimization.categories.${item.category}`)}
                         </span>
                         {getRiskBadge(item.riskLevel)}
                         <span
@@ -350,7 +350,7 @@ export function OptimizationView() {
                               : 'bg-status-warning/10 text-status-warning border-status-warning/30'
                           }`}
                         >
-                          {item.isReversible ? 'Reversible' : 'Non-Reversible'}
+                          {item.isReversible ? t('optimization.reversible') : t('optimization.nonReversible')}
                         </span>
                       </div>
                     </div>
@@ -366,7 +366,7 @@ export function OptimizationView() {
                           className="ml-2 flex items-center gap-1 text-[10px] text-text-muted hover:text-text-primary shrink-0"
                         >
                           <Terminal className="h-3 w-3" />
-                          <span>{isExpanded ? 'Hide Undo' : 'Inspect Undo'}</span>
+                          <span>{isExpanded ? t('optimization.hideUndo') : t('optimization.inspectUndo')}</span>
                           {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                         </button>
                       </div>
@@ -375,7 +375,7 @@ export function OptimizationView() {
                       {isExpanded && (
                         <div className="rounded bg-surface p-2.5 font-mono text-[11px] text-status-warning border border-status-warning/30 space-y-1">
                           <div className="text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1">
-                            <RotateCcw className="h-3 w-3" /> Undo PowerShell Script:
+                            <RotateCcw className="h-3 w-3" /> {t('optimization.undoCommand')}
                           </div>
                           <div className="select-all font-mono text-text-secondary">$ {item.undoCommand}</div>
                         </div>

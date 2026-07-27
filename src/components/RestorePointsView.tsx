@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { RestorePoint } from '../types';
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export function RestorePointsView() {
+  const { t } = useTranslation();
   const restorePoints = useAppStore((s) => s.restorePoints);
   const isLoading = useAppStore((s) => s.isLoadingRestorePoints);
   const fetchRestorePoints = useAppStore((s) => s.fetchRestorePoints);
@@ -41,8 +43,8 @@ export function RestorePointsView() {
     if (!desc || isButtonDisabled) return;
 
     openSafetyModal({
-      title: 'Create System Restore Point',
-      description: `Create a new Windows System Restore Point with description "${desc}".`,
+      title: t('restorePoints.modalCreateTitle'),
+      description: t('restorePoints.modalCreateDesc', { desc }),
       riskLevel: 'low',
       commandsToRun: [`Checkpoint-Computer -Description '${desc}' -RestorePointType "MODIFY_SETTINGS"`],
       onConfirmAction: async () => {
@@ -65,8 +67,8 @@ export function RestorePointsView() {
     setSelectedPointForRollback(null);
 
     openSafetyModal({
-      title: `Rollback System to Restore Point #${point.sequenceNumber}`,
-      description: `WARNING: System restore will revert registry, settings, and drivers back to the state captured on ${point.creationTime} (${point.description}). In live mode, this action may initiate a system restart.`,
+      title: t('restorePoints.modalRollbackTitle', { seq: point.sequenceNumber }),
+      description: t('restorePoints.modalLiveWarning', { time: point.creationTime, desc: point.description }),
       riskLevel: 'high',
       commandsToRun: [`Restore-Computer -SequenceNumber ${point.sequenceNumber} -Confirm:$false`],
       onConfirmAction: async () => {
@@ -82,10 +84,10 @@ export function RestorePointsView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">System Restore Manager</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('restorePoints.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Create Windows restore points and manage system rollback checkpoints.
+            {t('restorePoints.description')}
           </p>
         </div>
         <button
@@ -94,12 +96,12 @@ export function RestorePointsView() {
           className="flex items-center gap-2 px-3 py-1.5 rounded-[6px] border border-border bg-surface-subtle text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
+          <span>{t('restorePoints.refreshBtn')}</span>
         </button>
       </div>
 
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="Windows System Restore Operations" />
+      <AdminElevationBanner featureName={t('restorePoints.title')} />
 
       {/* Status Card & Create Form Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -107,34 +109,34 @@ export function RestorePointsView() {
         <div className="lg:col-span-5 rounded-[6px] border border-border bg-surface p-4 space-y-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-text-primary border-b border-border-subtle pb-2">
             <History className="h-4 w-4 text-brand" />
-            <span>System Restore Protection Status</span>
+            <span>{t('restorePoints.statusTitle')}</span>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-secondary">Active Restore Points:</span>
+              <span className="text-text-secondary">{t('restorePoints.activePoints')}</span>
               <span className="font-mono font-semibold text-text-primary">{restorePoints.length}</span>
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-secondary">Elevation Status:</span>
+              <span className="text-text-secondary">{t('restorePoints.elevationStatus')}</span>
               <span className={`flex items-center gap-1 font-medium ${isElevated ? 'text-status-success' : 'text-status-warning'}`}>
                 {isElevated ? (
                   <>
-                    <ShieldCheck className="h-3.5 w-3.5" /> Elevated
+                    <ShieldCheck className="h-3.5 w-3.5" /> {t('restorePoints.elevated')}
                   </>
                 ) : (
                   <>
-                    <ShieldAlert className="h-3.5 w-3.5" /> Standard User
+                    <ShieldAlert className="h-3.5 w-3.5" /> {t('restorePoints.standard')}
                   </>
                 )}
               </span>
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-secondary">Execution Mode:</span>
+              <span className="text-text-secondary">{t('restorePoints.executionMode')}</span>
               <span className="font-mono text-xs text-brand font-medium">
-                {dryRunMode ? 'Dry-Run (Simulated)' : 'Live System Mode'}
+                {dryRunMode ? t('restorePoints.dryRunMode') : t('restorePoints.liveMode')}
               </span>
             </div>
           </div>
@@ -144,20 +146,20 @@ export function RestorePointsView() {
         <div className="lg:col-span-7 rounded-[6px] border border-border bg-surface p-4 space-y-4">
           <div className="flex items-center gap-2 text-xs font-semibold text-text-primary border-b border-border-subtle pb-2">
             <Plus className="h-4 w-4 text-brand" />
-            <span>Create New Restore Point</span>
+            <span>{t('restorePoints.createTitle')}</span>
           </div>
 
           <form onSubmit={handleCreate} className="space-y-3">
             <div>
               <label htmlFor="restore-desc-input" className="text-[11px] font-medium text-text-secondary uppercase font-mono tracking-wider">
-                Restore Point Description
+                {t('restorePoints.descLabel')}
               </label>
               <input
                 id="restore-desc-input"
                 type="text"
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
-                placeholder="e.g. WiScripts Manual Checkpoint Before Driver Updates"
+                placeholder={t('restorePoints.descPlaceholder')}
                 disabled={isButtonDisabled}
                 className="mt-1.5 w-full rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs text-text-primary focus:border-brand focus:outline-none disabled:opacity-60"
               />
@@ -173,7 +175,7 @@ export function RestorePointsView() {
               }`}
             >
               {isExecuting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              <span>Create Restore Point</span>
+              <span>{t('restorePoints.createBtn')}</span>
             </button>
           </form>
         </div>
@@ -184,30 +186,30 @@ export function RestorePointsView() {
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-brand" />
-            <span className="text-xs font-semibold text-text-primary">Available System Checkpoints</span>
+            <span className="text-xs font-semibold text-text-primary">{t('restorePoints.checkpointsTitle')}</span>
           </div>
-          <span className="text-[11px] font-mono text-text-muted">{restorePoints.length} total points</span>
+          <span className="text-[11px] font-mono text-text-muted">{t('restorePoints.totalPoints', { count: restorePoints.length })}</span>
         </div>
 
         {isLoading ? (
           <div className="py-8 flex flex-col items-center justify-center text-text-muted space-y-2">
             <Loader2 className="h-5 w-5 animate-spin text-brand" />
-            <span className="text-xs">Querying System Restore Points via PowerShell...</span>
+            <span className="text-xs">{t('restorePoints.loading')}</span>
           </div>
         ) : restorePoints.length === 0 ? (
           <div className="py-8 text-center text-xs text-text-muted">
-            No restore points found or System Restore disabled on host.
+            {t('restorePoints.noPoints')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-border bg-surface-subtle text-[11px] font-mono uppercase text-text-secondary">
-                  <th className="py-2.5 px-3 font-medium">Seq #</th>
-                  <th className="py-2.5 px-3 font-medium">Description</th>
-                  <th className="py-2.5 px-3 font-medium">Type</th>
-                  <th className="py-2.5 px-3 font-medium">Created Time</th>
-                  <th className="py-2.5 px-3 font-medium text-right">Action</th>
+                  <th className="py-2.5 px-3 font-medium">{t('restorePoints.colSeq')}</th>
+                  <th className="py-2.5 px-3 font-medium">{t('restorePoints.colDesc')}</th>
+                  <th className="py-2.5 px-3 font-medium">{t('restorePoints.colType')}</th>
+                  <th className="py-2.5 px-3 font-medium">{t('restorePoints.colTime')}</th>
+                  <th className="py-2.5 px-3 font-medium text-right">{t('restorePoints.colAction')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle font-mono text-[11px]">
@@ -230,10 +232,10 @@ export function RestorePointsView() {
                       <button
                         onClick={() => handleRollbackClick(point)}
                         disabled={isButtonDisabled}
-                        title={!isElevated && !dryRunMode ? 'Administrator privileges required for live rollback' : ''}
+                        title={!isElevated && !dryRunMode ? t('restorePoints.adminRequiredRollback') : ''}
                         className="px-2.5 py-1 rounded border border-status-warning/40 bg-status-warningSubtle text-status-warning hover:bg-status-warning/20 transition-colors text-[11px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Rollback
+                        {t('restorePoints.rollbackBtn')}
                       </button>
                     </td>
                   </tr>
@@ -250,22 +252,22 @@ export function RestorePointsView() {
           <div className="w-full max-w-md rounded-[6px] border border-border bg-surface p-5 space-y-4 shadow-xl">
             <div className="flex items-center gap-2.5 text-status-warning border-b border-border pb-3">
               <AlertTriangle className="h-5 w-5 shrink-0" />
-              <h3 className="text-sm font-semibold">Confirm System Rollback</h3>
+              <h3 className="text-sm font-semibold">{t('restorePoints.modalRollbackTitle')}</h3>
             </div>
 
             <div className="space-y-2 text-xs text-text-secondary">
               <p>
-                You are about to restore Windows system files and settings to Checkpoint #{selectedPointForRollback.sequenceNumber}:
+                {t('restorePoints.modalRollbackDesc', { seq: selectedPointForRollback.sequenceNumber })}
               </p>
               <div className="rounded border border-border-subtle bg-surface-subtle p-3 space-y-1 font-mono text-[11px]">
                 <div className="text-text-primary font-semibold">{selectedPointForRollback.description}</div>
-                <div className="text-text-muted">Type: {selectedPointForRollback.restorePointType}</div>
-                <div className="text-text-muted">Created: {selectedPointForRollback.creationTime}</div>
+                <div className="text-text-muted">{t('restorePoints.modalType', { type: selectedPointForRollback.restorePointType })}</div>
+                <div className="text-text-muted">{t('restorePoints.modalCreated', { time: selectedPointForRollback.creationTime })}</div>
               </div>
               <p className="text-[11px] text-status-warning font-medium">
                 {dryRunMode
-                  ? 'Dry-Run Mode: Command execution will be simulated without altering host state.'
-                  : 'LIVE MODE: System restore will undo system changes and require a system restart.'}
+                  ? t('restorePoints.modalDryRun')
+                  : t('restorePoints.modalLive')}
               </p>
             </div>
 
@@ -274,13 +276,13 @@ export function RestorePointsView() {
                 onClick={() => setSelectedPointForRollback(null)}
                 className="px-3 py-1.5 rounded border border-border bg-surface-subtle text-xs text-text-secondary hover:bg-surface-hover transition-colors"
               >
-                Cancel
+                {t('restorePoints.cancelBtn')}
               </button>
               <button
                 onClick={confirmRollback}
                 className="px-4 py-1.5 rounded bg-status-warning text-white text-xs font-medium hover:bg-status-warning/90 transition-colors shadow-sm"
               >
-                Proceed Rollback
+                {t('restorePoints.proceedBtn')}
               </button>
             </div>
           </div>

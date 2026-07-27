@@ -1,63 +1,13 @@
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { MasMethod, ExecutionSummary } from '../types';
 import { KeyRound, ShieldCheck, ShieldAlert, Sparkles, CheckCircle2, Info, Lock, Play, Loader2 } from 'lucide-react';
 
-interface MethodDetail {
-  id: MasMethod;
-  name: string;
-  badge: string;
-  scope: string;
-  description: string;
-  features: string[];
-  command: string;
-}
-
-const ACTIVATION_METHODS: MethodDetail[] = [
-  {
-    id: 'HWID',
-    name: 'HWID Digital License',
-    badge: 'Permanent',
-    scope: 'Windows 10 / 11',
-    description: 'Generates a genuine Microsoft digital license ticket registered directly with Microsoft activation servers. Ties permanently to motherboard hardware ID.',
-    features: [
-      'Survives OS format & clean reinstallation',
-      'No background services or registry modifications',
-      'Fully official digital entitlement status',
-    ],
-    command: 'irm https://get.activated.win | iex /HWID',
-  },
-  {
-    id: 'Ohook',
-    name: 'Ohook Office Activation',
-    badge: 'Permanent',
-    scope: 'Office 2013 - 2024',
-    description: 'Hooks into the Office SPP licensing library to enable genuine permanent activation status for Microsoft 365, Office ProPlus, Visio, and Project.',
-    features: [
-      'Permanent licensing across all Office suites',
-      'Compatible with Microsoft 365 cloud updates',
-      'Clean DLL hook method with automatic persistence',
-    ],
-    command: 'irm https://get.activated.win | iex /Ohook',
-  },
-  {
-    id: 'KMS38',
-    name: 'KMS38 Activation',
-    badge: 'Until 2038',
-    scope: 'Enterprise & Server',
-    description: 'Extends Windows KMS activation period to December 19, 2038 (19+ years). Ideal for Windows Enterprise, LTSC, and Windows Server editions.',
-    features: [
-      'Activation period valid until 2038-12-19',
-      'Does not require external KMS server connection',
-      'Ideal for offline or Enterprise deployments',
-    ],
-    command: 'irm https://get.activated.win | iex /KMS38',
-  },
-];
-
 export function MasView() {
+  const { t } = useTranslation();
   const selectedMasMethod = useAppStore((s) => s.selectedMasMethod);
   const setSelectedMasMethod = useAppStore((s) => s.setSelectedMasMethod);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
@@ -67,6 +17,48 @@ export function MasView() {
   const isExecuting = useAppStore((s) => s.isExecuting);
   const setIsExecuting = useAppStore((s) => s.setIsExecuting);
 
+  const ACTIVATION_METHODS = [
+    {
+      id: 'HWID' as MasMethod,
+      name: t('mas.methodHwidName'),
+      badge: t('mas.methodHwidBadge'),
+      scope: t('mas.methodHwidScope'),
+      description: t('mas.methodHwidDesc'),
+      features: [
+        t('mas.methodHwidFeat1'),
+        t('mas.methodHwidFeat2'),
+        t('mas.methodHwidFeat3'),
+      ],
+      command: 'irm https://get.activated.win | iex /HWID',
+    },
+    {
+      id: 'Ohook' as MasMethod,
+      name: t('mas.methodOhookName'),
+      badge: t('mas.methodOhookBadge'),
+      scope: t('mas.methodOhookScope'),
+      description: t('mas.methodOhookDesc'),
+      features: [
+        t('mas.methodOhookFeat1'),
+        t('mas.methodOhookFeat2'),
+        t('mas.methodOhookFeat3'),
+      ],
+      command: 'irm https://get.activated.win | iex /Ohook',
+    },
+    {
+      id: 'KMS38' as MasMethod,
+      name: t('mas.methodKms38Name'),
+      badge: t('mas.methodKms38Badge'),
+      scope: t('mas.methodKms38Scope'),
+      description: t('mas.methodKms38Desc'),
+      features: [
+        t('mas.methodKms38Feat1'),
+        t('mas.methodKms38Feat2'),
+        t('mas.methodKms38Feat3'),
+      ],
+      command: 'irm https://get.activated.win | iex /KMS38',
+    },
+  ];
+
   const activeMethodDetail = ACTIVATION_METHODS.find((m) => m.id === selectedMasMethod) || ACTIVATION_METHODS[0];
 
   const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
@@ -75,10 +67,12 @@ export function MasView() {
     if (isButtonDisabled) return;
 
     openSafetyModal({
-      title: `Execute Activation via MAS (${selectedMasMethod})`,
-      description: `Triggers Microsoft Activation Script method ${selectedMasMethod} (${activeMethodDetail.scope}). Dry-run safety mode is currently ${
-        dryRunMode ? 'ACTIVE' : 'DISABLED'
-      }.`,
+      title: t('mas.modalTitle', { method: selectedMasMethod }),
+      description: t('mas.modalDesc', {
+        method: selectedMasMethod,
+        scope: activeMethodDetail.scope,
+        status: dryRunMode ? 'ACTIVE' : 'DISABLED'
+      }),
       riskLevel: 'critical',
       commandsToRun: [activeMethodDetail.command],
       onConfirmAction: async () => {
@@ -115,14 +109,14 @@ export function MasView() {
             const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'MAS activation returned failure status';
             useAppStore.getState().addToast({
               type: 'error',
-              title: 'MAS Activation Failed',
+              title: t('mas.toastFailTitle'),
               message: errMsg,
             });
           } else {
             useAppStore.getState().addToast({
               type: 'success',
-              title: 'MAS Activation Complete',
-              message: `Activation method ${selectedMasMethod} completed successfully.`,
+              title: t('mas.toastSuccessTitle'),
+              message: t('mas.toastSuccessMsg', { method: selectedMasMethod }),
             });
           }
         } catch (err) {
@@ -133,7 +127,7 @@ export function MasView() {
           });
           useAppStore.getState().addToast({
             type: 'error',
-            title: 'MAS Activation Error',
+            title: t('mas.toastErrorTitle'),
             message: errMsg,
           });
         } finally {
@@ -150,16 +144,16 @@ export function MasView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">Microsoft Activation Scripts (MAS)</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('mas.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Open-source Windows & Office activation wrapper utilizing digital ticket, Ohook, and KMS38 algorithms.
+            {t('mas.description')}
           </p>
         </div>
         <button
           onClick={handleActivate}
           disabled={isButtonDisabled}
-          title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+          title={!isElevated && !dryRunMode ? t('mas.adminRequiredTitle') : ''}
           className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium text-white transition-opacity shadow-sm ${
             isButtonDisabled
               ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border opacity-50'
@@ -171,12 +165,12 @@ export function MasView() {
           ) : (
             <Play className="h-3.5 w-3.5 fill-current" />
           )}
-          <span>{isExecuting ? `Activating (${selectedMasMethod})...` : `Activate (${selectedMasMethod})`}</span>
+          <span>{isExecuting ? t('mas.activatingBtn', { method: selectedMasMethod }) : t('mas.activateBtn', { method: selectedMasMethod })}</span>
         </button>
       </div>
 
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="Microsoft Activation Scripts (MAS)" />
+      <AdminElevationBanner featureName={t('mas.title')} />
 
       {/* Activation Method Selector Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -214,7 +208,7 @@ export function MasView() {
               </div>
               <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px] font-mono">
                 <span className={isSelected ? 'text-brand font-medium' : 'text-text-muted'}>
-                  Method: /{method.id}
+                  {t('mas.methodPrefix', { id: method.id })}
                 </span>
                 <input
                   type="radio"
@@ -238,16 +232,16 @@ export function MasView() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand" />
             <h3 className="text-sm font-semibold text-text-primary">
-              Active Selection Details: {activeMethodDetail.name}
+              {t('mas.detailsTitle', { name: activeMethodDetail.name })}
             </h3>
           </div>
-          <span className="text-xs font-mono text-text-muted">ID: {activeMethodDetail.id}</span>
+          <span className="text-xs font-mono text-text-muted">{t('mas.idLabel', { id: activeMethodDetail.id })}</span>
         </div>
 
         <p className="text-xs text-text-secondary leading-relaxed">{activeMethodDetail.description}</p>
 
         <div className="space-y-2">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">Key Characteristics:</span>
+          <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">{t('mas.keyCharacteristics')}</span>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {activeMethodDetail.features.map((feat, idx) => (
               <div key={idx} className="flex items-center gap-2 rounded-[6px] border border-border-subtle bg-surface-subtle p-2.5 text-xs text-text-primary">
@@ -259,7 +253,7 @@ export function MasView() {
         </div>
 
         <div className="pt-2">
-          <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">Command Invocation Preview:</span>
+          <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">{t('mas.commandPreview')}</span>
           <div className="mt-1 rounded-[6px] border border-border-subtle bg-surface-subtle p-3 font-mono text-xs text-text-code">
             {activeMethodDetail.command}
           </div>
@@ -271,30 +265,30 @@ export function MasView() {
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center gap-2 text-status-success">
             <ShieldCheck className="h-4 w-4" />
-            <span className="text-xs font-semibold text-text-primary">Open Source Verified</span>
+            <span className="text-xs font-semibold text-text-primary">{t('mas.openSourceVerified')}</span>
           </div>
           <p className="text-xs text-text-secondary">
-            Utilizes Massgrave MAS standard activation scripts without bundled third-party binaries or malware.
+            {t('mas.openSourceDesc')}
           </p>
         </div>
 
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center gap-2 text-brand">
             <Lock className="h-4 w-4" />
-            <span className="text-xs font-semibold text-text-primary">Dry-Run Guard Active</span>
+            <span className="text-xs font-semibold text-text-primary">{t('mas.dryRunGuard')}</span>
           </div>
           <p className="text-xs text-text-secondary">
-            Current Dry-Run Mode is <span className="font-mono font-semibold text-brand">{dryRunMode ? 'ENABLED' : 'DISABLED'}</span>. {dryRunMode ? 'Simulates execution without modifying licensing stores.' : 'Will apply live licensing modifications.'}
+            {t('mas.dryRunDesc')} <span className="font-mono font-semibold text-brand">{dryRunMode ? t('mas.dryRunEnabled') : t('mas.dryRunDisabled')}</span>. {dryRunMode ? t('mas.dryRunStatusEnabled') : t('mas.dryRunStatusDisabled')}
           </p>
         </div>
 
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center gap-2 text-status-info">
             <Info className="h-4 w-4" />
-            <span className="text-xs font-semibold text-text-primary">Non-Destructive Hooks</span>
+            <span className="text-xs font-semibold text-text-primary">{t('mas.nonDestructive')}</span>
           </div>
           <p className="text-xs text-text-secondary">
-            Activation keys and SPP licensing hooks can be updated or uninstalled at any time.
+            {t('mas.nonDestructiveDesc')}
           </p>
         </div>
       </div>

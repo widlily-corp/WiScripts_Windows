@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/useAppStore';
 import { TaskProgressPayload } from '../types';
 import { Loader2, Terminal, AlertOctagon, CheckCircle2, X } from 'lucide-react';
 
 export function ExecutionProgressModal() {
+  const { t } = useTranslation();
   const isExecuting = useAppStore((s) => s.isExecuting);
   const executionProgress = useAppStore((s) => s.executionProgress);
   const currentStep = useAppStore((s) => s.currentStep);
@@ -36,7 +38,7 @@ export function ExecutionProgressModal() {
 
           addLog({
             level: isError ? 'error' : 'info',
-            message: `[Step ${step}/${total}] ${message}`,
+            message: t('execution_modal.log_step', { step, total, message }),
           });
         });
 
@@ -100,15 +102,15 @@ export function ExecutionProgressModal() {
             </div>
             <div>
               <h3 id="progress-modal-title" className="text-base font-semibold text-text-primary">
-                {isCompleted ? 'Execution Complete' : hasError ? 'Execution Completed with Errors' : 'Executing Task Operations...'}
+                {isCompleted ? t('execution_modal.title_complete') : hasError ? t('execution_modal.title_error') : t('execution_modal.title_executing')}
               </h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] font-mono text-text-muted">
-                  {dryRunMode ? 'Mode: Simulated (Dry-Run)' : 'Mode: Live Execution'}
+                  {dryRunMode ? t('execution_modal.mode_dry_run') : t('execution_modal.mode_live')}
                 </span>
                 {dryRunMode && (
                   <span className="rounded bg-brand/10 px-1.5 py-0.2 font-mono text-[9px] uppercase text-brand border border-brand/20">
-                    Dry-Run Guard Active
+                    {t('execution_modal.dry_run_active')}
                   </span>
                 )}
               </div>
@@ -117,14 +119,14 @@ export function ExecutionProgressModal() {
           <div className="text-right font-mono">
             <div className="text-lg font-bold text-brand tabular-nums">{progressPercent}%</div>
             <div className="text-[10px] text-text-muted">
-              {totalSteps > 0 ? `Step ${currentStep} of ${totalSteps}` : 'Processing...'}
+              {totalSteps > 0 ? t('execution_modal.step_of_total', { step: currentStep, total: totalSteps }) : t('execution_modal.processing')}
             </div>
           </div>
           {canClose && (
             <button
               onClick={() => setIsExecuting(false)}
               className="absolute -top-2 -right-2 p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
-              aria-label="Close"
+              aria-label={t('execution_modal.close')}
             >
               <X className="h-5 w-5" />
             </button>
@@ -135,7 +137,7 @@ export function ExecutionProgressModal() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
             <span className="font-mono text-text-secondary truncate max-w-[80%]">
-              {totalSteps > 0 ? `Executing Step ${currentStep}/${totalSteps}` : 'Initializing task execution...'}
+              {totalSteps > 0 ? t('execution_modal.executing_step', { step: currentStep, total: totalSteps }) : t('execution_modal.initializing')}
             </span>
             <span className="font-mono text-text-muted tabular-nums">{progressPercent}%</span>
           </div>
@@ -153,9 +155,9 @@ export function ExecutionProgressModal() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[11px] font-mono text-text-muted">
             <span className="flex items-center gap-1.5">
-              <Terminal className="h-3.5 w-3.5 text-brand" /> Live Console Output
+              <Terminal className="h-3.5 w-3.5 text-brand" /> {t('execution_modal.live_console')}
             </span>
-            <span className="tabular-nums">{logs.length} entries</span>
+            <span className="tabular-nums">{t('execution_modal.entries_count', { count: logs.length })}</span>
           </div>
 
           <div
@@ -164,7 +166,7 @@ export function ExecutionProgressModal() {
           >
             {logs.length === 0 ? (
               <div className="text-text-muted italic py-10 text-center text-xs">
-                Awaiting task output stream...
+                {t('execution_modal.awaiting_output')}
               </div>
             ) : (
               logs.map((log) => {
@@ -207,7 +209,7 @@ export function ExecutionProgressModal() {
               onClick={() => setIsExecuting(false)}
               className="px-4 py-2 bg-brand text-brand-contrast rounded-[6px] text-sm font-medium hover:bg-brand/90 transition-colors"
             >
-              Close
+              {t('execution_modal.close')}
             </button>
           </div>
         )}

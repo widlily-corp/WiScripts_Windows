@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { StartupItem } from '../types';
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export function StartupView() {
+  const { t } = useTranslation();
   const startupItems = useAppStore((s) => s.startupItems);
   const isStartupLoading = useAppStore((s) => s.isStartupLoading);
   const fetchStartupItems = useAppStore((s) => s.fetchStartupItems);
@@ -50,10 +52,10 @@ export function StartupView() {
 
   const handleRemoveClick = (item: StartupItem) => {
     openSafetyModal({
-      title: `Remove Startup Entry: ${item.name}`,
-      description: `Are you sure you want to permanently delete this startup entry? This will prevent '${item.name}' from automatically starting with Windows.`,
+      title: t('startupView.removeStartupEntryTitle', { name: item.name }),
+      description: t('startupView.removeStartupEntryDesc', { name: item.name }),
       riskLevel: 'medium',
-      commandsToRun: [`Remove Startup Item ID: ${item.id}`, `Command: ${item.command}`],
+      commandsToRun: [t('startupView.removeStartupItemId', { id: item.id }), t('startupView.command', { command: item.command })],
       onConfirmAction: async () => {
         await removeStartupItem(item.id, item.valueName || item.name, item.location);
       },
@@ -70,16 +72,16 @@ export function StartupView() {
           <div className="flex items-center gap-2">
             <Power className="h-5 w-5 text-brand" />
             <h2 className="text-base font-semibold text-text-primary">
-              Startup Apps Manager
+              {t('startupView.title')}
             </h2>
             {dryRunMode && (
               <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-[4px] font-bold">
-                Dry-Run Preview
+                {t('startupView.dryRunPreview')}
               </span>
             )}
           </div>
           <p className="text-xs text-text-secondary">
-            Manage applications scheduled to run automatically at system boot and user logon.
+            {t('startupView.description')}
           </p>
         </div>
 
@@ -89,7 +91,7 @@ export function StartupView() {
           className="flex items-center gap-2 rounded-[6px] border border-border-subtle bg-surface-subtle px-3 py-1.5 text-xs font-mono text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 text-brand ${isStartupLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
+          <span>{t('startupView.refresh')}</span>
         </button>
       </div>
 
@@ -97,7 +99,7 @@ export function StartupView() {
       <div className="grid grid-cols-3 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Total Startup Apps</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('startupView.totalStartupApps')}</div>
             <div className="text-2xl font-bold font-mono text-text-primary mt-1">{totalCount}</div>
           </div>
           <Layers className="h-6 w-6 text-brand opacity-60" />
@@ -105,7 +107,7 @@ export function StartupView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Enabled</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('startupView.enabled')}</div>
             <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{enabledCount}</div>
           </div>
           <CheckCircle className="h-6 w-6 text-emerald-400 opacity-60" />
@@ -113,7 +115,7 @@ export function StartupView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Disabled</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('startupView.disabled')}</div>
             <div className="text-2xl font-bold font-mono text-text-muted mt-1">{disabledCount}</div>
           </div>
           <XCircle className="h-6 w-6 text-text-muted opacity-60" />
@@ -128,7 +130,7 @@ export function StartupView() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search startup apps by name, command, or publisher..."
+            placeholder={t('startupView.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 bg-surface border border-border rounded-[6px] text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
           />
         </div>
@@ -138,10 +140,10 @@ export function StartupView() {
           onChange={(e) => setLocationFilter(e.target.value)}
           className="bg-surface border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-brand"
         >
-          <option value="all">All Locations</option>
-          <option value="hkcu">HKCU Registry</option>
-          <option value="hklm">HKLM Registry</option>
-          <option value="folder">Startup Folders</option>
+          <option value="all">{t('startupView.allLocations')}</option>
+          <option value="hkcu">{t('startupView.hkcuRegistry')}</option>
+          <option value="hklm">{t('startupView.hklmRegistry')}</option>
+          <option value="folder">{t('startupView.startupFolders')}</option>
         </select>
       </div>
 
@@ -150,17 +152,17 @@ export function StartupView() {
         {filteredItems.length === 0 ? (
           <div className="p-12 text-center text-text-muted space-y-2">
             <AlertTriangle className="h-8 w-8 text-text-muted mx-auto" />
-            <div className="text-sm font-medium">No startup apps match your search filter.</div>
+            <div className="text-sm font-medium">{t('startupView.noStartupApps')}</div>
           </div>
         ) : (
           <table className="w-full text-left text-xs">
             <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
               <tr>
-                <th className="py-3 px-4 font-semibold">Status</th>
-                <th className="py-3 px-4 font-semibold">Application & Publisher</th>
-                <th className="py-3 px-4 font-semibold">Location</th>
-                <th className="py-3 px-4 font-semibold">Command Target</th>
-                <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                <th className="py-3 px-4 font-semibold">{t('startupView.status')}</th>
+                <th className="py-3 px-4 font-semibold">{t('startupView.appAndPublisher')}</th>
+                <th className="py-3 px-4 font-semibold">{t('startupView.location')}</th>
+                <th className="py-3 px-4 font-semibold">{t('startupView.commandTarget')}</th>
+                <th className="py-3 px-4 font-semibold text-right">{t('startupView.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -186,7 +188,7 @@ export function StartupView() {
                   <td className="py-3 px-4">
                     <div className="font-semibold text-text-primary">{item.name}</div>
                     <div className="text-[11px] text-text-muted">
-                      {item.publisher || 'Unknown Publisher'}
+                      {item.publisher || t('startupView.unknownPublisher')}
                     </div>
                   </td>
 
@@ -212,7 +214,7 @@ export function StartupView() {
                     <button
                       onClick={() => handleRemoveClick(item)}
                       className="p-1.5 rounded-[4px] text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Remove Startup Entry"
+                      title={t('startupView.removeStartupEntryTooltip')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

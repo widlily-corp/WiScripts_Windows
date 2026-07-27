@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { useMetricsPoller } from '../hooks/useMetricsPoller';
 import { SparklineAreaGraph } from './SparklineAreaGraph';
@@ -28,6 +29,7 @@ function formatBytesPerSec(bytes: number): string {
 }
 
 export function Dashboard() {
+  const { t } = useTranslation();
   // Activate real-time polling hook
   useMetricsPoller();
 
@@ -62,12 +64,11 @@ export function Dashboard() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-brand" />
             <h3 className="text-sm font-semibold text-text-primary">
-              System Optimization Readiness
+              {t('dashboard.systemOptimizationReadiness')}
             </h3>
           </div>
           <p className="text-xs text-text-secondary">
-            Windows build {systemInfo?.osBuild || '22631'} detected.{' '}
-            {selectedCount} optimizations currently queued.
+            {t('dashboard.statusDesc', { build: systemInfo?.osBuild || '22631', count: selectedCount })}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -78,7 +79,7 @@ export function Dashboard() {
             }}
             className="flex items-center gap-2 rounded-[6px] bg-brand px-3.5 py-2 text-xs font-medium text-white hover:bg-brand-hover transition-opacity"
           >
-            <span>Apply Recommended Presets</span>
+            <span>{t('dashboard.applyRecommendedPresets')}</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -89,7 +90,7 @@ export function Dashboard() {
         <div className="flex items-center gap-2">
           <Gauge className="h-4 w-4 text-brand" />
           <h4 className="text-xs font-semibold uppercase tracking-wider text-text-primary font-mono">
-            Real-Time System Telemetry & Hardware Probe
+            {t('dashboard.realTimeTelemetry')}
           </h4>
           <span
             className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-[4px] border font-bold ${
@@ -98,22 +99,22 @@ export function Dashboard() {
                 : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
             }`}
           >
-            {isPollingActive ? 'Live Polling' : 'Paused'}
+            {isPollingActive ? t('dashboard.livePolling') : t('dashboard.paused')}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted font-mono">Interval:</span>
+            <span className="text-xs text-text-muted font-mono">{t('dashboard.interval')}</span>
             <select
               value={pollingIntervalMs}
               onChange={(e) => setPollingIntervalMs(Number(e.target.value))}
               className="bg-surface-subtle border border-border-subtle rounded-[4px] px-2 py-1 text-xs font-mono text-text-primary focus:outline-none focus:border-brand"
             >
-              <option value={1000}>1 sec</option>
-              <option value={2000}>2 sec</option>
-              <option value={5000}>5 sec</option>
-              <option value={10000}>10 sec</option>
+              <option value={1000}>{t('dashboard.sec1')}</option>
+              <option value={2000}>{t('dashboard.sec2')}</option>
+              <option value={5000}>{t('dashboard.sec5')}</option>
+              <option value={10000}>{t('dashboard.sec10')}</option>
             </select>
           </div>
 
@@ -124,12 +125,12 @@ export function Dashboard() {
             {isPollingActive ? (
               <>
                 <Pause className="h-3.5 w-3.5 text-amber-400" />
-                <span>Pause</span>
+                <span>{t('dashboard.pause')}</span>
               </>
             ) : (
               <>
                 <Play className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Resume</span>
+                <span>{t('dashboard.resume')}</span>
               </>
             )}
           </button>
@@ -137,7 +138,7 @@ export function Dashboard() {
           <button
             onClick={() => fetchLatestMetrics()}
             className="flex items-center gap-1.5 rounded-[4px] border border-border-subtle bg-surface-subtle px-2 py-1 text-xs font-mono text-text-secondary hover:bg-surface-hover transition-colors"
-            title="Poll Now"
+            title={t('dashboard.pollNow')}
           >
             <RefreshCw className="h-3.5 w-3.5 text-brand" />
           </button>
@@ -146,10 +147,10 @@ export function Dashboard() {
 
       {/* Real-time Metric Sparkline Area Graphs (4-Card Grid) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: CPU Usage */}
+        {/* Card 1: {t('dashboard.cpuUsage')} */}
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">CPU Usage</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.cpuUsage')}</span>
             <Cpu className="h-4 w-4 text-brand" />
           </div>
           <div className="text-xl font-bold text-text-primary font-mono tabular-nums">
@@ -170,7 +171,7 @@ export function Dashboard() {
         {/* Card 2: Memory Load */}
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">RAM Usage</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.ramUsage')}</span>
             <HardDrive className="h-4 w-4 text-emerald-400" />
           </div>
           <div className="text-xl font-bold text-text-primary font-mono tabular-nums">
@@ -193,7 +194,7 @@ export function Dashboard() {
         {/* Card 3: Disk I/O Rate */}
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Disk Read Rate</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.diskReadRate')}</span>
             <Disc className="h-4 w-4 text-amber-400" />
           </div>
           <div className="text-xl font-bold text-text-primary font-mono tabular-nums">
@@ -208,10 +209,10 @@ export function Dashboard() {
           />
         </div>
 
-        {/* Card 4: Network RX Rate */}
+        {/* Card 4: {t('dashboard.networkRx')} Rate */}
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Network RX</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.networkRx')}</span>
             <Wifi className="h-4 w-4 text-cyan-400" />
           </div>
           <div className="text-xl font-bold text-text-primary font-mono tabular-nums">
@@ -230,18 +231,18 @@ export function Dashboard() {
       {/* Hardware Temperatures Sensor Pipeline Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <TemperatureSensorWidget
-          title="CPU Core Package Sensor"
+          title={t('dashboard.cpuSensor')}
           tempC={currentMetrics?.cpuTempC ?? null}
           sensorType="cpu"
           thermalStatus={currentMetrics?.cpuThermalStatus || 'unknown'}
-          sensorSource="ACPI / sysinfo Multi-Tier Pipeline"
+          sensorSource={t('dashboard.cpuSensorSource')}
         />
         <TemperatureSensorWidget
-          title="GPU Hardware Thermal Sensor"
+          title={t('dashboard.gpuSensor')}
           tempC={currentMetrics?.gpuTempC ?? null}
           sensorType="gpu"
           thermalStatus={currentMetrics?.gpuThermalStatus || 'unknown'}
-          sensorSource="NVIDIA SMI / Open Hardware Sensor"
+          sensorSource={t('dashboard.gpuSensorSource')}
         />
       </div>
 
@@ -249,27 +250,27 @@ export function Dashboard() {
       <div className="grid grid-cols-2 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Operating System</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.operatingSystem')}</span>
             <Activity className="h-4 w-4 text-brand" />
           </div>
           <div className="text-lg font-semibold text-text-primary">
             {systemInfo?.osName || 'Windows 11'}
           </div>
           <div className="text-xs font-mono text-text-secondary">
-            Build {systemInfo?.osBuild || '22631.3880'} ({systemInfo?.osVersion || '23H2'})
+            {t('dashboard.build', { build: systemInfo?.osBuild || '22631.3880', version: systemInfo?.osVersion || '23H2' })}
           </div>
         </div>
 
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">Telemetry Service</span>
+            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.telemetryService')}</span>
             <ShieldCheck className="h-4 w-4 text-status-success" />
           </div>
           <div className="text-lg font-semibold text-status-success">
             {systemInfo?.telemetryStatus || 'Active'}
           </div>
           <div className="text-xs text-text-secondary">
-            DiagTrack service active
+            {t('dashboard.diagTrackActive')}
           </div>
         </div>
       </div>
@@ -279,17 +280,17 @@ export function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-semibold text-text-primary">
-              Core Optimization Catalog Preview
+              {t('dashboard.coreOptimizationCatalog')}
             </h4>
             <p className="text-xs text-text-secondary">
-              Telemetry removal, bloatware cleanup, privacy hardening, and service optimization
+              {t('dashboard.coreOptimizationDesc')}
             </p>
           </div>
           <button
             onClick={() => setActiveTab('optimization')}
             className="text-xs text-brand hover:underline font-mono"
           >
-            View All Rules ({optimizations.length}) &rarr;
+            {t('dashboard.viewAllRules', { count: optimizations.length })}
           </button>
         </div>
 
@@ -306,9 +307,9 @@ export function Dashboard() {
                 }}
                 className="cursor-pointer rounded-[6px] border border-border-subtle bg-surface-subtle p-2.5 hover:bg-surface-hover transition-colors"
               >
-                <div className="text-[10px] font-mono uppercase text-text-muted">{cat}</div>
+                <div className="text-[10px] font-mono uppercase text-text-muted">{t(`dashboard.categories.${cat}`)}</div>
                 <div className="text-xs font-semibold text-text-primary font-mono tabular-nums mt-0.5">
-                  {selCount} / {count} <span className="text-[10px] text-text-muted font-normal">active</span>
+                  {selCount} / {count} <span className="text-[10px] text-text-muted font-normal">{t('dashboard.active')}</span>
                 </div>
               </div>
             );
@@ -333,7 +334,7 @@ export function Dashboard() {
                 </div>
               </div>
               <span className="font-mono text-[10px] text-text-muted uppercase px-2 py-0.5 rounded-[4px] bg-surface-subtle border border-border-subtle shrink-0">
-                {item.category}
+                {t(`dashboard.categories.${item.category}`)}
               </span>
             </div>
           ))}

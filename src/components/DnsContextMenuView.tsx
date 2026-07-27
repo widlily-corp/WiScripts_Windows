@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import {
@@ -23,42 +24,43 @@ interface DnsCard {
   recommendedFor: string;
 }
 
-const DNS_PROVIDERS: DnsCard[] = [
+const getDnsProviders = (t: any): DnsCard[] => [
   {
     id: 'adguard',
-    name: 'AdGuard DNS',
+    name: t('dnsContextMenuView.providers.adguard.name'),
     primary: '94.140.14.14',
     secondary: '94.140.15.15',
-    description: 'Blocks ads, malware domains, phishing sites, and tracking servers system-wide.',
-    recommendedFor: 'Ad-blocking & Privacy',
+    description: t('dnsContextMenuView.providers.adguard.description'),
+    recommendedFor: t('dnsContextMenuView.providers.adguard.recommendedFor'),
   },
   {
     id: 'cloudflare',
-    name: 'Cloudflare 1.1.1.1',
+    name: t('dnsContextMenuView.providers.cloudflare.name'),
     primary: '1.1.1.1',
     secondary: '1.0.0.1',
-    description: 'Ultra-fast privacy-focused DNS resolver with DNSSEC validation.',
-    recommendedFor: 'High Speed & Privacy',
+    description: t('dnsContextMenuView.providers.cloudflare.description'),
+    recommendedFor: t('dnsContextMenuView.providers.cloudflare.recommendedFor'),
   },
   {
     id: 'google',
-    name: 'Google Public DNS',
+    name: t('dnsContextMenuView.providers.google.name'),
     primary: '8.8.8.8',
     secondary: '8.8.4.4',
-    description: 'Global distributed high-reliability DNS resolver infrastructure.',
-    recommendedFor: 'Global Reliability',
+    description: t('dnsContextMenuView.providers.google.description'),
+    recommendedFor: t('dnsContextMenuView.providers.google.recommendedFor'),
   },
   {
     id: 'dhcp',
-    name: 'Automatic (DHCP)',
-    primary: 'Obtain automatically',
-    secondary: 'Obtain automatically',
-    description: 'Resets DNS server configuration back to ISP/router automatic DHCP settings.',
-    recommendedFor: 'Default ISP Network',
+    name: t('dnsContextMenuView.providers.dhcp.name'),
+    primary: t('dnsContextMenuView.providers.dhcp.primary'),
+    secondary: t('dnsContextMenuView.providers.dhcp.secondary'),
+    description: t('dnsContextMenuView.providers.dhcp.description'),
+    recommendedFor: t('dnsContextMenuView.providers.dhcp.recommendedFor'),
   },
 ];
 
 export function DnsContextMenuView() {
+  const { t } = useTranslation();
   const [interfaceAlias, setInterfaceAlias] = useState('');
   const [activeDnsAction, setActiveDnsAction] = useState<string | null>(null);
   const [isTogglingMenu, setIsTogglingMenu] = useState(false);
@@ -109,16 +111,16 @@ export function DnsContextMenuView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">DNS & Context Menu Manager</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('dnsContextMenuView.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Configure system DNS resolver servers and toggle classic Windows 10 right-click menu on Windows 11.
+            {t('dnsContextMenuView.description')}
           </p>
         </div>
 
         {dryRunMode && (
           <span className="text-xs bg-status-successSubtle text-status-success px-3 py-1 rounded-[6px] border border-status-success/30 font-mono">
-            Dry-Run Active
+            {t('dnsContextMenuView.dryRunActive')}
           </span>
         )}
       </div>
@@ -132,9 +134,9 @@ export function DnsContextMenuView() {
           <div className="flex items-center gap-2.5">
             <MousePointer className="h-4 w-4 text-brand" />
             <div>
-              <h3 className="text-sm font-semibold text-text-primary">Windows 11 Classic Context Menu</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('dnsContextMenuView.win11ClassicContextMenu')}</h3>
               <p className="text-xs text-text-secondary">
-                Restores full classic right-click menu without needing "Show more options" (Shift+F10).
+                {t('dnsContextMenuView.win11ClassicContextMenuDesc')}
               </p>
             </div>
           </div>
@@ -147,13 +149,13 @@ export function DnsContextMenuView() {
                   : 'bg-surface-subtle text-text-muted border-border-subtle'
               }`}
             >
-              Status: {classicContextMenuEnabled ? 'Classic Win10 Active' : 'Modern Win11 Active'}
+              {classicContextMenuEnabled ? t('dnsContextMenuView.statusClassic') : t('dnsContextMenuView.statusModern')}
             </span>
             <button
               onClick={fetchClassicContextMenuStatus}
               disabled={isContextMenuLoading}
               className="p-1.5 rounded-[6px] border border-border bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-40 transition-colors"
-              title="Refresh Registry Status"
+              title={t('dnsContextMenuView.refreshRegistryStatusTooltip')}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isContextMenuLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -162,7 +164,7 @@ export function DnsContextMenuView() {
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface-subtle p-3 rounded-[6px] border border-border-subtle">
           <div className="text-xs text-text-secondary">
-            Modifies HKCU CLSID registry key <code className="font-mono text-brand text-[11px] font-semibold">{`{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}`}</code>
+            {t('dnsContextMenuView.modifiesHkcu')} <code className="font-mono text-brand text-[11px] font-semibold">{`{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}`}</code>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -180,7 +182,7 @@ export function DnsContextMenuView() {
               ) : (
                 <Check className="h-3.5 w-3.5" />
               )}
-              <span>Enable Classic Menu</span>
+              <span>{t('dnsContextMenuView.enableClassicMenu')}</span>
             </button>
 
             <button
@@ -195,7 +197,7 @@ export function DnsContextMenuView() {
               {isTogglingMenu ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : null}
-              <span>Restore Win11 Modern Menu</span>
+              <span>{t('dnsContextMenuView.restoreWin11ModernMenu')}</span>
             </button>
           </div>
         </div>
@@ -207,20 +209,20 @@ export function DnsContextMenuView() {
           <div className="flex items-center gap-2.5">
             <Network className="h-4 w-4 text-brand" />
             <div>
-              <h3 className="text-sm font-semibold text-text-primary">System DNS Server Switcher</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('dnsContextMenuView.systemDnsServerSwitcher')}</h3>
               <p className="text-xs text-text-secondary">
-                Set active DNS servers across active network adapters (`Set-DnsClientServerAddress`).
+                {t('dnsContextMenuView.systemDnsServerSwitcherDesc')}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-text-muted font-mono whitespace-nowrap">Interface:</span>
+            <span className="text-xs text-text-muted font-mono whitespace-nowrap">{t('dnsContextMenuView.interface')}</span>
             <input
               type="text"
               value={interfaceAlias}
               onChange={(e) => setInterfaceAlias(e.target.value)}
-              placeholder="e.g. Ethernet, Wi-Fi (Blank = All Active)"
+              placeholder={t('dnsContextMenuView.interfacePlaceholder')}
               className="w-full sm:w-64 rounded-[6px] border border-border bg-surface-subtle px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
             />
           </div>
@@ -228,7 +230,7 @@ export function DnsContextMenuView() {
 
         {/* DNS Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {DNS_PROVIDERS.map((dns) => {
+          {getDnsProviders(t).map((dns) => {
             const isSelected = selectedDnsProvider === dns.id;
             const isRunning = activeDnsAction === dns.id;
 
@@ -247,7 +249,7 @@ export function DnsContextMenuView() {
                       {dns.name}
                       {isSelected && (
                         <span className="text-[10px] bg-brand text-white px-2 py-0.5 rounded font-mono">
-                          Selected
+                          {t('dnsContextMenuView.selected')}
                         </span>
                       )}
                     </h4>
@@ -260,11 +262,11 @@ export function DnsContextMenuView() {
 
                   <div className="flex items-center gap-4 text-xs font-mono text-text-muted pt-1">
                     <div>
-                      <span className="text-[10px] text-text-muted uppercase">Primary:</span>{' '}
+                      <span className="text-[10px] text-text-muted uppercase">{t('dnsContextMenuView.primary')}</span>{' '}
                       <span className="text-text-primary font-semibold">{dns.primary}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-text-muted uppercase">Secondary:</span>{' '}
+                      <span className="text-[10px] text-text-muted uppercase">{t('dnsContextMenuView.secondary')}</span>{' '}
                       <span className="text-text-primary font-semibold">{dns.secondary}</span>
                     </div>
                   </div>
@@ -273,7 +275,7 @@ export function DnsContextMenuView() {
                 <button
                   onClick={() => handleApplyDns(dns.id)}
                   disabled={isDnsButtonDisabled}
-                  title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+                  title={!isElevated && !dryRunMode ? t('dnsContextMenuView.adminRequired') : ''}
                   className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[6px] text-xs font-medium transition-opacity shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
                     isSelected
                       ? 'bg-brand text-white hover:bg-brand-hover'
@@ -283,12 +285,12 @@ export function DnsContextMenuView() {
                   {isRunning ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Applying DNS...</span>
+                      <span>{t('dnsContextMenuView.applyingDns')}</span>
                     </>
                   ) : (
                     <>
                       <Play className="h-3.5 w-3.5 fill-current" />
-                      <span>Set {dns.name}</span>
+                      <span>{t('dnsContextMenuView.setDns', { name: dns.name })}</span>
                     </>
                   )}
                 </button>

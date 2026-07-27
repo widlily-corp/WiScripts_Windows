@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 import { CleanerScanResult, CleanerCleanResult, CleanerCategoryItem } from '../types';
@@ -24,6 +25,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function SystemCleaner() {
+  const { t } = useTranslation();
   const addLog = useAppStore((s) => s.addLog);
   const addToast = useAppStore((s) => s.addToast);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
@@ -56,7 +58,7 @@ export function SystemCleaner() {
       });
       addToast({
         type: 'error',
-        title: 'Scan Error',
+        title: t('systemCleaner.scanErrorTitle'),
         message: String(err),
       });
     } finally {
@@ -114,8 +116,8 @@ export function SystemCleaner() {
         });
         addToast({
           type: 'info',
-          title: 'Dry-Run Cleanup Completed',
-          message: `Simulated cleanup of ${formatBytes(totalSelectedBytes)} across ${totalSelectedFiles} files.`,
+          title: t('systemCleaner.dryRunTitle'),
+          message: t('systemCleaner.dryRunMsg', { bytes: formatBytes(totalSelectedBytes), files: totalSelectedFiles }),
         });
       } else {
         const res = await invoke<CleanerCleanResult>('clean_system_items', {
@@ -129,8 +131,8 @@ export function SystemCleaner() {
 
         addToast({
           type: 'success',
-          title: 'System Cleanup Completed',
-          message: `Freed ${formatBytes(res.bytesFreed)} across ${res.filesRemoved} files (${res.skippedFilesCount} locked files skipped).`,
+          title: t('systemCleaner.successTitle'),
+          message: t('systemCleaner.successMsg', { bytes: formatBytes(res.bytesFreed), files: res.filesRemoved, skipped: res.skippedFilesCount }),
         });
 
         // Re-scan to update state
@@ -143,7 +145,7 @@ export function SystemCleaner() {
       });
       addToast({
         type: 'error',
-        title: 'Cleanup Error',
+        title: t('systemCleaner.errorTitle'),
         message: String(err),
       });
     } finally {
@@ -161,9 +163,9 @@ export function SystemCleaner() {
               <Sparkles className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-text-primary">System Cleaner & Cache Optimizer</h2>
+              <h2 className="text-base font-semibold text-text-primary">{t('systemCleaner.title')}</h2>
               <p className="text-xs text-text-muted">
-                Scan and purge Windows temporary files, system logs, update downloads, and browser caches.
+                {t('systemCleaner.desc')}
               </p>
             </div>
           </div>
@@ -176,7 +178,7 @@ export function SystemCleaner() {
               className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-surface-subtle border border-border text-text-primary hover:bg-surface-hover transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-              <span>{isScanning ? 'Scanning...' : 'Scan System Junk'}</span>
+              <span>{isScanning ? t('systemCleaner.scanning') : t('systemCleaner.scanSystemJunk')}</span>
             </button>
 
             <button
@@ -187,9 +189,7 @@ export function SystemCleaner() {
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>
-                {isCleaning
-                  ? 'Cleaning...'
-                  : `Clean Selected (${selectedCatIds.size})`}
+                {isCleaning ? t('systemCleaner.cleaning') : t('systemCleaner.cleanSelected', { count: selectedCatIds.size })}
               </span>
             </button>
           </div>
@@ -201,7 +201,7 @@ export function SystemCleaner() {
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <HardDrive className="h-4 w-4 text-text-muted" />
-                <span className="text-xs text-text-muted">Total Junk Detected</span>
+                <span className="text-xs text-text-muted">{t('systemCleaner.totalJunkDetected')}</span>
               </div>
               <span className="text-sm font-semibold font-mono tabular-nums text-text-primary">
                 {formatBytes(scanResult.totalBytes)}
@@ -211,7 +211,7 @@ export function SystemCleaner() {
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <FileText className="h-4 w-4 text-text-muted" />
-                <span className="text-xs text-text-muted">Files Count</span>
+                <span className="text-xs text-text-muted">{t('systemCleaner.filesCount')}</span>
               </div>
               <span className="text-sm font-semibold font-mono tabular-nums text-text-primary">
                 {scanResult.totalFiles.toLocaleString()}
@@ -221,10 +221,10 @@ export function SystemCleaner() {
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Sparkles className="h-4 w-4 text-brand" />
-                <span className="text-xs text-text-muted">Selected for Cleanup</span>
+                <span className="text-xs text-text-muted">{t('systemCleaner.selectedForCleanup')}</span>
               </div>
               <span className="text-sm font-semibold font-mono tabular-nums text-brand">
-                {formatBytes(totalSelectedBytes)} ({totalSelectedFiles} files)
+                {formatBytes(totalSelectedBytes)} ({totalSelectedFiles} {t('systemCleaner.files')})
               </span>
             </div>
           </div>
@@ -236,7 +236,7 @@ export function SystemCleaner() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-              Category Breakdown ({scanResult.categories.length})
+              {t('systemCleaner.categoryBreakdown', { count: scanResult.categories.length })}
             </h3>
 
             <div className="flex items-center gap-3 text-xs">
@@ -291,7 +291,7 @@ export function SystemCleaner() {
                         {formatBytes(cat.totalSizeBytes)}
                       </div>
                       <div className="text-[11px] text-text-muted font-mono tabular-nums">
-                        {cat.fileCount} files
+                        {cat.fileCount} {t('systemCleaner.files')}
                       </div>
                     </div>
                   </div>
@@ -299,7 +299,7 @@ export function SystemCleaner() {
                   {/* Targeted Paths preview */}
                   <div className="pt-2 border-t border-border-subtle/50 space-y-1">
                     <div className="text-[10px] uppercase font-mono text-text-muted tracking-wider">
-                      Target Paths
+                      {t('systemCleaner.targetPaths')}
                     </div>
                     {cat.paths.map((p, idx) => (
                       <div
@@ -319,9 +319,9 @@ export function SystemCleaner() {
       ) : (
         <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-12 text-center space-y-3">
           <Sparkles className="h-10 w-10 text-text-muted mx-auto opacity-50" />
-          <div className="text-sm font-medium text-text-primary">No system junk scan results yet</div>
+          <div className="text-sm font-medium text-text-primary">{t('systemCleaner.noScanResults')}</div>
           <p className="text-xs text-text-muted max-w-md mx-auto">
-            Click &quot;Scan System Junk&quot; to calculate total temporary file usage across Windows %TEMP%, update caches, and browser directories.
+            {t('systemCleaner.noScanDesc')}
           </p>
           <button
             type="button"
@@ -330,7 +330,7 @@ export function SystemCleaner() {
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>Start Scan</span>
+            <span>{t('systemCleaner.startScan')}</span>
           </button>
         </div>
       )}
@@ -344,24 +344,24 @@ export function SystemCleaner() {
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-text-primary">Confirm System Junk Cleanup</h3>
-                <p className="text-xs text-text-muted">This action will purge temporary files from disk.</p>
+                <h3 className="text-sm font-semibold text-text-primary">{t('systemCleaner.confirmTitle')}</h3>
+                <p className="text-xs text-text-muted">{t('systemCleaner.confirmDesc')}</p>
               </div>
             </div>
 
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-text-muted">Selected Categories:</span>
+                <span className="text-text-muted">{t('systemCleaner.confirmSelectedCat')}</span>
                 <span className="font-semibold text-text-primary">{selectedCatIds.size}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Total Space to Free:</span>
+                <span className="text-text-muted">{t('systemCleaner.confirmSpaceToFree')}</span>
                 <span className="font-semibold font-mono tabular-nums text-brand">
                   {formatBytes(totalSelectedBytes)}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Total Files Affected:</span>
+                <span className="text-text-muted">{t('systemCleaner.confirmFilesAffected')}</span>
                 <span className="font-semibold font-mono tabular-nums text-text-primary">
                   {totalSelectedFiles}
                 </span>
@@ -371,7 +371,7 @@ export function SystemCleaner() {
             {dryRunMode && (
               <div className="p-2.5 rounded-[6px] bg-status-info/10 border border-status-info/20 text-xs text-status-info flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>Safety Dry-Run Mode is ACTIVE. Execution will be simulated without deleting actual files.</span>
+                <span>{t('systemCleaner.safetyDryRunMsg')}</span>
               </div>
             )}
 
@@ -381,14 +381,14 @@ export function SystemCleaner() {
                 onClick={() => setShowConfirmModal(false)}
                 className="px-3 py-1.5 text-xs font-medium rounded-[6px] border border-border bg-surface-subtle text-text-primary hover:bg-surface-hover"
               >
-                Cancel
+                {t('systemCleaner.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleExecuteClean}
                 className="px-4 py-1.5 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover"
               >
-                Proceed Cleanup
+                {t('systemCleaner.proceedCleanup')}
               </button>
             </div>
           </div>

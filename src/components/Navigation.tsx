@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { TabType } from '../types';
 import {
@@ -24,32 +25,33 @@ import {
 
 interface NavItem {
   id: TabType;
-  label: string;
+  labelKey: string;
   icon: React.ElementType;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'optimization', label: 'Optimizations', icon: Sliders },
-  { id: 'package_manager', label: 'Package Manager', icon: Package },
-  { id: 'app_uninstaller', label: 'App Uninstaller', icon: Trash2 },
-  { id: 'presets', label: 'Optimization Presets', icon: Sparkles },
-  { id: 'system_cleaner', label: 'System Cleaner', icon: Sparkles },
-  { id: 'storage_utilities', label: 'Storage Utilities', icon: FolderSearch },
-  { id: 'startup', label: 'Startup Apps', icon: Power },
-  { id: 'scheduler', label: 'Task Scheduler', icon: Clock },
-  { id: 'dns_context', label: 'DNS & Context Menu', icon: Globe },
-  { id: 'driver_backup', label: 'Driver Backup', icon: HardDrive },
-  { id: 'diagnostics', label: 'Diagnostics & Health', icon: Activity },
-  { id: 'odt', label: 'Office ODT', icon: FileCode },
-  { id: 'activation', label: 'Activation MAS', icon: KeyRound },
-  { id: 'restore_points', label: 'Restore Points', icon: RotateCcw },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'dashboard', labelKey: 'nav.items.dashboard', icon: LayoutDashboard },
+  { id: 'optimization', labelKey: 'nav.items.optimization', icon: Sliders },
+  { id: 'package_manager', labelKey: 'nav.items.package_manager', icon: Package },
+  { id: 'app_uninstaller', labelKey: 'nav.items.app_uninstaller', icon: Trash2 },
+  { id: 'presets', labelKey: 'nav.items.presets', icon: Sparkles },
+  { id: 'system_cleaner', labelKey: 'nav.items.system_cleaner', icon: Sparkles },
+  { id: 'storage_utilities', labelKey: 'nav.items.storage_utilities', icon: FolderSearch },
+  { id: 'startup', labelKey: 'nav.items.startup', icon: Power },
+  { id: 'scheduler', labelKey: 'nav.items.scheduler', icon: Clock },
+  { id: 'dns_context', labelKey: 'nav.items.dns_context', icon: Globe },
+  { id: 'driver_backup', labelKey: 'nav.items.driver_backup', icon: HardDrive },
+  { id: 'diagnostics', labelKey: 'nav.items.diagnostics', icon: Activity },
+  { id: 'odt', labelKey: 'nav.items.odt', icon: FileCode },
+  { id: 'activation', labelKey: 'nav.items.activation', icon: KeyRound },
+  { id: 'restore_points', labelKey: 'nav.items.restore_points', icon: RotateCcw },
+  { id: 'settings', labelKey: 'nav.items.settings', icon: Settings },
 ];
 
 
 
 export function Navigation() {
+  const { t } = useTranslation();
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const systemInfo = useAppStore((s) => s.systemInfo);
@@ -65,7 +67,7 @@ export function Navigation() {
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              Windows Utility v{appVersion || '0.3.0'}
+              {t('nav.app_version', { version: appVersion || '0.3.0' })}
             </span>
           </div>
         </div>
@@ -89,7 +91,7 @@ export function Navigation() {
                 }`}
               >
                 <Icon className={`h-4 w-4 ${isActive ? 'text-brand' : 'text-text-muted'}`} />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </button>
             );
           })}
@@ -106,10 +108,10 @@ export function Navigation() {
           )}
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-medium text-text-primary truncate">
-              {systemInfo?.isElevated ? 'Elevated Privileges' : 'Standard User'}
+              {systemInfo?.isElevated ? t('nav.admin_status.elevated') : t('nav.admin_status.standard')}
             </div>
             <div className="text-[10px] text-text-muted truncate">
-              {systemInfo?.isElevated ? 'Full Registry & Service Control' : 'Limited System Modifications'}
+              {systemInfo?.isElevated ? t('nav.admin_status.full_control') : t('nav.admin_status.limited_control')}
             </div>
           </div>
         </div>

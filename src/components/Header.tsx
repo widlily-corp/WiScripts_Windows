@@ -1,29 +1,31 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 import { SystemInfo } from '../types';
 import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive } from 'lucide-react';
 
 const TAB_TITLES: Record<string, string> = {
-  dashboard: 'System Overview Dashboard',
-  optimization: 'Windows Optimizations & Debloat',
-  package_manager: 'Package & Bloatware Manager (Winget / UWP)',
-  app_uninstaller: 'Application Uninstaller',
-  presets: 'Curated Optimization Profiles & Presets',
-  system_cleaner: 'System Junk & Cache Cleaner',
-  storage_utilities: 'Duplicate File & Large Space Analyzer',
-  startup: 'Windows Startup Applications Manager',
-  scheduler: 'Windows Task Scheduler Manager',
-  dns_context: 'DNS Server & Win11 Context Menu Manager',
-  driver_backup: 'Windows Device Driver Export & Backup',
-  diagnostics: 'Advanced Diagnostics & System Health Stream',
-  odt: 'Office Deployment Tool (ODT) Configurator',
-  activation: 'Microsoft Activation Scripts (MAS)',
-  restore_points: 'Windows System Restore Checkpoints',
-  settings: 'Global Configuration & Preferences',
+  dashboard: 'header.tab_titles.dashboard',
+  optimization: 'header.tab_titles.optimization',
+  package_manager: 'header.tab_titles.package_manager',
+  app_uninstaller: 'header.tab_titles.app_uninstaller',
+  presets: 'header.tab_titles.presets',
+  system_cleaner: 'header.tab_titles.system_cleaner',
+  storage_utilities: 'header.tab_titles.storage_utilities',
+  startup: 'header.tab_titles.startup',
+  scheduler: 'header.tab_titles.scheduler',
+  dns_context: 'header.tab_titles.dns_context',
+  driver_backup: 'header.tab_titles.driver_backup',
+  diagnostics: 'header.tab_titles.diagnostics',
+  odt: 'header.tab_titles.odt',
+  activation: 'header.tab_titles.activation',
+  restore_points: 'header.tab_titles.restore_points',
+  settings: 'header.tab_titles.settings',
 };
 
 export function Header() {
+  const { t } = useTranslation();
   const activeTab = useAppStore((s) => s.activeTab);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const setDryRunMode = useAppStore((s) => s.setDryRunMode);
@@ -41,12 +43,12 @@ export function Header() {
       setSystemInfo(info);
       addLog({
         level: 'info',
-        message: `System metrics refreshed: CPU ${info.cpuUsagePercent}%, RAM ${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)} GB`,
+        message: t('header.logs.refresh_success', { cpu: info.cpuUsagePercent, used: Math.round(info.memoryUsedMb / 1024), total: Math.round(info.memoryTotalMb / 1024) }),
       });
     } catch (err) {
       addLog({
         level: 'error',
-        message: `Failed to refresh system info via IPC: ${String(err)}`,
+        message: t('header.logs.refresh_error', { err: String(err) }),
       });
     } finally {
       setIsRefreshing(false);
@@ -59,7 +61,7 @@ export function Header() {
       {/* Title */}
       <div>
         <h2 className="text-sm font-semibold text-text-primary">
-          {TAB_TITLES[activeTab] || 'WiScripts'}
+          {TAB_TITLES[activeTab] ? t(TAB_TITLES[activeTab]) : 'WiScripts'}
         </h2>
       </div>
 
@@ -70,13 +72,13 @@ export function Header() {
           <div className="flex items-center gap-3 bg-surface-subtle border border-border-subtle rounded-[6px] px-3 py-1 text-xs">
             <div className="flex items-center gap-1.5 text-text-secondary font-mono text-[11px] tabular-nums">
               <Cpu className="h-3.5 w-3.5 text-brand" />
-              <span>{systemInfo.cpuUsagePercent}% CPU</span>
+              <span>{t('header.stats.cpu', { cpu: systemInfo.cpuUsagePercent })}</span>
             </div>
             <span className="text-border">|</span>
             <div className="flex items-center gap-1.5 text-text-secondary font-mono text-[11px] tabular-nums">
               <HardDrive className="h-3.5 w-3.5 text-brand" />
               <span>
-                {Math.round(systemInfo.memoryUsedMb / 1024)} / {Math.round(systemInfo.memoryTotalMb / 1024)} GB
+                {t('header.stats.ram', { used: Math.round(systemInfo.memoryUsedMb / 1024), total: Math.round(systemInfo.memoryTotalMb / 1024) })}
               </span>
             </div>
           </div>
@@ -89,7 +91,7 @@ export function Header() {
           ) : (
             <ShieldAlert className="h-4 w-4 text-status-warning" />
           )}
-          <span className="text-xs font-medium text-text-secondary">Safety Dry-Run</span>
+          <span className="text-xs font-medium text-text-secondary">{t('header.safety_dry_run')}</span>
           <button
             type="button"
             role="switch"
@@ -112,7 +114,7 @@ export function Header() {
           onClick={handleRefreshSystemInfo}
           disabled={isRefreshing}
           className="p-1.5 rounded-[6px] border border-border bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-opacity disabled:opacity-50"
-          title="Refresh System Information"
+          title={t('header.refresh_btn_title')}
         >
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import {
   DuplicateGroup,
@@ -30,13 +31,14 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-function formatDate(tsSec: number): string {
-  if (!tsSec) return 'Unknown';
+function formatDate(tsSec: number, t: any): string {
+  if (!tsSec) return t('storageUtilities.unknown');
   const date = new Date(tsSec * 1000);
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function StorageUtilities() {
+  const { t } = useTranslation();
   const addLog = useAppStore((s) => s.addLog);
   const addToast = useAppStore((s) => s.addToast);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
@@ -58,7 +60,7 @@ export function StorageUtilities() {
   // Scan Duplicates
   const handleScanDuplicates = async () => {
     setIsScanning(true);
-    addLog({ level: 'info', message: 'Starting duplicate file scan in %USERPROFILE%...' });
+    addLog({ level: 'info', message: t('storageUtilities.startingDuplicateScan') });
     try {
       const res = await invoke<DuplicateGroup[]>('scan_duplicate_files', {});
       setDuplicateGroups(res);
@@ -69,16 +71,16 @@ export function StorageUtilities() {
 
       addLog({
         level: 'info',
-        message: `Duplicate file scan finished: Found ${res.length} duplicate groups`,
+        message: t('storageUtilities.duplicateScanFinished', { count: res.length }),
       });
     } catch (err) {
       addLog({
         level: 'error',
-        message: `Duplicate scan failed: ${String(err)}`,
+        message: t('storageUtilities.duplicateScanFailed', { error: String(err) }),
       });
       addToast({
         type: 'error',
-        title: 'Scan Error',
+        title: t('storageUtilities.scanError'),
         message: String(err),
       });
     } finally {
@@ -89,7 +91,7 @@ export function StorageUtilities() {
   // Scan Large Files
   const handleScanLargeFiles = async () => {
     setIsScanning(true);
-    addLog({ level: 'info', message: 'Scanning for large files in %USERPROFILE%...' });
+    addLog({ level: 'info', message: t('storageUtilities.startingLargeFilesScan') });
     try {
       const res = await invoke<LargeFileItem[]>('scan_large_files', { limit: 50 });
       setLargeFiles(res);
@@ -97,16 +99,16 @@ export function StorageUtilities() {
 
       addLog({
         level: 'info',
-        message: `Large files scan finished: Located top ${res.length} files`,
+        message: t('storageUtilities.largeFilesScanFinished', { count: res.length }),
       });
     } catch (err) {
       addLog({
         level: 'error',
-        message: `Large files scan failed: ${String(err)}`,
+        message: t('storageUtilities.largeFilesScanFailed', { error: String(err) }),
       });
       addToast({
         type: 'error',
-        title: 'Scan Error',
+        title: t('storageUtilities.scanError'),
         message: String(err),
       });
     } finally {
@@ -175,7 +177,7 @@ export function StorageUtilities() {
 
     addLog({
       level: 'info',
-      message: `Executing deletion for ${pathsArray.length} files (Dry-Run: ${dryRunMode})...`,
+      message: t('storageUtilities.executingDeletion', { count: pathsArray.length, dryRunMode: String(dryRunMode) }),
     });
 
     try {
@@ -183,24 +185,24 @@ export function StorageUtilities() {
         await new Promise((resolve) => setTimeout(resolve, 800));
         addLog({
           level: 'cmd',
-          message: `[DRY-RUN] Simulated deletion of ${pathsArray.length} files (${formatBytes(selectedBytes)}).`,
+          message: `[DRY-RUN] ${t('storageUtilities.simulatedDeletion', { count: pathsArray.length, size: formatBytes(selectedBytes) })}`,
         });
         addToast({
           type: 'info',
-          title: 'Dry-Run Deletion Completed',
-          message: `Simulated deletion of ${pathsArray.length} files (${formatBytes(selectedBytes)}).`,
+          title: t('storageUtilities.dryRunDeletionCompleted'),
+          message: t('storageUtilities.simulatedDeletion', { count: pathsArray.length, size: formatBytes(selectedBytes) }),
         });
       } else {
         const res = await invoke<StorageDeleteResult>('delete_files', { paths: pathsArray });
         addLog({
           level: 'info',
-          message: `Delete finished: Deleted ${res.filesDeleted} files, freed ${formatBytes(res.bytesFreed)}.`,
+          message: t('storageUtilities.deleteFinished', { filesDeleted: res.filesDeleted, bytesFreed: formatBytes(res.bytesFreed) }),
         });
 
         addToast({
           type: 'success',
-          title: 'Files Deleted',
-          message: `Successfully deleted ${res.filesDeleted} files freeing ${formatBytes(res.bytesFreed)}.`,
+          title: t('storageUtilities.filesDeleted'),
+          message: t('storageUtilities.successfullyDeleted', { filesDeleted: res.filesDeleted, bytesFreed: formatBytes(res.bytesFreed) }),
         });
 
         // Re-scan current active view
@@ -213,11 +215,11 @@ export function StorageUtilities() {
     } catch (err) {
       addLog({
         level: 'error',
-        message: `Deletion failed: ${String(err)}`,
+        message: t('storageUtilities.deletionFailed', { error: String(err) }),
       });
       addToast({
         type: 'error',
-        title: 'Delete Failed',
+        title: t('storageUtilities.deleteFailed'),
         message: String(err),
       });
     } finally {
@@ -236,14 +238,14 @@ export function StorageUtilities() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-text-primary">Storage Utilities & File Analyzer</h2>
+                <h2 className="text-base font-semibold text-text-primary">{t('storageUtilities.title')}</h2>
                 <div className="px-2 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-[10px] font-mono text-text-muted flex items-center gap-1">
                   <ShieldCheck className="h-3 w-3 text-status-success" />
-                  <span>%USERPROFILE% Only</span>
+                  <span>{t('storageUtilities.userProfileOnly')}</span>
                 </div>
               </div>
               <p className="text-xs text-text-muted">
-                Scan for byte-level duplicate files (SHA-256) and top space-consuming large files.
+                {t('storageUtilities.description')}
               </p>
             </div>
           </div>
@@ -257,7 +259,7 @@ export function StorageUtilities() {
                 className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>{isScanning ? 'Scanning...' : 'Scan for Duplicates'}</span>
+                <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanForDuplicates')}</span>
               </button>
             ) : (
               <button
@@ -267,7 +269,7 @@ export function StorageUtilities() {
                 className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>{isScanning ? 'Scanning...' : 'Scan Large Files'}</span>
+                <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanLargeFiles')}</span>
               </button>
             )}
 
@@ -280,8 +282,8 @@ export function StorageUtilities() {
               <Trash2 className="h-3.5 w-3.5" />
               <span>
                 {isDeleting
-                  ? 'Deleting...'
-                  : `Delete Selected (${selectedPaths.size})`}
+                  ? t('storageUtilities.deleting')
+                  : t('storageUtilities.deleteSelected', { count: selectedPaths.size })}
               </span>
             </button>
           </div>
@@ -302,7 +304,7 @@ export function StorageUtilities() {
             }`}
           >
             <Copy className="h-4 w-4" />
-            <span>Duplicate Files</span>
+            <span>{t('storageUtilities.duplicateFilesTab')}</span>
           </button>
 
           <button
@@ -318,7 +320,7 @@ export function StorageUtilities() {
             }`}
           >
             <HardDrive className="h-4 w-4" />
-            <span>Large Files Finder</span>
+            <span>{t('storageUtilities.largeFilesFinderTab')}</span>
           </button>
         </div>
       </div>
@@ -330,10 +332,10 @@ export function StorageUtilities() {
             duplicateGroups.length > 0 ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs text-text-muted">
-                  <span>Found {duplicateGroups.length} duplicate file groups</span>
+                  <span>{t('storageUtilities.foundDuplicateGroups', { count: duplicateGroups.length })}</span>
                   {selectedPaths.size > 0 && (
                     <span className="font-mono tabular-nums text-brand">
-                      Selected: {selectedPaths.size} files ({formatBytes(calculateSelectedBytes())})
+                      {t('storageUtilities.selectedFiles', { count: selectedPaths.size, size: formatBytes(calculateSelectedBytes()) })}
                     </span>
                   )}
                 </div>
@@ -361,10 +363,10 @@ export function StorageUtilities() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-semibold text-text-primary truncate">
-                                Hash: {group.hash.substring(0, 16)}...
+                                {t('storageUtilities.hash', { hash: group.hash.substring(0, 16) })}
                               </span>
                               <span className="px-2 py-0.5 rounded-[4px] bg-brand/10 text-brand text-[10px] font-mono">
-                                {group.files.length} Duplicates
+                                {t('storageUtilities.duplicatesCount', { count: group.files.length })}
                               </span>
                             </div>
                           </div>
@@ -373,10 +375,10 @@ export function StorageUtilities() {
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
                             <div className="text-xs font-mono tabular-nums font-semibold text-text-primary">
-                              {formatBytes(group.sizeBytes)} each
+                              {formatBytes(group.sizeBytes)} {t('storageUtilities.each')}
                             </div>
                             <div className="text-[10px] font-mono tabular-nums text-status-success">
-                              Save {formatBytes(potentialSavings)}
+                              {t('storageUtilities.save', { size: formatBytes(potentialSavings) })}
                             </div>
                           </div>
 
@@ -385,7 +387,7 @@ export function StorageUtilities() {
                             onClick={() => selectDuplicatesExceptFirst(group)}
                             className="px-2.5 py-1 text-[11px] font-medium rounded-[4px] border border-border bg-surface text-text-secondary hover:text-text-primary hover:bg-surface-hover"
                           >
-                            Select Duplicates
+                            {t('storageUtilities.selectDuplicates')}
                           </button>
                         </div>
                       </div>
@@ -417,10 +419,10 @@ export function StorageUtilities() {
                                       {file.path}
                                     </div>
                                     <div className="text-[10px] text-text-muted">
-                                      Modified: {formatDate(file.modifiedTimestamp)}
+                                      {t('storageUtilities.modified', { date: formatDate(file.modifiedTimestamp, t) })}
                                       {fIdx === 0 && (
                                         <span className="ml-2 text-status-info font-medium">
-                                          (Original Candidate)
+                                          {t('storageUtilities.originalCandidate')}
                                         </span>
                                       )}
                                     </div>
@@ -442,16 +444,16 @@ export function StorageUtilities() {
             ) : (
               <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-12 text-center space-y-2">
                 <Copy className="h-8 w-8 text-text-muted mx-auto opacity-50" />
-                <div className="text-sm font-medium text-text-primary">No duplicate files found</div>
-                <p className="text-xs text-text-muted">All scanned files in %USERPROFILE% have unique SHA-256 contents.</p>
+                <div className="text-sm font-medium text-text-primary">{t('storageUtilities.noDuplicateFiles')}</div>
+                <p className="text-xs text-text-muted">{t('storageUtilities.allScannedFilesUnique')}</p>
               </div>
             )
           ) : (
             <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-12 text-center space-y-3">
               <Copy className="h-10 w-10 text-text-muted mx-auto opacity-50" />
-              <div className="text-sm font-medium text-text-primary">Duplicate File Scanner</div>
+              <div className="text-sm font-medium text-text-primary">{t('storageUtilities.duplicateFileScanner')}</div>
               <p className="text-xs text-text-muted max-w-md mx-auto">
-                Scan your user profile directory for identical files using a 2-phase size collision and SHA-256 hashing algorithm.
+                {t('storageUtilities.scanDescription')}
               </p>
               <button
                 type="button"
@@ -460,7 +462,7 @@ export function StorageUtilities() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>Start Duplicate Scan</span>
+                <span>{t('storageUtilities.startDuplicateScan')}</span>
               </button>
             </div>
           )}
@@ -474,11 +476,11 @@ export function StorageUtilities() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-surface-subtle border-b border-border-subtle text-text-muted font-medium uppercase tracking-wider text-[10px]">
                     <tr>
-                      <th className="p-3 w-10">Select</th>
-                      <th className="p-3">File Name & Details</th>
-                      <th className="p-3">Extension</th>
-                      <th className="p-3 font-mono text-right">Size</th>
-                      <th className="p-3 text-right">Last Modified</th>
+                      <th className="p-3 w-10">{t('storageUtilities.selectColumn')}</th>
+                      <th className="p-3">{t('storageUtilities.fileNameAndDetails')}</th>
+                      <th className="p-3">{t('storageUtilities.extension')}</th>
+                      <th className="p-3 font-mono text-right">{t('storageUtilities.size')}</th>
+                      <th className="p-3 text-right">{t('storageUtilities.lastModified')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle/50">
@@ -516,7 +518,7 @@ export function StorageUtilities() {
                             {formatBytes(file.sizeBytes)}
                           </td>
                           <td className="p-3 text-right text-text-muted font-mono tabular-nums text-[11px]">
-                            {formatDate(file.modifiedTimestamp)}
+                            {formatDate(file.modifiedTimestamp, t)}
                           </td>
                         </tr>
                       );
@@ -527,16 +529,16 @@ export function StorageUtilities() {
             ) : (
               <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-12 text-center space-y-2">
                 <HardDrive className="h-8 w-8 text-text-muted mx-auto opacity-50" />
-                <div className="text-sm font-medium text-text-primary">No large files found</div>
-                <p className="text-xs text-text-muted">No space-consuming files located in %USERPROFILE%.</p>
+                <div className="text-sm font-medium text-text-primary">{t('storageUtilities.noLargeFiles')}</div>
+                <p className="text-xs text-text-muted">{t('storageUtilities.noSpaceConsuming')}</p>
               </div>
             )
           ) : (
             <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-12 text-center space-y-3">
               <HardDrive className="h-10 w-10 text-text-muted mx-auto opacity-50" />
-              <div className="text-sm font-medium text-text-primary">Large File Finder</div>
+              <div className="text-sm font-medium text-text-primary">{t('storageUtilities.largeFileFinder')}</div>
               <p className="text-xs text-text-muted max-w-md mx-auto">
-                Scan your user profile directory to locate top 50 largest files sorted descending by byte size.
+                {t('storageUtilities.scanLargeDescription')}
               </p>
               <button
                 type="button"
@@ -545,7 +547,7 @@ export function StorageUtilities() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>Start Large Files Scan</span>
+                <span>{t('storageUtilities.startLargeFilesScan')}</span>
               </button>
             </div>
           )}
@@ -561,18 +563,18 @@ export function StorageUtilities() {
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-text-primary">Confirm File Deletion</h3>
-                <p className="text-xs text-text-muted">Delete selected files permanently or to Recycle Bin.</p>
+                <h3 className="text-sm font-semibold text-text-primary">{t('storageUtilities.confirmFileDeletion')}</h3>
+                <p className="text-xs text-text-muted">{t('storageUtilities.deletePermanently')}</p>
               </div>
             </div>
 
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-text-muted">Selected Files:</span>
+                <span className="text-text-muted">{t('storageUtilities.selectedFilesLabel')}</span>
                 <span className="font-semibold text-text-primary">{selectedPaths.size}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-text-muted">Total Space to Free:</span>
+                <span className="text-text-muted">{t('storageUtilities.totalSpaceToFree')}</span>
                 <span className="font-semibold font-mono tabular-nums text-status-error">
                   {formatBytes(calculateSelectedBytes())}
                 </span>
@@ -582,7 +584,7 @@ export function StorageUtilities() {
             {dryRunMode && (
               <div className="p-2.5 rounded-[6px] bg-status-info/10 border border-status-info/20 text-xs text-status-info flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>Safety Dry-Run Mode is ACTIVE. Deletion will be simulated without altering disk files.</span>
+                <span>{t('storageUtilities.safetyDryRun')}</span>
               </div>
             )}
 
@@ -592,14 +594,14 @@ export function StorageUtilities() {
                 onClick={() => setShowConfirmModal(false)}
                 className="px-3 py-1.5 text-xs font-medium rounded-[6px] border border-border bg-surface-subtle text-text-primary hover:bg-surface-hover"
               >
-                Cancel
+                {t('storageUtilities.cancel')}
               </button>
               <button
                 type="button"
                 onClick={handleExecuteDelete}
                 className="px-4 py-1.5 text-xs font-medium rounded-[6px] bg-status-error text-white hover:opacity-90"
               >
-                Confirm Delete
+                {t('storageUtilities.confirmDelete')}
               </button>
             </div>
           </div>

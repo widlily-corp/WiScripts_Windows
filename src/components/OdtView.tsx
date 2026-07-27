@@ -1,38 +1,40 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { ExecutionSummary } from '../types';
 import { FileCode, Play, Copy, Check, ShieldAlert, Package, Layers, SlidersHorizontal, Loader2 } from 'lucide-react';
 
 const PRODUCT_OPTIONS = [
-  { id: 'O365ProPlusRetail', name: 'Microsoft 365 Apps for Enterprise', desc: 'Full suite including Word, Excel, PowerPoint, Outlook' },
-  { id: 'O365BusinessRetail', name: 'Microsoft 365 Apps for Business', desc: 'Standard business suite edition' },
-  { id: 'VisioPro2021Volume', name: 'Visio Professional 2021', desc: 'Diagramming & vector graphics application' },
-  { id: 'ProjectPro2021Volume', name: 'Project Professional 2021', desc: 'Project management software suite' },
+  { id: 'O365ProPlusRetail' },
+  { id: 'O365BusinessRetail' },
+  { id: 'VisioPro2021Volume' },
+  { id: 'ProjectPro2021Volume' },
 ];
 
 const EXCLUDABLE_APPS = [
-  { id: 'Access', name: 'Access' },
-  { id: 'Bing', name: 'Bing Search' },
-  { id: 'Groove', name: 'OneDrive for Business (Legacy)' },
-  { id: 'Lync', name: 'Skype for Business' },
-  { id: 'OneDrive', name: 'OneDrive Standalone' },
-  { id: 'OneNote', name: 'OneNote Desktop' },
-  { id: 'Outlook', name: 'Outlook' },
-  { id: 'Publisher', name: 'Publisher' },
-  { id: 'Teams', name: 'Microsoft Teams' },
+  { id: 'Access' },
+  { id: 'Bing' },
+  { id: 'Groove' },
+  { id: 'Lync' },
+  { id: 'OneDrive' },
+  { id: 'OneNote' },
+  { id: 'Outlook' },
+  { id: 'Publisher' },
+  { id: 'Teams' },
 ];
 
 const LANGUAGE_OPTIONS = [
-  { code: 'en-us', label: 'English (US)' },
-  { code: 'de-de', label: 'German (Germany)' },
-  { code: 'fr-fr', label: 'French (France)' },
-  { code: 'es-es', label: 'Spanish (Spain)' },
-  { code: 'ru-ru', label: 'Russian (Russia)' },
+  { code: 'en-us' },
+  { code: 'de-de' },
+  { code: 'fr-fr' },
+  { code: 'es-es' },
+  { code: 'ru-ru' },
 ];
 
 export function OdtView() {
+  const { t } = useTranslation();
   const odtConfig = useAppStore((s) => s.odtConfig);
   const updateOdtConfig = useAppStore((s) => s.updateOdtConfig);
   const generatedXml = useAppStore((s) => s.generatedXml);
@@ -75,10 +77,13 @@ export function OdtView() {
     if (isButtonDisabled) return;
 
     openSafetyModal({
-      title: 'Deploy Office Suite via ODT',
-      description: `Deploying configuration for ${odtConfig.products.join(', ')} (${odtConfig.architecture}, ${odtConfig.channel} Channel). Dry-run mode is currently ${
-        dryRunMode ? 'ACTIVE' : 'DISABLED'
-      }.`,
+      title: t('odt.modalDeployTitle'),
+      description: t('odt.modalDeployDesc', {
+        products: odtConfig.products.join(', '),
+        arch: odtConfig.architecture,
+        channel: odtConfig.channel,
+        status: dryRunMode ? 'ACTIVE' : 'DISABLED'
+      }),
       riskLevel: 'high',
       commandsToRun: [
         `Setup.exe /configure configuration.xml`,
@@ -119,14 +124,14 @@ export function OdtView() {
             const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'ODT deployment failed';
             useAppStore.getState().addToast({
               type: 'error',
-              title: 'ODT Deployment Failed',
+              title: t('odt.toastDeployFailTitle'),
               message: errMsg,
             });
           } else {
             useAppStore.getState().addToast({
               type: 'success',
-              title: 'ODT Deployment Complete',
-              message: `Office suite deployment completed successfully.`,
+              title: t('odt.toastDeploySuccessTitle'),
+              message: t('odt.toastDeploySuccessMsg'),
             });
           }
         } catch (err) {
@@ -137,7 +142,7 @@ export function OdtView() {
           });
           useAppStore.getState().addToast({
             type: 'error',
-            title: 'ODT Deployment Error',
+            title: t('odt.toastDeployErrorTitle'),
             message: errMsg,
           });
         } finally {
@@ -151,8 +156,8 @@ export function OdtView() {
     if (isButtonDisabled) return;
 
     openSafetyModal({
-      title: 'Bypass ODT Regional Lock',
-      description: 'Modifies Office update policies and experiment configs in registry to bypass regional installation restrictions.',
+      title: t('odt.modalBypassTitle'),
+      description: t('odt.modalBypassDesc'),
       riskLevel: 'medium',
       commandsToRun: [
         `HKLM:\\SOFTWARE\\Policies\\Microsoft\\office\\16.0\\common\\officeupdate (PreventRegionalBlock = 1)`,
@@ -191,14 +196,14 @@ export function OdtView() {
             const errMsg = errAction?.output.stderr.trim() || errAction?.output.stdout.trim() || 'Regional bypass failed';
             useAppStore.getState().addToast({
               type: 'error',
-              title: 'Regional Bypass Failed',
+              title: t('odt.toastBypassFailTitle'),
               message: errMsg,
             });
           } else {
             useAppStore.getState().addToast({
               type: 'success',
-              title: 'Regional Bypass Active',
-              message: `Office regional restriction bypass applied.`,
+              title: t('odt.toastBypassSuccessTitle'),
+              message: t('odt.toastBypassSuccessMsg'),
             });
           }
         } catch (err) {
@@ -209,7 +214,7 @@ export function OdtView() {
           });
           useAppStore.getState().addToast({
             type: 'error',
-            title: 'Regional Bypass Error',
+            title: t('odt.toastBypassErrorTitle'),
             message: errMsg,
           });
         } finally {
@@ -226,17 +231,17 @@ export function OdtView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <FileCode className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">Office Deployment Tool (ODT)</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('odt.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Configure custom Microsoft Office XML profiles and trigger unattended deployment.
+            {t('odt.description')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleBypassRegionalLock}
             disabled={isButtonDisabled}
-            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+            title={!isElevated && !dryRunMode ? t('odt.adminRequiredTitle') : ''}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-[6px] text-xs font-medium transition-all shadow-sm ${
               isButtonDisabled
                 ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border opacity-50'
@@ -244,12 +249,12 @@ export function OdtView() {
             }`}
           >
             <ShieldAlert className="h-3.5 w-3.5 text-brand" />
-            <span>Bypass Regional Lock</span>
+            <span>{t('odt.bypassLockBtn')}</span>
           </button>
           <button
             onClick={handleDeploy}
             disabled={isButtonDisabled}
-            title={!isElevated && !dryRunMode ? 'Administrator privileges required for live execution' : ''}
+            title={!isElevated && !dryRunMode ? t('odt.adminRequiredTitle') : ''}
             className={`flex items-center gap-2 px-4 py-2 rounded-[6px] text-xs font-medium transition-all shadow-sm ${
               isButtonDisabled
                 ? 'bg-surface-active text-text-muted cursor-not-allowed border border-border opacity-50'
@@ -261,13 +266,13 @@ export function OdtView() {
             ) : (
               <Play className="h-3.5 w-3.5 fill-current" />
             )}
-            <span>{isExecuting ? 'Deploying Office...' : 'Deploy Office'}</span>
+            <span>{isExecuting ? t('odt.deployingBtn') : t('odt.deployBtn')}</span>
           </button>
         </div>
       </div>
 
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="Office Deployment Tool Setup Execution" />
+      <AdminElevationBanner featureName={t('odt.title')} />
 
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -277,7 +282,7 @@ export function OdtView() {
           <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3">
             <div className="flex items-center gap-2 text-xs font-semibold text-text-primary border-b border-border-subtle pb-2">
               <Package className="h-4 w-4 text-brand" />
-              <span>1. Target Product Suites</span>
+              <span>{t('odt.productSection')}</span>
             </div>
             <div className="grid grid-cols-1 gap-2">
               {PRODUCT_OPTIONS.map((prod) => {
@@ -304,8 +309,8 @@ export function OdtView() {
                       className="mt-0.5 h-4 w-4 rounded border-border bg-surface text-brand disabled:cursor-not-allowed"
                     />
                     <div className="space-y-0.5 min-w-0 flex-1">
-                      <div className="text-xs font-medium text-text-primary">{prod.name}</div>
-                      <div className="text-[11px] text-text-muted">{prod.desc}</div>
+                      <div className="text-xs font-medium text-text-primary">{t(`odtProducts.${prod.id}Name`)}</div>
+                      <div className="text-[11px] text-text-muted">{t(`odtProducts.${prod.id}Desc`)}</div>
                       <div className="text-[10px] font-mono text-brand/80">{prod.id}</div>
                     </div>
                   </div>
@@ -318,12 +323,12 @@ export function OdtView() {
           <div className="rounded-[6px] border border-border bg-surface p-4 space-y-4">
             <div className="flex items-center gap-2 text-xs font-semibold text-text-primary border-b border-border-subtle pb-2">
               <Layers className="h-4 w-4 text-brand" />
-              <span>2. Architecture & Channel Settings</span>
+              <span>{t('odt.archChannelSection')}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="text-[11px] font-medium text-text-secondary uppercase font-mono tracking-wider">
-                  Architecture
+                  {t('odt.architectureLabel')}
                 </label>
                 <select
                   value={odtConfig.architecture}
@@ -331,14 +336,14 @@ export function OdtView() {
                   onChange={(e) => updateOdtConfig({ architecture: e.target.value as 'x64' | 'x86' })}
                   className="mt-1.5 w-full rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs text-text-primary focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value="x64">64-bit (x64)</option>
-                  <option value="x86">32-bit (x86)</option>
+                  <option value="x64">{t('odtArchs.x64')}</option>
+                  <option value="x86">{t('odtArchs.x86')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="text-[11px] font-medium text-text-secondary uppercase font-mono tracking-wider">
-                  Update Channel
+                  {t('odt.channelLabel')}
                 </label>
                 <select
                   value={odtConfig.channel}
@@ -348,15 +353,15 @@ export function OdtView() {
                   }
                   className="mt-1.5 w-full rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs text-text-primary focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value="Current">Current Channel</option>
-                  <option value="MonthlyEnterprise">Monthly Enterprise</option>
-                  <option value="SemiAnnual">Semi-Annual Enterprise</option>
+                  <option value="Current">{t('odtChannels.Current')}</option>
+                  <option value="MonthlyEnterprise">{t('odtChannels.MonthlyEnterprise')}</option>
+                  <option value="SemiAnnual">{t('odtChannels.SemiAnnual')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="text-[11px] font-medium text-text-secondary uppercase font-mono tracking-wider">
-                  Language
+                  {t('odt.languageLabel')}
                 </label>
                 <select
                   value={odtConfig.language}
@@ -366,7 +371,7 @@ export function OdtView() {
                 >
                   {LANGUAGE_OPTIONS.map((lang) => (
                     <option key={lang.code} value={lang.code}>
-                      {lang.label}
+                      {t(`odtLangs.${lang.code}`)}
                     </option>
                   ))}
                 </select>
@@ -379,10 +384,10 @@ export function OdtView() {
             <div className="flex items-center justify-between border-b border-border-subtle pb-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">
                 <SlidersHorizontal className="h-4 w-4 text-brand" />
-                <span>3. Exclude Specific Applications</span>
+                <span>{t('odt.excludeSection')}</span>
               </div>
               <span className="text-[11px] font-mono text-text-muted">
-                {odtConfig.excludedApps.length} excluded
+                {t('odt.excludedCount', { count: odtConfig.excludedApps.length })}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -407,7 +412,7 @@ export function OdtView() {
                       readOnly
                       className="h-3.5 w-3.5 rounded border-border text-status-warning disabled:cursor-not-allowed"
                     />
-                    <span className="truncate">{app.name}</span>
+                    <span className="truncate">{t(`odtApps.${app.id}`)}</span>
                   </button>
                 );
               })}
@@ -418,8 +423,8 @@ export function OdtView() {
           <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs font-medium text-text-primary">Remove Previous Office Versions</div>
-                <div className="text-[11px] text-text-muted">Clean uninstall existing MSI/C2R Office installations before setup</div>
+                <div className="text-xs font-medium text-text-primary">{t('odt.removeExistingTitle')}</div>
+                <div className="text-[11px] text-text-muted">{t('odt.removeExistingDesc')}</div>
               </div>
               <input
                 type="checkbox"
@@ -432,8 +437,8 @@ export function OdtView() {
 
             <div className="flex items-center justify-between border-t border-border-subtle pt-3">
               <div>
-                <div className="text-xs font-medium text-text-primary">Auto Accept EULA</div>
-                <div className="text-[11px] text-text-muted">Suppress license agreement prompt during silent installation</div>
+                <div className="text-xs font-medium text-text-primary">{t('odt.autoEulaTitle')}</div>
+                <div className="text-[11px] text-text-muted">{t('odt.autoEulaDesc')}</div>
               </div>
               <input
                 type="checkbox"
@@ -452,7 +457,7 @@ export function OdtView() {
             <div className="flex items-center justify-between border-b border-border pb-3 mb-3">
               <div className="flex items-center gap-2">
                 <FileCode className="h-4 w-4 text-brand" />
-                <span className="text-xs font-semibold text-text-primary">Live XML Profile Preview</span>
+                <span className="text-xs font-semibold text-text-primary">{t('odt.livePreviewTitle')}</span>
               </div>
               <button
                 onClick={handleCopyXml}
@@ -461,12 +466,12 @@ export function OdtView() {
                 {copied ? (
                   <>
                     <Check className="h-3 w-3 text-status-success" />
-                    <span className="text-status-success">Copied!</span>
+                    <span className="text-status-success">{t('odt.copiedBtn')}</span>
                   </>
                 ) : (
                   <>
                     <Copy className="h-3 w-3" />
-                    <span>Copy XML</span>
+                    <span>{t('odt.copyXmlBtn')}</span>
                   </>
                 )}
               </button>
@@ -474,12 +479,12 @@ export function OdtView() {
 
             <div className="flex-1 rounded-[6px] border border-border-subtle bg-surface-subtle p-3 overflow-auto max-h-[520px]">
               <pre className="font-mono text-[11px] leading-relaxed text-text-code whitespace-pre-wrap select-all">
-                {generatedXml || '<!-- Generating ODT Configuration XML... -->'}
+                {generatedXml || t('odt.generatingXml')}
               </pre>
             </div>
             <div className="mt-3 flex items-center justify-between text-[11px] text-text-muted font-mono">
-              <span>Target: configuration.xml</span>
-              <span className="tabular-nums">{generatedXml.length} bytes</span>
+              <span>{t('odt.targetFile')}</span>
+              <span className="tabular-nums">{t('odt.bytes', { count: generatedXml.length })}</span>
             </div>
           </div>
         </div>

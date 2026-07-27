@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AlertTriangle, Terminal, X, ShieldAlert } from 'lucide-react';
 
 export function SafetyConfirmationModal() {
+  const { t } = useTranslation();
   const modal = useAppStore((s) => s.pendingSafetyModal);
   const closeModal = useAppStore((s) => s.closeSafetyModal);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
@@ -34,12 +36,12 @@ export function SafetyConfirmationModal() {
       const errMsg = typeof err === 'string' ? err : (err as Error)?.message || String(err);
       useAppStore.getState().addToast({
         type: 'error',
-        title: 'Action Execution Failed',
+        title: t('safety_modal.error_title'),
         message: errMsg,
       });
       useAppStore.getState().addLog({
         level: 'error',
-        message: `Action execution error: ${errMsg}`,
+        message: t('safety_modal.error_log', { error: errMsg }),
       });
     } finally {
       setIsSubmitting(false);
@@ -71,7 +73,7 @@ export function SafetyConfirmationModal() {
                 {modal.title}
               </h3>
               <span className="text-[11px] font-mono uppercase tracking-wider text-text-muted">
-                Risk Level:{' '}
+                {t('safety_modal.risk_level')}{' '}
                 <span className={isCritical ? 'text-status-danger font-bold' : 'text-status-warning font-bold'}>
                   {modal.riskLevel}
                 </span>
@@ -81,7 +83,7 @@ export function SafetyConfirmationModal() {
           <button
             onClick={closeModal}
             className="rounded-[6px] p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"
-            aria-label="Close modal"
+            aria-label={t('safety_modal.close_modal')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -94,8 +96,8 @@ export function SafetyConfirmationModal() {
           {/* Dry Run Toggle Card */}
           <div className="flex items-center justify-between rounded-[6px] border border-border-subtle bg-surface-subtle p-3">
             <div>
-              <div className="text-xs font-medium text-text-primary">Safety Mode (Dry-Run)</div>
-              <div className="text-[11px] text-text-muted">Simulate execution without applying real system changes</div>
+              <div className="text-xs font-medium text-text-primary">{t('safety_modal.safety_mode')}</div>
+              <div className="text-[11px] text-text-muted">{t('safety_modal.simulate_desc')}</div>
             </div>
             <input
               type="checkbox"
@@ -112,7 +114,7 @@ export function SafetyConfirmationModal() {
               className="flex items-center gap-2 text-xs font-mono text-brand hover:underline"
             >
               <Terminal className="h-3.5 w-3.5" />
-              {showCommands ? 'Hide exact commands' : `Inspect commands (${modal.commandsToRun.length})`}
+              {showCommands ? t('safety_modal.hide_commands') : t('safety_modal.inspect_commands', { count: modal.commandsToRun.length })}
             </button>
             {showCommands && (
               <div className="mt-2 max-h-40 overflow-y-auto rounded-[6px] border border-border-subtle bg-surface-subtle p-3 font-mono text-[11px] text-text-code">
@@ -129,7 +131,7 @@ export function SafetyConfirmationModal() {
           {isCritical && !dryRunMode && (
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-text-secondary">
-                Type <span className="font-mono text-status-danger font-bold">CONFIRM</span> to proceed:
+                {t('safety_modal.type')} <span className="font-mono text-status-danger font-bold">CONFIRM</span> {t('safety_modal.to_proceed')}
               </label>
               <input
                 type="text"
@@ -148,7 +150,7 @@ export function SafetyConfirmationModal() {
             onClick={closeModal}
             className="rounded-[6px] border border-border px-4 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
           >
-            Cancel
+            {t('safety_modal.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -160,10 +162,10 @@ export function SafetyConfirmationModal() {
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
             {isSubmitting
-              ? 'Processing...'
+              ? t('safety_modal.processing')
               : dryRunMode
-              ? 'Simulate in Dry-Run'
-              : 'Execute Live Action'}
+              ? t('safety_modal.simulate_dry_run')
+              : t('safety_modal.execute_live')}
           </button>
         </div>
       </div>

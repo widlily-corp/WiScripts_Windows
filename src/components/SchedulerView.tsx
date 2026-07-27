@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { ScheduledTaskItem } from '../types';
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export function SchedulerView() {
+  const { t } = useTranslation();
   const scheduledTasks = useAppStore((s) => s.scheduledTasks);
   const isSchedulerLoading = useAppStore((s) => s.isSchedulerLoading);
   const fetchScheduledTasks = useAppStore((s) => s.fetchScheduledTasks);
@@ -66,7 +68,7 @@ export function SchedulerView() {
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-[4px] bg-surface-subtle text-text-muted border border-border-subtle font-bold">
           <PauseCircle className="h-3 w-3 text-text-muted" />
-          Disabled
+          {t('schedulerView.disabled')}
         </span>
       );
     }
@@ -74,14 +76,14 @@ export function SchedulerView() {
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-[4px] bg-brand/10 text-brand border border-brand/30 font-bold">
           <PlayCircle className="h-3 w-3 text-brand animate-pulse" />
-          Running
+          {t('schedulerView.running')}
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase px-2 py-0.5 rounded-[4px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
         <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-        Ready
+        {t('schedulerView.ready')}
       </span>
     );
   };
@@ -96,16 +98,16 @@ export function SchedulerView() {
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-brand" />
             <h2 className="text-base font-semibold text-text-primary">
-              Task Scheduler Manager
+              {t('schedulerView.title')}
             </h2>
             {dryRunMode && (
               <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-[4px] font-bold">
-                Dry-Run Preview
+                {t('schedulerView.dryRunPreview')}
               </span>
             )}
           </div>
           <p className="text-xs text-text-secondary">
-            Inspect, toggle, and trigger Windows Task Scheduler background services and automated jobs.
+            {t('schedulerView.description')}
           </p>
         </div>
 
@@ -115,7 +117,7 @@ export function SchedulerView() {
           className="flex items-center gap-2 rounded-[6px] border border-border-subtle bg-surface-subtle px-3 py-1.5 text-xs font-mono text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 text-brand ${isSchedulerLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
+          <span>{t('schedulerView.refresh')}</span>
         </button>
       </div>
 
@@ -123,7 +125,7 @@ export function SchedulerView() {
       <div className="grid grid-cols-4 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Total Tasks</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('schedulerView.totalTasks')}</div>
             <div className="text-2xl font-bold font-mono text-text-primary mt-1">{totalCount}</div>
           </div>
           <Layers className="h-6 w-6 text-brand opacity-60" />
@@ -131,7 +133,7 @@ export function SchedulerView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Ready</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('schedulerView.ready')}</div>
             <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">{readyCount}</div>
           </div>
           <CheckCircle2 className="h-6 w-6 text-emerald-400 opacity-60" />
@@ -139,7 +141,7 @@ export function SchedulerView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Disabled</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('schedulerView.disabled')}</div>
             <div className="text-2xl font-bold font-mono text-text-muted mt-1">{disabledCount}</div>
           </div>
           <PauseCircle className="h-6 w-6 text-text-muted opacity-60" />
@@ -147,7 +149,7 @@ export function SchedulerView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Running</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('schedulerView.running')}</div>
             <div className="text-2xl font-bold font-mono text-brand mt-1">{runningCount}</div>
           </div>
           <PlayCircle className="h-6 w-6 text-brand opacity-60" />
@@ -162,7 +164,7 @@ export function SchedulerView() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search scheduled tasks by name, path, author, or command..."
+            placeholder={t('schedulerView.searchPlaceholder')}
             className="w-full pl-9 pr-4 py-2 bg-surface border border-border rounded-[6px] text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
           />
         </div>
@@ -177,7 +179,7 @@ export function SchedulerView() {
             }`}
           >
             <Filter className="h-3.5 w-3.5" />
-            <span>Telemetry Only</span>
+            <span>{t('schedulerView.telemetryOnly')}</span>
           </button>
 
           <select
@@ -185,10 +187,10 @@ export function SchedulerView() {
             onChange={(e) => setStateFilter(e.target.value)}
             className="bg-surface border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-brand"
           >
-            <option value="all">All States</option>
-            <option value="ready">Ready</option>
-            <option value="running">Running</option>
-            <option value="disabled">Disabled</option>
+            <option value="all">{t('schedulerView.allStates')}</option>
+            <option value="ready">{t('schedulerView.ready')}</option>
+            <option value="running">{t('schedulerView.running')}</option>
+            <option value="disabled">{t('schedulerView.disabled')}</option>
           </select>
         </div>
       </div>
@@ -198,18 +200,18 @@ export function SchedulerView() {
         {filteredTasks.length === 0 ? (
           <div className="p-12 text-center text-text-muted space-y-2">
             <AlertTriangle className="h-8 w-8 text-text-muted mx-auto" />
-            <div className="text-sm font-medium">No scheduled tasks match your search query.</div>
+            <div className="text-sm font-medium">{t('schedulerView.noScheduledTasks')}</div>
           </div>
         ) : (
           <table className="w-full text-left text-xs">
             <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
               <tr>
-                <th className="py-3 px-4 font-semibold">Enable</th>
-                <th className="py-3 px-4 font-semibold">Task Name & Path</th>
-                <th className="py-3 px-4 font-semibold">Author</th>
-                <th className="py-3 px-4 font-semibold">State</th>
-                <th className="py-3 px-4 font-semibold">Action Command</th>
-                <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                <th className="py-3 px-4 font-semibold">{t('schedulerView.enable')}</th>
+                <th className="py-3 px-4 font-semibold">{t('schedulerView.taskNameAndPath')}</th>
+                <th className="py-3 px-4 font-semibold">{t('schedulerView.author')}</th>
+                <th className="py-3 px-4 font-semibold">{t('schedulerView.state')}</th>
+                <th className="py-3 px-4 font-semibold">{t('schedulerView.actionCommand')}</th>
+                <th className="py-3 px-4 font-semibold text-right">{t('schedulerView.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -259,10 +261,10 @@ export function SchedulerView() {
                     <button
                       onClick={() => runScheduledTask(task.taskName, task.taskPath)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 transition-colors font-mono text-[11px] font-semibold"
-                      title="Run Task Now"
+                      title={t('schedulerView.runTaskNowTooltip')}
                     >
                       <Play className="h-3 w-3 fill-current" />
-                      <span>Run</span>
+                      <span>{t('schedulerView.run')}</span>
                     </button>
                   </td>
                 </tr>

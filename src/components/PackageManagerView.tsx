@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { WingetPackage, UwpAppInfo } from '../types';
@@ -25,6 +26,7 @@ const QUICK_PRESETS = [
 ];
 
 export function PackageManagerView() {
+  const { t } = useTranslation();
   const [activeSubTab, setActiveSubTab] = useState<'winget' | 'uwp'>('winget');
   const [searchQuery, setSearchQuery] = useState('');
   const [uwpFilter, setUwpFilter] = useState('');
@@ -113,10 +115,10 @@ export function PackageManagerView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Package className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">Package & Bloatware Manager</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('packageManager.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Search and manage WinGet packages or clean preinstalled UWP AppX bloatware.
+            {t('packageManager.desc')}
           </p>
         </div>
 
@@ -131,7 +133,7 @@ export function PackageManagerView() {
             }`}
           >
             <Box className="h-3.5 w-3.5" />
-            <span>WinGet Packages</span>
+            <span>{t('packageManager.wingetPackages')}</span>
           </button>
           <button
             onClick={() => setActiveSubTab('uwp')}
@@ -142,7 +144,7 @@ export function PackageManagerView() {
             }`}
           >
             <AppWindow className="h-3.5 w-3.5" />
-            <span>UWP App Debloater</span>
+            <span>{t('packageManager.uwpDebloater')}</span>
           </button>
         </div>
       </div>
@@ -162,7 +164,7 @@ export function PackageManagerView() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search packages by name or ID (e.g. 7zip, Git.Git, vscode)..."
+                  placeholder={t('packageManager.searchPlaceholder')}
                   className="w-full rounded-[6px] border border-border bg-surface-subtle pl-9 pr-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
                 />
               </div>
@@ -176,13 +178,13 @@ export function PackageManagerView() {
                 ) : (
                   <Search className="h-4 w-4" />
                 )}
-                <span>Search</span>
+                <span>{t('packageManager.search')}</span>
               </button>
             </form>
 
             {/* Quick Preset Buttons */}
             <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border-subtle/50">
-              <span className="text-[11px] text-text-muted font-mono uppercase">Quick Searches:</span>
+              <span className="text-[11px] text-text-muted font-mono uppercase">{t('packageManager.quickSearches')}</span>
               {QUICK_PRESETS.map((preset) => (
                 <button
                   key={preset.id}
@@ -200,11 +202,11 @@ export function PackageManagerView() {
           <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
-                Package Search Results ({wingetPackages.length})
+                {t('packageManager.searchResults', { count: wingetPackages.length })}
               </h3>
               {dryRunMode && (
                 <span className="text-[10px] bg-status-successSubtle text-status-success px-2 py-0.5 rounded border border-status-success/30 font-mono">
-                  Dry-Run Active
+                  {t('packageManager.dryRunActive')}
                 </span>
               )}
             </div>
@@ -212,22 +214,22 @@ export function PackageManagerView() {
             {isWingetSearching ? (
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-text-muted text-xs">
                 <Loader2 className="h-6 w-6 animate-spin text-brand" />
-                <span>Executing WinGet package search query...</span>
+                <span>{t('packageManager.executingSearch')}</span>
               </div>
             ) : wingetPackages.length === 0 ? (
               <div className="py-12 text-center text-xs text-text-muted italic border border-dashed border-border-subtle rounded-[6px]">
-                No WinGet packages returned. Enter a search term above or click a quick preset to begin.
+                {t('packageManager.noPackages')}
               </div>
             ) : (
               <div className="overflow-x-auto border border-border-subtle rounded-[6px]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-border-subtle bg-surface-subtle text-text-muted font-mono text-[11px] uppercase">
-                      <th className="py-2.5 px-3">Name</th>
-                      <th className="py-2.5 px-3">Package ID</th>
-                      <th className="py-2.5 px-3">Version</th>
-                      <th className="py-2.5 px-3">Source</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colName')}</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colPackageId')}</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colVersion')}</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colSource')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('packageManager.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle/60">
@@ -248,7 +250,7 @@ export function PackageManagerView() {
                             ) : (
                               <Download className="h-3 w-3" />
                             )}
-                            <span>Install</span>
+                            <span>{t('packageManager.install')}</span>
                           </button>
                           <button
                             onClick={() => handleUpdate(pkg.id)}
@@ -260,7 +262,7 @@ export function PackageManagerView() {
                             ) : (
                               <ArrowUpCircle className="h-3 w-3" />
                             )}
-                            <span>Upgrade</span>
+                            <span>{t('packageManager.upgrade')}</span>
                           </button>
                         </td>
                       </tr>
@@ -284,7 +286,7 @@ export function PackageManagerView() {
                 type="text"
                 value={uwpFilter}
                 onChange={(e) => setUwpFilter(e.target.value)}
-                placeholder="Filter UWP packages (e.g. Xbox, Bing, YourPhone)..."
+                placeholder={t('packageManager.filterUwpPlaceholder')}
                 className="w-full rounded-[6px] border border-border bg-surface-subtle pl-9 pr-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
               />
             </div>
@@ -297,7 +299,7 @@ export function PackageManagerView() {
                   onChange={(e) => setHideFrameworks(e.target.checked)}
                   className="rounded border-border bg-surface-subtle text-brand focus:ring-0"
                 />
-                <span>Hide Framework Packages</span>
+                <span>{t('packageManager.hideFrameworks')}</span>
               </label>
 
               <button
@@ -306,7 +308,7 @@ export function PackageManagerView() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-[6px] border border-border bg-surface-subtle text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-40 transition-colors"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isUwpLoading ? 'animate-spin' : ''}`} />
-                <span>Refresh List</span>
+                <span>{t('packageManager.refreshList')}</span>
               </button>
             </div>
           </div>
@@ -315,11 +317,11 @@ export function PackageManagerView() {
           <div className="rounded-[6px] border border-border bg-surface p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider font-mono">
-                Installed AppX Packages ({filteredUwpApps.length} shown of {uwpApps.length})
+                {t('packageManager.installedAppX', { count: filteredUwpApps.length, total: uwpApps.length })}
               </h3>
               {dryRunMode && (
                 <span className="text-[10px] bg-status-successSubtle text-status-success px-2 py-0.5 rounded border border-status-success/30 font-mono">
-                  Dry-Run Active
+                  {t('packageManager.dryRunActive')}
                 </span>
               )}
             </div>
@@ -327,21 +329,21 @@ export function PackageManagerView() {
             {isUwpLoading ? (
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-text-muted text-xs">
                 <Loader2 className="h-6 w-6 animate-spin text-brand" />
-                <span>Scanning system for installed UWP AppX packages...</span>
+                <span>{t('packageManager.scanningUwp')}</span>
               </div>
             ) : filteredUwpApps.length === 0 ? (
               <div className="py-12 text-center text-xs text-text-muted italic border border-dashed border-border-subtle rounded-[6px]">
-                No UWP packages match current filter criteria.
+                {t('packageManager.noUwpMatch')}
               </div>
             ) : (
               <div className="overflow-x-auto border border-border-subtle rounded-[6px] max-h-[460px]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="sticky top-0 bg-surface-subtle border-b border-border-subtle text-text-muted font-mono text-[11px] uppercase">
                     <tr>
-                      <th className="py-2.5 px-3">Application Name</th>
-                      <th className="py-2.5 px-3">Package Full Name</th>
-                      <th className="py-2.5 px-3">Publisher ID</th>
-                      <th className="py-2.5 px-3 text-right">Action</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colAppName')}</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colPackageFullName')}</th>
+                      <th className="py-2.5 px-3">{t('packageManager.colPublisherId')}</th>
+                      <th className="py-2.5 px-3 text-right">{t('packageManager.colActions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle/60">
@@ -365,7 +367,7 @@ export function PackageManagerView() {
                             ) : (
                               <Trash2 className="h-3 w-3" />
                             )}
-                            <span>Uninstall</span>
+                            <span>{t('packageManager.uninstall')}</span>
                           </button>
                         </td>
                       </tr>

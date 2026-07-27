@@ -1,8 +1,10 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { Sparkles, Download, RefreshCw, X, Loader2 } from 'lucide-react';
 
 export function UpdateBanner() {
+  const { t } = useTranslation();
   const updateStatus = useAppStore((s) => s.updateStatus);
   const updateInfo = useAppStore((s) => s.updateInfo);
   const updateProgress = useAppStore((s) => s.updateProgress);
@@ -35,17 +37,17 @@ export function UpdateBanner() {
         <div className="min-w-0 truncate">
           <span className="font-semibold text-text-primary">
             {updateStatus === 'ready'
-              ? 'Update ready to install!'
+              ? t('update_banner.ready')
               : updateStatus === 'downloading'
-              ? `Downloading WiScripts v${updateInfo?.version || 'new'} (${updateProgress}%)`
-              : `WiScripts v${updateInfo?.version || 'new'} is available`}
+              ? t('update_banner.downloading', { version: updateInfo?.version || 'new', progress: updateProgress })
+              : t('update_banner.available', { version: updateInfo?.version || 'new' })}
           </span>
           <span className="text-text-muted ml-2 hidden sm:inline">
             {updateStatus === 'ready'
-              ? 'Restart application to finish updating.'
+              ? t('update_banner.restart_desc')
               : updateStatus === 'downloading'
-              ? 'Please keep the application open.'
-              : `Current version is v${updateInfo?.currentVersion || '0.3.0'}.`}
+              ? t('update_banner.keep_open_desc')
+              : t('update_banner.current_version', { currentVersion: updateInfo?.currentVersion || '0.3.0' })}
           </span>
         </div>
       </div>
@@ -57,14 +59,14 @@ export function UpdateBanner() {
             className="flex items-center gap-1.5 px-3 py-1 bg-brand hover:bg-brand-hover text-white rounded-[6px] font-medium transition-colors text-xs"
           >
             <Download className="h-3.5 w-3.5" />
-            <span>Update Now</span>
+            <span>{t('update_banner.update_now')}</span>
           </button>
         )}
 
         {updateStatus === 'downloading' && (
           <div className="flex items-center gap-1.5 px-3 py-1 bg-surface-active text-text-secondary rounded-[6px] text-xs">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
-            <span>Downloading... {updateProgress}%</span>
+            <span>{t('update_banner.downloading_progress', { progress: updateProgress })}</span>
           </div>
         )}
 
@@ -74,14 +76,14 @@ export function UpdateBanner() {
             className="flex items-center gap-1.5 px-3 py-1 bg-status-success hover:opacity-90 text-white rounded-[6px] font-medium transition-colors text-xs"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Restart & Apply</span>
+            <span>{t('update_banner.restart_apply')}</span>
           </button>
         )}
 
         <button
           onClick={dismissUpdateBanner}
           className="text-text-muted hover:text-text-primary p-1 rounded transition-colors"
-          aria-label="Dismiss banner"
+          aria-label={t('update_banner.dismiss')}
         >
           <X className="h-4 w-4" />
         </button>

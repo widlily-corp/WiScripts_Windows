@@ -35,10 +35,10 @@ export function SettingsView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-brand" />
-            <h2 className="text-base font-semibold text-text-primary">Application Settings & Configuration</h2>
+            <h2 className="text-base font-semibold text-text-primary">{t('settings.title')}</h2>
           </div>
           <p className="text-xs text-text-secondary">
-            Manage execution safety defaults, inspect design system theme specifications, and view open-source credits.
+            {t('settings.desc')}
           </p>
         </div>
       </div>
@@ -50,14 +50,14 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Shield className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Execution Safety Mode</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.safetyModeTitle')}</h3>
             </div>
 
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <div className="text-xs font-medium text-text-primary">Global Dry-Run Default</div>
+                <div className="text-xs font-medium text-text-primary">{t('settings.globalDryRunLabel')}</div>
                 <p className="text-xs text-text-secondary leading-relaxed">
-                  When enabled, all optimization commands, ODT setups, and MAS activation routines run in simulation mode without writing changes to host registry or services.
+                  {t('settings.globalDryRunDesc')}
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
@@ -76,7 +76,7 @@ export function SettingsView() {
                 ? 'border-brand/40 bg-brand-subtle text-brand'
                 : 'border-status-warning/40 bg-status-warningSubtle text-status-warning'
             }`}>
-              Status: Safety Mode is currently <span className="font-bold">{dryRunMode ? 'ACTIVE (Simulate Only)' : 'DISABLED (Live Modifications)'}</span>
+              {dryRunMode ? t('settings.safetyStatusActive') : t('settings.safetyStatusDisabled')}
             </div>
           </div>
 
@@ -84,14 +84,14 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <RefreshCw className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Software Auto-Updater</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.autoUpdaterTitle')}</h3>
             </div>
 
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <div className="text-xs font-medium text-text-primary">Automatic Background Checks</div>
+                <div className="text-xs font-medium text-text-primary">{t('settings.autoCheckLabel')}</div>
                 <p className="text-xs text-text-secondary leading-relaxed">
-                  Periodically check GitHub Releases endpoint for signed binary updates.
+                  {t('settings.autoCheckDesc')}
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
@@ -107,8 +107,8 @@ export function SettingsView() {
 
             <div className="flex items-center justify-between pt-2 border-t border-border-subtle text-xs">
               <div>
-                <span className="text-text-muted">Last Checked: </span>
-                <span className="text-text-primary font-mono">{lastUpdateCheckTime || 'Not checked yet'}</span>
+                <span className="text-text-muted">{t('settings.lastChecked')} </span>
+                <span className="text-text-primary font-mono">{lastUpdateCheckTime || '—'}</span>
               </div>
               <button
                 onClick={() => checkForUpdates(false)}
@@ -120,30 +120,30 @@ export function SettingsView() {
                 ) : (
                   <Sparkles className="h-3.5 w-3.5 text-brand" />
                 )}
-                <span>{updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}</span>
+                <span>{updateStatus === 'checking' ? t('settings.checkingBtn') : t('settings.checkUpdatesBtn')}</span>
               </button>
             </div>
 
             {updateStatus === 'available' && (
               <div className="rounded-[6px] border border-brand/40 bg-brand-subtle p-3 flex items-center justify-between text-xs text-brand">
-                <span>Update v{updateInfo?.version} is available!</span>
+                <span>{t('settings.updateAvailable', { ver: updateInfo?.version })}</span>
                 <button
                   onClick={() => downloadAndInstallUpdate()}
                   className="px-2.5 py-1 bg-brand text-white font-medium rounded-[4px] hover:bg-brand-hover transition-colors"
                 >
-                  Download & Install
+                  {t('settings.downloadInstallBtn')}
                 </button>
               </div>
             )}
 
             {updateStatus === 'ready' && (
               <div className="rounded-[6px] border border-status-success/40 bg-status-successSubtle p-3 flex items-center justify-between text-xs text-status-success">
-                <span>Update ready! Restart to finish.</span>
+                <span>{t('settings.updateReady')}</span>
                 <button
                   onClick={() => downloadAndInstallUpdate()}
                   className="px-2.5 py-1 bg-status-success text-white font-medium rounded-[4px] hover:opacity-90 transition-colors"
                 >
-                  Restart Now
+                  {t('settings.restartNowBtn')}
                 </button>
               </div>
             )}
@@ -153,11 +153,11 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Sparkles className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Language & Localization</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.languageTitle')}</h3>
             </div>
             <div className="flex items-center justify-between">
               <div className="text-xs text-text-secondary leading-relaxed">
-                Choose the interface language.
+                {t('settings.languageDesc')}
               </div>
               <div className="flex bg-surface-active rounded-[6px] p-1 border border-border">
                 <button
@@ -188,23 +188,23 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-3">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Cpu className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Runtime Environment</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.runtimeEnvTitle')}</h3>
             </div>
             <div className="space-y-2 font-mono text-xs">
               <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-text-muted">Application Version</span>
+                <span className="text-text-muted">{t('settings.appVersion')}</span>
                 <span className="text-text-primary font-semibold">{appVersion}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-text-muted">Tauri Framework</span>
+                <span className="text-text-muted">{t('settings.tauriFramework')}</span>
                 <span className="text-text-primary">v2.0 (Rust Desktop IPC)</span>
               </div>
               <div className="flex justify-between py-1 border-b border-border-subtle">
-                <span className="text-text-muted">UI Architecture</span>
+                <span className="text-text-muted">{t('settings.uiArch')}</span>
                 <span className="text-text-primary">React 18 + Tailwind CSS</span>
               </div>
               <div className="flex justify-between py-1">
-                <span className="text-text-muted">Target Platform</span>
+                <span className="text-text-muted">{t('settings.targetPlatform')}</span>
                 <span className="text-text-primary">Windows 10 / 11 x64</span>
               </div>
             </div>
@@ -217,10 +217,10 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-3">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Palette className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Design System: Refined Minimal</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.designSystemTitle')}</h3>
             </div>
             <p className="text-xs text-text-secondary leading-relaxed">
-              Designed following strict Refined Minimal principles (Linear/Stripe style) with muted contrast, 1px hairlines, and Geist Mono typography.
+              {t('settings.designSystemDesc')}
             </p>
 
             <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
@@ -247,7 +247,7 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-3">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Heart className="h-4 w-4 text-status-danger" />
-              <h3 className="text-sm font-semibold text-text-primary">Repository & Open Source Credits</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.creditsTitle')}</h3>
             </div>
 
             <div className="space-y-3 text-xs">

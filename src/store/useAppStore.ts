@@ -224,7 +224,7 @@ const DEFAULT_OPTIMIZATIONS: OptimizationItem[] = [
     description: 'Disables Customer Experience Improvement Program scheduled tasks in Task Scheduler.',
     riskLevel: 'low',
     isReversible: true,
-    powershellCommand: "Disable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator', 'UsbCeip'",
+    powershellCommand: "Disable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator', 'UsbCeip' -ErrorAction SilentlyContinue",
     undoCommand: "Enable-ScheduledTask -TaskPath '\\Microsoft\\Windows\\Customer Experience Improvement Program\\' -TaskName 'Consolidator', 'UsbCeip'",
     isRecommended: true,
     isSelected: true,

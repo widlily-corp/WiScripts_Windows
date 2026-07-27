@@ -1,10 +1,30 @@
 import React from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { Settings, Shield, Palette, Terminal, Heart, Layers, Cpu, Code2 } from 'lucide-react';
+import {
+  Settings,
+  Shield,
+  Palette,
+  Terminal,
+  Heart,
+  Layers,
+  Cpu,
+  Code2,
+  RefreshCw,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
 
 export function SettingsView() {
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const setDryRunMode = useAppStore((s) => s.setDryRunMode);
+  const appVersion = useAppStore((s) => s.appVersion);
+  const updateStatus = useAppStore((s) => s.updateStatus);
+  const updateInfo = useAppStore((s) => s.updateInfo);
+  const autoCheckUpdates = useAppStore((s) => s.autoCheckUpdates);
+  const setAutoCheckUpdates = useAppStore((s) => s.setAutoCheckUpdates);
+  const lastUpdateCheckTime = useAppStore((s) => s.lastUpdateCheckTime);
+  const checkForUpdates = useAppStore((s) => s.checkForUpdates);
+  const downloadAndInstallUpdate = useAppStore((s) => s.downloadAndInstallUpdate);
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
@@ -58,7 +78,76 @@ export function SettingsView() {
             </div>
           </div>
 
-          {/* Card 2: Environment Info */}
+          {/* Card 2: Software Auto-Updater */}
+          <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+            <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
+              <RefreshCw className="h-4 w-4 text-brand" />
+              <h3 className="text-sm font-semibold text-text-primary">Software Auto-Updater</h3>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-text-primary">Automatic Background Checks</div>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Periodically check GitHub Releases endpoint for signed binary updates.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={autoCheckUpdates}
+                  onChange={(e) => setAutoCheckUpdates(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-surface-active peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"></div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-border-subtle text-xs">
+              <div>
+                <span className="text-text-muted">Last Checked: </span>
+                <span className="text-text-primary font-mono">{lastUpdateCheckTime || 'Not checked yet'}</span>
+              </div>
+              <button
+                onClick={() => checkForUpdates(false)}
+                disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-hover hover:bg-surface-active border border-border text-text-primary rounded-[6px] font-medium transition-colors disabled:opacity-50"
+              >
+                {updateStatus === 'checking' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 text-brand" />
+                )}
+                <span>{updateStatus === 'checking' ? 'Checking...' : 'Check for Updates'}</span>
+              </button>
+            </div>
+
+            {updateStatus === 'available' && (
+              <div className="rounded-[6px] border border-brand/40 bg-brand-subtle p-3 flex items-center justify-between text-xs text-brand">
+                <span>Update v{updateInfo?.version} is available!</span>
+                <button
+                  onClick={() => downloadAndInstallUpdate()}
+                  className="px-2.5 py-1 bg-brand text-white font-medium rounded-[4px] hover:bg-brand-hover transition-colors"
+                >
+                  Download & Install
+                </button>
+              </div>
+            )}
+
+            {updateStatus === 'ready' && (
+              <div className="rounded-[6px] border border-status-success/40 bg-status-successSubtle p-3 flex items-center justify-between text-xs text-status-success">
+                <span>Update ready! Restart to finish.</span>
+                <button
+                  onClick={() => downloadAndInstallUpdate()}
+                  className="px-2.5 py-1 bg-status-success text-white font-medium rounded-[4px] hover:opacity-90 transition-colors"
+                >
+                  Restart Now
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Card 3: Environment Info */}
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-3">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <Cpu className="h-4 w-4 text-brand" />
@@ -67,7 +156,7 @@ export function SettingsView() {
             <div className="space-y-2 font-mono text-xs">
               <div className="flex justify-between py-1 border-b border-border-subtle">
                 <span className="text-text-muted">Application Version</span>
-                <span className="text-text-primary font-semibold">2.0.0</span>
+                <span className="text-text-primary font-semibold">{appVersion}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-border-subtle">
                 <span className="text-text-muted">Tauri Framework</span>

@@ -3,12 +3,17 @@ use crate::dns_context;
 use crate::driver_backup;
 use crate::error::AppError;
 use crate::mas::{self, ActivationMethod};
+use crate::metrics;
 use crate::odt::{self, OdtConfig};
 use crate::optimization::{self, OptimizationItem};
 use crate::packages::{self, UwpAppInfo, WingetPackage};
 use crate::profiles::{self, OptimizationProfile};
-use crate::runner::{DryRunRunner, ExecutionSummary, RealRunner};
+use crate::runner::{CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
+use crate::scheduler;
+use crate::startup;
+use crate::system_restore::{self, RestorePoint};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +86,11 @@ fn probe_telemetry_status() -> String {
 }
 
 #[tauri::command]
+pub fn get_app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[tauri::command]
 pub async fn get_system_info() -> Result<SystemInfo, AppError> {
     log::info!("[IPC] get_system_info request received");
     let mut sys = sysinfo::System::new_all();
@@ -149,18 +159,21 @@ pub async fn execute_optimizations(
     app: tauri::AppHandle,
     selected_keys: Vec<String>,
     dry_run: bool,
+    create_restore_point: Option<bool>,
 ) -> Result<ExecutionSummary, AppError> {
+    let should_create = create_restore_point.unwrap_or(true);
     log::info!(
-        "[IPC] execute_optimizations request received: {} keys selected, dry_run={}",
+        "[IPC] execute_optimizations request received: {} keys selected, dry_run={}, create_restore_point={}",
         selected_keys.len(),
-        dry_run
+        dry_run,
+        should_create
     );
     let res = if dry_run {
         let runner = DryRunRunner::new();
-        optimization::execute(Some(&app), &runner, &selected_keys)
+        optimization::execute(Some(&app), &runner, &selected_keys, should_create)
     } else {
         let runner = RealRunner::new();
-        optimization::execute(Some(&app), &runner, &selected_keys)
+        optimization::execute(Some(&app), &runner, &selected_keys, should_create)
     };
 
     match &res {
@@ -214,6 +227,35 @@ pub async fn execute_odt_install(
             summary.total_duration_ms
         ),
         Err(err) => log::error!("[IPC] execute_odt_install failed: {:?}", err),
+    }
+
+    res
+}
+
+#[tauri::command]
+pub async fn execute_odt_regional_bypass(
+    app: tauri::AppHandle,
+    dry_run: bool,
+) -> Result<ExecutionSummary, String> {
+    log::info!(
+        "[IPC] execute_odt_regional_bypass request received: dry_run={}",
+        dry_run
+    );
+    let res = if dry_run {
+        let runner = DryRunRunner::new();
+        odt::execute_odt_regional_bypass(Some(&app), &runner, true)
+    } else {
+        let runner = RealRunner::new();
+        odt::execute_odt_regional_bypass(Some(&app), &runner, false)
+    };
+
+    match &res {
+        Ok(summary) => log::info!(
+            "[IPC] execute_odt_regional_bypass completed: success={}, total_duration={}ms",
+            summary.success,
+            summary.total_duration_ms
+        ),
+        Err(err) => log::error!("[IPC] execute_odt_regional_bypass failed: {:?}", err),
     }
 
     res
@@ -531,9 +573,211 @@ pub async fn backup_drivers(
     res
 }
 
+#[tauri::command]
+pub async fn create_restore_point(
+    _app: tauri::AppHandle,
+    description: String,
+    dry_run: bool,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] create_restore_point request received: description='{}', dry_run={}",
+        description,
+        dry_run
+    );
+    let start_time = std::time::Instant::now();
+    let res = if dry_run {
+        let runner = DryRunRunner::new();
+        system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
+    } else {
+        let runner = RealRunner::new();
+        system_restore::create_restore_point(&runner, &description).map_err(AppError::Execution)
+    };
+
+    match res {
+        Ok(action) => Ok(ExecutionSummary {
+            success: true,
+            executed_actions: vec![action],
+            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            is_dry_run: dry_run,
+        }),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn get_restore_points() -> Result<Vec<RestorePoint>, AppError> {
+    log::info!("[IPC] get_restore_points request received");
+    let runner = RealRunner::new();
+    system_restore::get_restore_points(&runner).map_err(AppError::Execution)
+}
+
+#[tauri::command]
+pub async fn restore_system_point(
+    _app: tauri::AppHandle,
+    sequence_number: u32,
+    dry_run: bool,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] restore_system_point request received: sequence_number={}, dry_run={}",
+        sequence_number,
+        dry_run
+    );
+    let start_time = std::time::Instant::now();
+    let res = if dry_run {
+        let runner = DryRunRunner::new();
+        system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+    } else {
+        let runner = RealRunner::new();
+        system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+    };
+
+    match res {
+        Ok(action) => Ok(ExecutionSummary {
+            success: true,
+            executed_actions: vec![action],
+            total_duration_ms: start_time.elapsed().as_millis() as u64,
+            is_dry_run: dry_run,
+        }),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn get_system_metrics(
+    state: tauri::State<'_, Arc<Mutex<metrics::MetricsCollector>>>,
+) -> Result<metrics::SystemMetricsPayload, AppError> {
+    log::debug!("[IPC] get_system_metrics request received");
+    let mut collector = state
+        .lock()
+        .map_err(|e| AppError::System(format!("Failed to lock metrics collector: {}", e)))?;
+    collector.collect()
+}
+
+#[tauri::command]
+pub async fn get_system_temperatures() -> Result<metrics::SystemTemperaturesPayload, AppError> {
+    log::debug!("[IPC] get_system_temperatures request received");
+    tauri::async_runtime::spawn_blocking(metrics::collect_temperatures)
+        .await
+        .map_err(|e| AppError::System(format!("Join error in get_system_temperatures: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn get_startup_items(
+    dry_run: Option<bool>,
+) -> Result<Vec<startup::StartupItem>, AppError> {
+    log::debug!("[IPC] get_startup_items request received, dry_run={:?}", dry_run);
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    startup::get_startup_items(runner.as_ref())
+}
+
+#[tauri::command]
+pub async fn toggle_startup_item(
+    id: String,
+    value_name: Option<String>,
+    location: Option<String>,
+    enable: bool,
+    dry_run: Option<bool>,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] toggle_startup_item id={}, value_name={:?}, location={:?}, enable={}, dry_run={:?}",
+        id, value_name, location, enable, dry_run
+    );
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    let v_name = value_name.as_deref().unwrap_or(&id);
+    let loc = location.as_deref().unwrap_or("");
+    startup::toggle_startup_item(runner.as_ref(), &id, v_name, loc, enable)
+}
+
+#[tauri::command]
+pub async fn remove_startup_item(
+    id: String,
+    value_name: Option<String>,
+    location: Option<String>,
+    dry_run: Option<bool>,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] remove_startup_item id={}, value_name={:?}, location={:?}, dry_run={:?}",
+        id, value_name, location, dry_run
+    );
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    let v_name = value_name.as_deref().unwrap_or(&id);
+    let loc = location.as_deref().unwrap_or("");
+    startup::remove_startup_item(runner.as_ref(), &id, v_name, loc)
+}
+
+#[tauri::command]
+pub async fn get_scheduled_tasks(
+    dry_run: Option<bool>,
+) -> Result<Vec<scheduler::ScheduledTaskItem>, AppError> {
+    log::debug!("[IPC] get_scheduled_tasks request received, dry_run={:?}", dry_run);
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    scheduler::get_scheduled_tasks(runner.as_ref())
+}
+
+#[tauri::command]
+pub async fn toggle_scheduled_task(
+    task_name: String,
+    task_path: String,
+    enable: bool,
+    dry_run: Option<bool>,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] toggle_scheduled_task name={}, path={}, enable={}, dry_run={:?}",
+        task_name, task_path, enable, dry_run
+    );
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    scheduler::toggle_scheduled_task(runner.as_ref(), &task_name, &task_path, enable)
+}
+
+#[tauri::command]
+pub async fn run_scheduled_task(
+    task_name: String,
+    task_path: String,
+    dry_run: Option<bool>,
+) -> Result<ExecutionSummary, AppError> {
+    log::info!(
+        "[IPC] run_scheduled_task name={}, path={}, dry_run={:?}",
+        task_name, task_path, dry_run
+    );
+    let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
+        Box::new(DryRunRunner::new())
+    } else {
+        Box::new(RealRunner::new())
+    };
+    scheduler::run_scheduled_task(runner.as_ref(), &task_name, &task_path)
+}
+
+
 #[cfg(test)]
+
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_cargo_pkg_version_matches() {
+        let ver = env!("CARGO_PKG_VERSION");
+        assert_eq!(ver, "0.3.0");
+    }
 
     #[test]
     fn test_get_system_info_ipc() {
@@ -550,7 +794,7 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let selected = vec!["telemetry_diagtrack".to_string()];
             let runner = DryRunRunner::new();
-            let summary = optimization::execute(None, &runner, &selected).unwrap();
+            let summary = optimization::execute(None, &runner, &selected, false).unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
             assert_eq!(summary.executed_actions.len(), 1);
@@ -610,5 +854,108 @@ mod tests {
         let summary = driver_backup::backup_drivers(None, &runner, "C:\\Backup", true).unwrap();
         assert!(summary.is_dry_run);
         assert!(summary.success);
+    }
+
+    #[test]
+    fn test_get_system_metrics_ipc() {
+        let collector = Arc::new(Mutex::new(metrics::MetricsCollector::new()));
+        let mut guard = collector.lock().unwrap();
+        let payload = guard.collect().unwrap();
+        assert!(payload.memory_total_mb > 0);
+        assert!(payload.timestamp_ms > 0);
+    }
+
+    #[test]
+    fn test_get_system_temperatures_ipc() {
+        tauri::async_runtime::block_on(async {
+            let temps = get_system_temperatures().await.unwrap();
+            assert!(!temps.sensor_source.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_get_startup_items_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let items = get_startup_items(Some(true)).await.unwrap();
+            assert_eq!(items.len(), 5);
+            assert_eq!(items[0].value_name, "Discord");
+        });
+    }
+
+    #[test]
+    fn test_toggle_startup_item_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let summary = toggle_startup_item(
+                "hkcu_run_discord".to_string(),
+                Some("Discord".to_string()),
+                Some("HKCU Run".to_string()),
+                false,
+                Some(true),
+            )
+            .await
+            .unwrap();
+            assert!(summary.is_dry_run);
+            assert!(summary.success);
+            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        });
+    }
+
+    #[test]
+    fn test_remove_startup_item_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let summary = remove_startup_item(
+                "hkcu_run_discord".to_string(),
+                Some("Discord".to_string()),
+                Some("HKCU Run".to_string()),
+                Some(true),
+            )
+            .await
+            .unwrap();
+            assert!(summary.is_dry_run);
+            assert!(summary.success);
+            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        });
+    }
+
+    #[test]
+    fn test_get_scheduled_tasks_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let tasks = get_scheduled_tasks(Some(true)).await.unwrap();
+            assert_eq!(tasks.len(), 4);
+            assert_eq!(tasks[0].task_name, "Consolidator");
+        });
+    }
+
+    #[test]
+    fn test_toggle_scheduled_task_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let summary = toggle_scheduled_task(
+                "Consolidator".to_string(),
+                r"\Microsoft\".to_string(),
+                false,
+                Some(true),
+            )
+            .await
+            .unwrap();
+            assert!(summary.is_dry_run);
+            assert!(summary.success);
+            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        });
+    }
+
+    #[test]
+    fn test_run_scheduled_task_ipc_dry_run() {
+        tauri::async_runtime::block_on(async {
+            let summary = run_scheduled_task(
+                "Consolidator".to_string(),
+                r"\Microsoft\".to_string(),
+                Some(true),
+            )
+            .await
+            .unwrap();
+            assert!(summary.is_dry_run);
+            assert!(summary.success);
+            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        });
     }
 }

@@ -254,19 +254,53 @@ pub fn execute(
     app: Option<&tauri::AppHandle>,
     runner: &dyn CommandRunner,
     selected_keys: &[String],
+    create_restore_point: bool,
 ) -> Result<ExecutionSummary, AppError> {
     use tauri::Emitter;
 
     let start_time = std::time::Instant::now();
     log::info!(
-        "[OptimizationEngine] Starting batch optimization execution for {} selected keys (is_dry_run={})",
+        "[OptimizationEngine] Starting batch optimization execution for {} selected keys (is_dry_run={}, create_restore_point={})",
         selected_keys.len(),
-        runner.is_dry_run()
+        runner.is_dry_run(),
+        create_restore_point
     );
     let rules = preview(selected_keys)?;
     let total_steps = rules.len();
     let mut executed_actions = Vec::new();
     let mut overall_success = true;
+
+    if create_restore_point {
+        log::info!("[OptimizationEngine] Auto-creating pre-optimization System Restore Point");
+        if let Some(app_handle) = app {
+            let payload = TaskProgressPayload {
+                current_step: 0,
+                total_steps,
+                message: "Creating System Restore Point...".to_string(),
+                is_error: false,
+            };
+            let _ = app_handle.emit("task-progress", &payload);
+        }
+
+        match crate::system_restore::create_restore_point(runner, "WiScripts Pre-Optimization Restore Point") {
+            Ok(action) => {
+                log::info!("[OptimizationEngine] Pre-optimization restore point created successfully");
+                executed_actions.push(action);
+            }
+            Err(e) => {
+                log::warn!("[OptimizationEngine] Failed to create restore point (non-fatal): {}", e);
+                if let Some(app_handle) = app {
+                    let payload = TaskProgressPayload {
+                        current_step: 0,
+                        total_steps,
+                        message: format!("Warning: Could not create Restore Point ({}) - proceeding with optimizations.", e),
+                        is_error: false,
+                    };
+                    let _ = app_handle.emit("task-progress", &payload);
+                }
+            }
+        }
+    }
 
     for (idx, rule) in rules.into_iter().enumerate() {
         let current_step = idx + 1;
@@ -439,7 +473,7 @@ mod tests {
         ];
 
         // Act
-        let summary = execute(None, &runner, &selected).unwrap();
+        let summary = execute(None, &runner, &selected, false).unwrap();
 
         // Assert: dry run mode verified
         assert!(summary.is_dry_run, "Execution should be flagged as dry-run");
@@ -509,7 +543,7 @@ mod tests {
     fn test_execute_optimizations_non_zero_exit_code() {
         let runner = FailingRunner { exit_code: 1 };
         let selected = vec!["telemetry_diagtrack".to_string()];
-        let summary = execute(None, &runner, &selected).unwrap();
+        let summary = execute(None, &runner, &selected, false).unwrap();
 
         assert!(!summary.success, "Overall success must be false on non-zero exit code");
         assert_eq!(summary.executed_actions.len(), 1);
@@ -521,7 +555,7 @@ mod tests {
     fn test_execute_optimizations_runner_error() {
         let runner = ErrRunner;
         let selected = vec!["telemetry_diagtrack".to_string()];
-        let res = execute(None, &runner, &selected);
+        let res = execute(None, &runner, &selected, false);
 
         assert!(res.is_err(), "Runner error should propagate as AppError::Execution");
         if let Err(AppError::Execution(msg)) = res {
@@ -529,6 +563,18 @@ mod tests {
         } else {
             panic!("Expected AppError::Execution");
         }
+    }
+
+    #[test]
+    fn test_execute_optimizations_with_create_restore_point() {
+        let runner = DryRunRunner::new();
+        let selected = vec!["telemetry_diagtrack".to_string()];
+        let summary = execute(None, &runner, &selected, true).unwrap();
+
+        assert!(summary.success);
+        assert_eq!(summary.executed_actions.len(), 2);
+        assert_eq!(summary.executed_actions[0].id, "create_restore_point");
+        assert_eq!(summary.executed_actions[1].id, "telemetry_diagtrack");
     }
 }
 

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
+import { check, type DownloadEvent } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import {
   SystemInfo,
   OptimizationItem,
@@ -14,6 +16,17 @@ import {
   OptimizationProfile,
   DnsProvider,
   ExecutionSummary,
+  UpdateStatus,
+  UpdateInfo,
+  ToastNotification,
+  ToastType,
+  RestorePoint,
+  SystemMetricsPayload,
+  SystemTemperaturesPayload,
+  MetricSnapshot,
+  ThermalStatus,
+  StartupItem,
+  ScheduledTaskItem,
 } from '../types';
 
 export interface PendingSafetyModal {
@@ -31,6 +44,27 @@ interface AppState {
   setDryRunMode: (enabled: boolean) => void;
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
+
+  // Application Version & Updater State
+  appVersion: string;
+  setAppVersion: (version: string) => void;
+  fetchAppVersion: () => Promise<string>;
+  updateStatus: UpdateStatus;
+  updateInfo: UpdateInfo | null;
+  updateProgress: number;
+  updateError: string | null;
+  autoCheckUpdates: boolean;
+  bannerDismissed: boolean;
+  lastUpdateCheckTime: string | null;
+  setAutoCheckUpdates: (enabled: boolean) => void;
+  dismissUpdateBanner: () => void;
+  checkForUpdates: (silent?: boolean) => Promise<boolean>;
+  downloadAndInstallUpdate: () => Promise<void>;
+
+  // Toast Notification System
+  toasts: ToastNotification[];
+  addToast: (toast: Omit<ToastNotification, 'id'>) => string;
+  dismissToast: (id: string) => void;
 
   // System Info State
   systemInfo: SystemInfo | null;
@@ -85,8 +119,40 @@ interface AppState {
 
   // Feature R5: Driver Backup
   driverBackupPath: string;
+  isDriverBackupLoading: boolean;
   setDriverBackupPath: (path: string) => void;
   backupDrivers: (outputDir: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+
+  // Feature R6: System Restore Points
+  restorePoints: RestorePoint[];
+  isLoadingRestorePoints: boolean;
+  fetchRestorePoints: () => Promise<RestorePoint[]>;
+  createRestorePoint: (description: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+  restoreSystemToPoint: (sequenceNumber: number, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+
+  // Milestone 3: Real-time Metrics & Hardware Sensors
+  metricsHistory: MetricSnapshot[];
+  currentMetrics: MetricSnapshot | null;
+  isPollingActive: boolean;
+  pollingIntervalMs: number;
+  setPollingIntervalMs: (interval: number) => void;
+  togglePollingActive: () => void;
+  pushMetricSnapshot: (snapshot: MetricSnapshot) => void;
+  fetchLatestMetrics: () => Promise<MetricSnapshot | null>;
+
+  // Milestone 3: Startup Apps Manager
+  startupItems: StartupItem[];
+  isStartupLoading: boolean;
+  fetchStartupItems: () => Promise<StartupItem[]>;
+  toggleStartupItem: (id: string, arg2?: boolean | string, arg3?: string, arg4?: boolean) => Promise<ExecutionSummary | null>;
+  removeStartupItem: (id: string, valueName?: string, location?: string) => Promise<ExecutionSummary | null>;
+
+  // Milestone 3: Task Scheduler Background Tasks
+  scheduledTasks: ScheduledTaskItem[];
+  isSchedulerLoading: boolean;
+  fetchScheduledTasks: () => Promise<ScheduledTaskItem[]>;
+  toggleScheduledTask: (taskName: string, taskPath: string, enable: boolean) => Promise<ExecutionSummary | null>;
+  runScheduledTask: (taskName: string, taskPath: string) => Promise<ExecutionSummary | null>;
 
   // ODT State
   odtConfig: OdtConfig;
@@ -350,6 +416,166 @@ export const useAppStore = create<AppState>()(
         setDryRunMode: (enabled) => set({ dryRunMode: enabled }),
         activeTab: 'dashboard',
         setActiveTab: (tab) => set({ activeTab: tab }),
+
+        // Application Version & Auto-Updater Implementation
+        appVersion: '0.3.0',
+        setAppVersion: (ver) => set({ appVersion: ver }),
+        fetchAppVersion: async () => {
+          try {
+            const ver = await invoke<string>('get_app_version');
+            if (ver) {
+              set({ appVersion: ver });
+              return ver;
+            }
+          } catch (err) {
+            // Dev mode fallback
+          }
+          const current = get().appVersion || '0.3.0';
+          return current;
+        },
+
+        updateStatus: 'idle',
+        updateInfo: null,
+        updateProgress: 0,
+        updateError: null,
+        autoCheckUpdates: true,
+        bannerDismissed: false,
+        lastUpdateCheckTime: null,
+
+        setAutoCheckUpdates: (enabled) => set({ autoCheckUpdates: enabled }),
+        dismissUpdateBanner: () => set({ bannerDismissed: true }),
+
+        checkForUpdates: async (silent = false) => {
+          set({ updateStatus: 'checking', updateError: null });
+          if (!silent) {
+            get().addLog({ level: 'cmd', message: 'Checking for application updates...' });
+          }
+          try {
+            const update = await check();
+            const now = new Date().toLocaleTimeString();
+            set({ lastUpdateCheckTime: now });
+
+            if (update?.available) {
+              const info: UpdateInfo = {
+                version: update.version,
+                currentVersion: get().appVersion,
+                body: update.body || undefined,
+                date: update.date || undefined,
+              };
+              set({
+                updateStatus: 'available',
+                updateInfo: info,
+                bannerDismissed: false,
+              });
+              get().addLog({
+                level: 'info',
+                message: `Update available: v${update.version} (current: v${get().appVersion})`,
+              });
+              get().addToast({
+                type: 'info',
+                title: 'Update Available',
+                message: `WiScripts v${update.version} is ready for download.`,
+                actionLabel: 'Update Now',
+                onAction: () => get().downloadAndInstallUpdate(),
+              });
+              return true;
+            } else {
+              set({ updateStatus: 'upToDate', updateInfo: null });
+              if (!silent) {
+                get().addLog({ level: 'info', message: 'Application is up to date.' });
+                get().addToast({
+                  type: 'success',
+                  title: 'Up to Date',
+                  message: `WiScripts v${get().appVersion} is currently the latest version.`,
+                });
+              }
+              return false;
+            }
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            set({ updateStatus: 'error', updateError: errMsg });
+            if (!silent) {
+              get().addLog({ level: 'error', message: `Update check failed: ${errMsg}` });
+              get().addToast({
+                type: 'error',
+                title: 'Update Check Failed',
+                message: errMsg || 'Unable to connect to update server.',
+              });
+            }
+            return false;
+          }
+        },
+
+        downloadAndInstallUpdate: async () => {
+          set({ updateStatus: 'downloading', updateProgress: 0 });
+          get().addLog({ level: 'cmd', message: 'Downloading & installing update package...' });
+          try {
+            const update = await check();
+            if (!update) {
+              const errMsg = 'No update package available for installation.';
+              set({ updateStatus: 'error', updateError: errMsg });
+              get().addLog({ level: 'error', message: `Download/install failed: ${errMsg}` });
+              get().addToast({
+                type: 'error',
+                title: 'Update Installation Failed',
+                message: errMsg,
+              });
+              return;
+            }
+            let downloaded = 0;
+            let contentLength = 0;
+            await update.downloadAndInstall((event: DownloadEvent) => {
+              const eventType = event.event;
+              const payload: any = (event as any).data || (event as any).payload;
+              switch (eventType) {
+                case 'Started':
+                  contentLength = payload?.contentLength || 0;
+                  break;
+                case 'Progress':
+                  downloaded += payload?.chunkLength || 0;
+                  if (contentLength > 0) {
+                    const percent = Math.round((downloaded / contentLength) * 100);
+                    set({ updateProgress: percent });
+                  }
+                  break;
+                case 'Finished':
+                  set({ updateProgress: 100, updateStatus: 'ready' });
+                  break;
+              }
+            });
+
+            set({ updateStatus: 'ready' });
+            get().addLog({ level: 'info', message: 'Update installation complete. Relaunching application...' });
+            get().addToast({
+              type: 'success',
+              title: 'Update Installed',
+              message: 'WiScripts is restarting to apply changes.',
+            });
+
+            await relaunch();
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            set({ updateStatus: 'error', updateError: errMsg });
+            get().addLog({ level: 'error', message: `Download/install failed: ${errMsg}` });
+            get().addToast({
+              type: 'error',
+              title: 'Update Installation Failed',
+              message: errMsg,
+            });
+          }
+        },
+
+        // Toast Notification System
+        toasts: [],
+        addToast: (toast) => {
+          const id = crypto.randomUUID();
+          const newToast: ToastNotification = { ...toast, id };
+          set((state) => ({ toasts: [...state.toasts, newToast] }));
+          return id;
+        },
+        dismissToast: (id) => {
+          set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+        },
 
         systemInfo: {
           osName: 'Windows 11 Pro',
@@ -700,6 +926,7 @@ export const useAppStore = create<AppState>()(
 
         // Feature R5: Driver Backup
         driverBackupPath: 'C:\\DriverBackup',
+        isDriverBackupLoading: false,
         setDriverBackupPath: (path: string) => set({ driverBackupPath: path }),
 
         backupDrivers: async (outputDir: string, dryRun?: boolean) => {
@@ -720,6 +947,79 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Backup drivers failed: ${errMsg}` });
+            return null;
+          } finally {
+            setIsExecuting(false);
+          }
+        },
+
+        // Feature System Restore
+        restorePoints: [],
+        isLoadingRestorePoints: false,
+
+        fetchRestorePoints: async () => {
+          set({ isLoadingRestorePoints: true });
+          get().addLog({ level: 'cmd', message: 'Fetching System Restore Points' });
+          try {
+            const points = await invoke<RestorePoint[]>('get_restore_points');
+            set({ restorePoints: points });
+            get().addLog({ level: 'info', message: `Retrieved ${points.length} system restore points` });
+            return points;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            get().addLog({ level: 'error', message: `Fetch restore points failed: ${errMsg}` });
+            set({ restorePoints: [] });
+            return [];
+          } finally {
+            set({ isLoadingRestorePoints: false });
+          }
+        },
+
+        createRestorePoint: async (description: string, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
+          setIsExecuting(true);
+          addLog({ level: 'cmd', message: `Creating restore point "${description}" (dryRun: ${currentDryRun})` });
+          try {
+            const summary = await invoke<ExecutionSummary>('create_restore_point', {
+              description,
+              dryRun: currentDryRun,
+            });
+            addLog({
+              level: summary.success ? 'info' : 'error',
+              message: `Create restore point ("${description}") result: ${summary.success ? 'Success' : 'Failed'}`,
+            });
+            if (summary.success) {
+              await get().fetchRestorePoints();
+            }
+            return summary;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            addLog({ level: 'error', message: `Create restore point failed: ${errMsg}` });
+            return null;
+          } finally {
+            setIsExecuting(false);
+          }
+        },
+
+        restoreSystemToPoint: async (sequenceNumber: number, dryRun?: boolean) => {
+          const currentDryRun = dryRun ?? get().dryRunMode;
+          const { addLog, setIsExecuting } = get();
+          setIsExecuting(true);
+          addLog({ level: 'cmd', message: `Restoring system to point #${sequenceNumber} (dryRun: ${currentDryRun})` });
+          try {
+            const summary = await invoke<ExecutionSummary>('restore_system_point', {
+              sequenceNumber,
+              dryRun: currentDryRun,
+            });
+            addLog({
+              level: summary.success ? 'info' : 'error',
+              message: `System restore to #${sequenceNumber} result: ${summary.success ? 'Success' : 'Failed'}`,
+            });
+            return summary;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            addLog({ level: 'error', message: `System restore to #${sequenceNumber} failed: ${errMsg}` });
             return null;
           } finally {
             setIsExecuting(false);
@@ -770,11 +1070,204 @@ export const useAppStore = create<AppState>()(
             pendingSafetyModal: { ...modal, isOpen: true },
           }),
         closeSafetyModal: () => set({ pendingSafetyModal: null }),
+
+        // Milestone 3: Real-time Metrics & Hardware Sensors
+        metricsHistory: [],
+        currentMetrics: null,
+        isPollingActive: true,
+        pollingIntervalMs: 2000,
+        setPollingIntervalMs: (interval) => set({ pollingIntervalMs: interval }),
+        togglePollingActive: () => set((state) => ({ isPollingActive: !state.isPollingActive })),
+        pushMetricSnapshot: (snapshot) =>
+          set((state) => ({
+            currentMetrics: snapshot,
+            metricsHistory: [...state.metricsHistory, snapshot].slice(-30),
+          })),
+        fetchLatestMetrics: async () => {
+          try {
+            const metricsPayload = await invoke<SystemMetricsPayload>('get_system_metrics');
+            const tempsPayload = await invoke<SystemTemperaturesPayload>('get_system_temperatures');
+
+            const getThermalStatus = (temp: number | null): ThermalStatus => {
+              if (temp === null) return 'unknown';
+              if (temp > 80) return 'hot';
+              if (temp >= 65) return 'warm';
+              return 'normal';
+            };
+
+            const snapshot: MetricSnapshot = {
+              timestamp: metricsPayload.timestampMs || Date.now(),
+              cpuUsagePercent: metricsPayload.cpuUsagePercent,
+              memoryUsedMb: metricsPayload.memoryUsedMb,
+              memoryTotalMb: metricsPayload.memoryTotalMb,
+              memoryUsagePercent: metricsPayload.memoryUsagePercent,
+              diskReadBytesPerSec: metricsPayload.diskReadBytesPerSec,
+              diskWriteBytesPerSec: metricsPayload.diskWriteBytesPerSec,
+              networkRxBytesPerSec: metricsPayload.networkRxBytesPerSec,
+              networkTxBytesPerSec: metricsPayload.networkTxBytesPerSec,
+              cpuTempC: tempsPayload.cpuTempCelsius,
+              gpuTempC: tempsPayload.gpuTempCelsius,
+              cpuThermalStatus: getThermalStatus(tempsPayload.cpuTempCelsius),
+              gpuThermalStatus: getThermalStatus(tempsPayload.gpuTempCelsius),
+            };
+
+            get().pushMetricSnapshot(snapshot);
+            return snapshot;
+          } catch (e) {
+            const ramUsed = Math.floor(4000 + Math.random() * 1500);
+            const ramTotal = 16384;
+            const simSnapshot: MetricSnapshot = {
+              timestamp: Date.now(),
+              cpuUsagePercent: Math.floor(10 + Math.random() * 25),
+              memoryUsedMb: ramUsed,
+              memoryTotalMb: ramTotal,
+              memoryUsagePercent: (ramUsed / ramTotal) * 100,
+              diskReadBytesPerSec: Math.floor(Math.random() * 5000000),
+              diskWriteBytesPerSec: Math.floor(Math.random() * 2000000),
+              networkRxBytesPerSec: Math.floor(Math.random() * 1000000),
+              networkTxBytesPerSec: Math.floor(Math.random() * 300000),
+              cpuTempC: Math.floor(45 + Math.random() * 15),
+              gpuTempC: Math.floor(40 + Math.random() * 12),
+              cpuThermalStatus: 'normal',
+              gpuThermalStatus: 'normal',
+            };
+            get().pushMetricSnapshot(simSnapshot);
+            return simSnapshot;
+          }
+        },
+
+        // Milestone 3: Startup Apps Manager
+        startupItems: [],
+        isStartupLoading: false,
+        fetchStartupItems: async () => {
+          set({ isStartupLoading: true });
+          try {
+            const items = await invoke<StartupItem[]>('get_startup_items', {
+              dryRun: get().dryRunMode,
+            });
+            set({ startupItems: items, isStartupLoading: false });
+            return items;
+          } catch (e) {
+            set({ isStartupLoading: false });
+            return [];
+          }
+        },
+        toggleStartupItem: async (id, arg2, arg3, arg4) => {
+          let enable = false;
+          let valueName: string | undefined = undefined;
+          let location: string | undefined = undefined;
+
+          if (typeof arg2 === 'boolean') {
+            enable = arg2;
+            const item = get().startupItems.find((i) => i.id === id);
+            if (item) {
+              valueName = item.valueName || item.name;
+              location = item.location;
+            }
+          } else {
+            valueName = arg2;
+            location = arg3;
+            enable = arg4 ?? false;
+          }
+
+          try {
+            const summary = await invoke<ExecutionSummary>('toggle_startup_item', {
+              id,
+              valueName,
+              location,
+              enable,
+              dryRun: get().dryRunMode,
+            });
+            await get().fetchStartupItems();
+            return summary;
+          } catch (e) {
+            get().addToast({ type: 'error', title: 'Toggle Startup App Failed', message: String(e) });
+            return null;
+          }
+        },
+        removeStartupItem: async (id, valueNameArg, locationArg) => {
+          let valueName = valueNameArg;
+          let location = locationArg;
+
+          if (!valueName || !location) {
+            const item = get().startupItems.find((i) => i.id === id);
+            if (item) {
+              valueName = valueName || item.valueName || item.name;
+              location = location || item.location;
+            }
+          }
+
+          try {
+            const summary = await invoke<ExecutionSummary>('remove_startup_item', {
+              id,
+              valueName,
+              location,
+              dryRun: get().dryRunMode,
+            });
+            await get().fetchStartupItems();
+            return summary;
+          } catch (e) {
+            get().addToast({ type: 'error', title: 'Remove Startup App Failed', message: String(e) });
+            return null;
+          }
+        },
+
+        // Milestone 3: Task Scheduler Background Tasks
+        scheduledTasks: [],
+        isSchedulerLoading: false,
+        fetchScheduledTasks: async () => {
+          set({ isSchedulerLoading: true });
+          try {
+            const tasks = await invoke<ScheduledTaskItem[]>('get_scheduled_tasks', {
+              dryRun: get().dryRunMode,
+            });
+            set({ scheduledTasks: tasks, isSchedulerLoading: false });
+            return tasks;
+          } catch (e) {
+            set({ isSchedulerLoading: false });
+            return [];
+          }
+        },
+        toggleScheduledTask: async (taskName, taskPath, enable) => {
+          try {
+            const summary = await invoke<ExecutionSummary>('toggle_scheduled_task', {
+              taskName,
+              taskPath,
+              enable,
+              dryRun: get().dryRunMode,
+            });
+            await get().fetchScheduledTasks();
+            return summary;
+          } catch (e) {
+            get().addToast({ type: 'error', title: 'Toggle Task Failed', message: String(e) });
+            return null;
+          }
+        },
+        runScheduledTask: async (taskName, taskPath) => {
+          try {
+            const summary = await invoke<ExecutionSummary>('run_scheduled_task', {
+              taskName,
+              taskPath,
+              dryRun: get().dryRunMode,
+            });
+            get().addToast({
+              type: 'success',
+              title: 'Task Execution Triggered',
+              message: `Triggered '${taskName}' successfully.`,
+            });
+            await get().fetchScheduledTasks();
+            return summary;
+          } catch (e) {
+            get().addToast({ type: 'error', title: 'Run Task Failed', message: String(e) });
+            return null;
+          }
+        },
       }),
       {
         name: 'wiscripts-app-store',
         partialize: (state) => ({
           dryRunMode: state.dryRunMode,
+          autoCheckUpdates: state.autoCheckUpdates,
           odtConfig: state.odtConfig,
           selectedMasMethod: state.selectedMasMethod,
           driverBackupPath: state.driverBackupPath,

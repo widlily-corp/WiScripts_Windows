@@ -250,6 +250,95 @@ pub fn execute_install(
     execute_odt_install(None, runner, config, None, runner.is_dry_run()).map_err(AppError::Execution)
 }
 
+/// Bypasses ODT regional block by setting Microsoft Office update policy registry keys and experiment configs.
+pub fn execute_odt_regional_bypass(
+    app: Option<&tauri::AppHandle>,
+    runner: &dyn CommandRunner,
+    dry_run: bool,
+) -> Result<ExecutionSummary, String> {
+    let start_time = std::time::Instant::now();
+    log::info!(
+        "[ODTEngine] Starting ODT regional block bypass (dry_run={})",
+        dry_run || runner.is_dry_run()
+    );
+
+    if let Some(app_handle) = app {
+        let payload = TaskProgressPayload {
+            current_step: 1,
+            total_steps: 1,
+            message: "Executing step 1/1: Bypass ODT Regional Lock".to_string(),
+            is_error: false,
+        };
+        let _ = app_handle.emit("task-progress", &payload);
+    }
+
+    let ps_command = "if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\office\\16.0\\common\\officeupdate')) { New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\office\\16.0\\common\\officeupdate' -Force } ; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\office\\16.0\\common\\officeupdate' -Name 'PreventRegionalBlock' -Value 1 -Type DWord ; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\office\\16.0\\common\\officeupdate' -Name 'EnableAutomaticUpdates' -Value 1 -Type DWord ; if (-not (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Office\\16.0\\Common\\ExperimentConfigs\\Ecs')) { New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Office\\16.0\\Common\\ExperimentConfigs\\Ecs' -Force } ; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Office\\16.0\\Common\\ExperimentConfigs\\Ecs' -Name 'CountryCode' -Value 'US' -Type String".to_string();
+
+    let output = match runner.run_powershell(&ps_command) {
+        Ok(out) => out,
+        Err(e) => {
+            let err_msg = format!("ODT regional bypass failed: {}", e);
+            log::error!("[ODTEngine] {}", err_msg);
+            if let Some(app_handle) = app {
+                let payload = TaskProgressPayload {
+                    current_step: 1,
+                    total_steps: 1,
+                    message: format!("Error in step 1/1: Bypass ODT Regional Lock: {}", e),
+                    is_error: true,
+                };
+                let _ = app_handle.emit("task-progress", &payload);
+            }
+            return Err(err_msg);
+        }
+    };
+
+    let is_success = output.exit_code == 0;
+    if is_success {
+        log::info!("[ODTEngine] ODT regional bypass completed successfully");
+        if let Some(app_handle) = app {
+            let payload = TaskProgressPayload {
+                current_step: 1,
+                total_steps: 1,
+                message: "Completed step 1/1: Bypass ODT Regional Lock".to_string(),
+                is_error: false,
+            };
+            let _ = app_handle.emit("task-progress", &payload);
+        }
+    } else {
+        log::warn!(
+            "[ODTEngine] ODT regional bypass returned exit code {}",
+            output.exit_code
+        );
+        if let Some(app_handle) = app {
+            let payload = TaskProgressPayload {
+                current_step: 1,
+                total_steps: 1,
+                message: format!(
+                    "Error in step 1/1: Bypass ODT Regional Lock (exit code {})",
+                    output.exit_code
+                ),
+                is_error: true,
+            };
+            let _ = app_handle.emit("task-progress", &payload);
+        }
+    }
+
+    let action = ExecutedAction {
+        id: "odt_regional_bypass".to_string(),
+        name: "Bypass ODT Regional Lock".to_string(),
+        command: ps_command,
+        output: output.clone(),
+        skipped: false,
+    };
+
+    Ok(ExecutionSummary {
+        success: is_success,
+        executed_actions: vec![action],
+        total_duration_ms: start_time.elapsed().as_millis() as u64,
+        is_dry_run: runner.is_dry_run() || dry_run,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -454,5 +543,22 @@ mod tests {
 
         assert!(res.is_err(), "Runner error should propagate as Err(String)");
         assert!(res.unwrap_err().contains("ODT execution failed: ODT spawn failed"));
+    }
+
+    #[test]
+    fn test_execute_odt_regional_bypass_dry_run() {
+        let runner = DryRunRunner::new();
+        let summary = execute_odt_regional_bypass(None, &runner, true).unwrap();
+
+        assert!(summary.is_dry_run);
+        assert!(summary.success);
+        assert_eq!(summary.executed_actions.len(), 1);
+        assert_eq!(summary.executed_actions[0].id, "odt_regional_bypass");
+        assert!(summary.executed_actions[0].command.contains("PreventRegionalBlock"));
+        assert!(summary.executed_actions[0].command.contains("CountryCode"));
+
+        let history = runner.get_history();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].command.contains("PreventRegionalBlock"));
     }
 }

@@ -93,7 +93,94 @@ export type TabType =
   | 'diagnostics'
   | 'odt'
   | 'activation'
+  | 'restore_points'
+  | 'startup'
+  | 'scheduler'
   | 'settings';
+
+export interface SystemMetricsPayload {
+  cpuUsagePercent: number;
+  cpuCoreCount: number;
+  perCoreCpuUsage: number[];
+  memoryUsedMb: number;
+  memoryTotalMb: number;
+  memoryFreeMb: number;
+  memoryUsagePercent: number;
+  diskReadBytesPerSec: number;
+  diskWriteBytesPerSec: number;
+  diskTotalReadBytes: number;
+  diskTotalWriteBytes: number;
+  networkRxBytesPerSec: number;
+  networkTxBytesPerSec: number;
+  networkTotalRxBytes: number;
+  networkTotalTxBytes: number;
+  timestampMs: number;
+}
+
+export type ThermalStatus = 'normal' | 'warm' | 'hot' | 'unknown';
+
+export interface TemperatureSensorInfo {
+  name: string;
+  label: string;
+  temperatureCelsius: number;
+  sensorType: 'cpu' | 'gpu' | 'other' | string;
+}
+
+export interface SystemTemperaturesPayload {
+  cpuTempCelsius: number | null;
+  gpuTempCelsius: number | null;
+  isCpuTempAvailable: boolean;
+  isGpuTempAvailable: boolean;
+  sensorSource: string;
+  sensorItems: TemperatureSensorInfo[];
+}
+
+export interface MetricSnapshot {
+  timestamp: number;
+  cpuUsagePercent: number;
+  memoryUsedMb: number;
+  memoryTotalMb: number;
+  memoryUsagePercent: number;
+  diskReadBytesPerSec: number;
+  diskWriteBytesPerSec: number;
+  networkRxBytesPerSec: number;
+  networkTxBytesPerSec: number;
+  cpuTempC: number | null;
+  gpuTempC: number | null;
+  cpuThermalStatus: ThermalStatus;
+  gpuThermalStatus: ThermalStatus;
+}
+
+export interface StartupItem {
+  id: string;
+  name: string;
+  valueName: string;
+  command: string;
+  location: string;
+  enabled: boolean;
+  itemType: string;
+  publisher?: string | null;
+}
+
+export interface ScheduledTaskItem {
+  taskName: string;
+  taskPath: string;
+  state: string;
+  enabled: boolean;
+  triggerType: string;
+  author: string;
+  lastRunTime?: string | null;
+  nextRunTime?: string | null;
+  actionSummary: string;
+}
+
+
+export interface RestorePoint {
+  sequenceNumber: number;
+  description: string;
+  restorePointType: string;
+  creationTime: string;
+}
 
 export interface WingetPackage {
   id: string;
@@ -124,4 +211,84 @@ export interface DnsProvider {
   secondaryDns: string;
   description: string;
 }
+
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'upToDate'
+  | 'downloading'
+  | 'ready'
+  | 'error';
+
+export interface UpdateInfo {
+  version: string;
+  currentVersion: string;
+  body?: string;
+  date?: string;
+}
+
+export type ToastType = 'info' | 'success' | 'warning' | 'error';
+
+export interface ToastNotification {
+  id: string;
+  type: ToastType;
+  title: string;
+  message?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  durationMs?: number;
+}
+
+export type ThemeMode = 'dark' | 'light' | 'system';
+export type Language = 'ru' | 'en';
+
+export interface AppPreferences {
+  themeMode: ThemeMode;
+  dryRunMode: boolean;
+  autoCreateRestorePoint: boolean;
+  pollingIntervalMs: number;
+  autoCheckUpdates: boolean;
+  language: Language;
+}
+
+export interface PresetMetadata {
+  id: string;
+  name: string;
+  description: string;
+  author?: string;
+  createdTimestamp: string;
+  appVersion: string;
+  iconName?: string;
+  tags?: string[];
+}
+
+export interface PresetTargetOs {
+  minBuild?: string;
+  supportedEditions?: string[];
+}
+
+export interface CustomPresetParameters {
+  createRestorePoint?: boolean;
+  dryRunRecommended?: boolean;
+  categoryOverrides?: Record<string, string>;
+}
+
+export interface WiScriptsPreset {
+  schemaVersion: '1.0' | string;
+  metadata: PresetMetadata;
+  targetOs?: PresetTargetOs;
+  ruleIds: string[];
+  customParameters?: CustomPresetParameters;
+}
+
+export interface PresetValidationResult {
+  isValid: boolean;
+  preset: WiScriptsPreset | null;
+  validRuleIds: string[];
+  unknownRuleIds: string[];
+  validationErrors: string[];
+}
+
+
 

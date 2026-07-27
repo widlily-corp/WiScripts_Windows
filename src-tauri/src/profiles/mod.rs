@@ -93,7 +93,7 @@ pub fn apply_optimization_profile(
         profile.rule_ids
     );
 
-    optimization::execute(app, runner, &profile.rule_ids)
+    optimization::execute(app, runner, &profile.rule_ids, false)
 }
 
 #[cfg(test)]

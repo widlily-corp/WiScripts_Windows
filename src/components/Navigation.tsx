@@ -15,6 +15,9 @@ import {
   Settings,
   ShieldCheck,
   ShieldAlert,
+  RotateCcw,
+  Power,
+  Clock,
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,11 +31,14 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'optimization', label: 'Optimizations', icon: Sliders },
   { id: 'package_manager', label: 'Package Manager', icon: Package },
   { id: 'presets', label: 'Optimization Presets', icon: Sparkles },
+  { id: 'startup', label: 'Startup Apps', icon: Power },
+  { id: 'scheduler', label: 'Task Scheduler', icon: Clock },
   { id: 'dns_context', label: 'DNS & Context Menu', icon: Globe },
   { id: 'driver_backup', label: 'Driver Backup', icon: HardDrive },
   { id: 'diagnostics', label: 'Diagnostics & Health', icon: Activity },
   { id: 'odt', label: 'Office ODT', icon: FileCode },
   { id: 'activation', label: 'Activation MAS', icon: KeyRound },
+  { id: 'restore_points', label: 'Restore Points', icon: RotateCcw },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -42,6 +48,7 @@ export function Navigation() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const systemInfo = useAppStore((s) => s.systemInfo);
   const isExecuting = useAppStore((s) => s.isExecuting);
+  const appVersion = useAppStore((s) => s.appVersion);
 
   return (
     <aside className="w-64 border-r border-border bg-surface flex flex-col justify-between h-full select-none">
@@ -54,7 +61,7 @@ export function Navigation() {
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              Windows Utility v2.0
+              Windows Utility v{appVersion || '0.3.0'}
             </span>
           </div>
         </div>

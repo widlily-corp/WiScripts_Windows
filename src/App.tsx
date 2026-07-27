@@ -13,8 +13,13 @@ import { OdtView } from './components/OdtView';
 import { MasView } from './components/MasView';
 import { DiagnosticsView } from './components/DiagnosticsView';
 import { SettingsView } from './components/SettingsView';
+import { RestorePointsView } from './components/RestorePointsView';
+import { StartupView } from './components/StartupView';
+import { SchedulerView } from './components/SchedulerView';
 import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
+import { UpdateBanner } from './components/UpdateBanner';
+import { ToastContainer } from './components/ToastContainer';
 import { SystemInfo } from './types';
 
 export function App() {
@@ -25,18 +30,29 @@ export function App() {
   const addLog = useAppStore((s) => s.addLog);
   const setSystemInfo = useAppStore((s) => s.setSystemInfo);
   const checkElevation = useAppStore((s) => s.checkElevation);
+  const fetchAppVersion = useAppStore((s) => s.fetchAppVersion);
+  const autoCheckUpdates = useAppStore((s) => s.autoCheckUpdates);
+  const checkForUpdates = useAppStore((s) => s.checkForUpdates);
 
-  // Fetch real system information & check elevation on mount
+  // Fetch real system information, version & check elevation on mount
   useEffect(() => {
     async function fetchSystemInfoOnMount() {
       try {
         await checkElevation();
+        const ver = await fetchAppVersion();
         const info = await invoke<SystemInfo>('get_system_info');
         setSystemInfo(info);
         addLog({
           level: 'info',
-          message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${info.isElevated})`,
+          message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${info.isElevated}, App v${ver})`,
         });
+
+        // Trigger non-intrusive update check if enabled
+        if (autoCheckUpdates) {
+          setTimeout(() => {
+            checkForUpdates(true);
+          }, 3000);
+        }
       } catch (err) {
         addLog({
           level: 'error',
@@ -45,7 +61,7 @@ export function App() {
       }
     }
     fetchSystemInfoOnMount();
-  }, [setSystemInfo, checkElevation, addLog]);
+  }, [setSystemInfo, checkElevation, addLog, fetchAppVersion, autoCheckUpdates, checkForUpdates]);
 
   // Generate ODT XML preview when odtConfig changes
   useEffect(() => {
@@ -65,6 +81,7 @@ export function App() {
       <Navigation />
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        <UpdateBanner />
         <Header />
 
         <main className="flex-1 overflow-auto">
@@ -72,17 +89,21 @@ export function App() {
           {activeTab === 'optimization' && <OptimizationView />}
           {activeTab === 'package_manager' && <PackageManagerView />}
           {activeTab === 'presets' && <PresetsView />}
+          {activeTab === 'startup' && <StartupView />}
+          {activeTab === 'scheduler' && <SchedulerView />}
           {activeTab === 'dns_context' && <DnsContextMenuView />}
           {activeTab === 'driver_backup' && <DriverBackupView />}
           {activeTab === 'diagnostics' && <DiagnosticsView />}
           {activeTab === 'odt' && <OdtView />}
           {activeTab === 'activation' && <MasView />}
+          {activeTab === 'restore_points' && <RestorePointsView />}
           {activeTab === 'settings' && <SettingsView />}
         </main>
       </div>
 
       <SafetyConfirmationModal />
       <ExecutionProgressModal />
+      <ToastContainer />
     </div>
   );
 }

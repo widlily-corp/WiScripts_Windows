@@ -55,9 +55,7 @@ export function Navigation() {
       <div>
         {/* Brand Header */}
         <div className="p-4 border-b border-border flex items-center gap-3">
-          <div className="h-8 w-8 rounded-[6px] bg-brand text-white flex items-center justify-center font-bold text-sm">
-            WS
-          </div>
+          <img src="/icon.png" alt="WiScripts" className="h-8 w-8 rounded-[6px] object-cover bg-white shadow-sm" />
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">

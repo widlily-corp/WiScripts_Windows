@@ -67,11 +67,11 @@ export function TemperatureSensorWidget({
         <div className="flex items-center gap-2">
           <Thermometer className="h-4 w-4 text-text-muted" />
           <span className="text-2xl font-bold font-mono tabular-nums text-text-primary">
-            {isAvailable ? `${tempC}°C` : '-- °C'}
+            {isAvailable ? `${tempC}°C` : 'N/A'}
           </span>
         </div>
-        <span className="text-[10px] font-mono text-text-muted">
-          Max Threshold: 95°C
+        <span className="text-[10px] font-mono text-text-muted text-right">
+          {isAvailable ? 'Max Threshold: 95°C' : 'Requires Admin / Unsupported'}
         </span>
       </div>
 

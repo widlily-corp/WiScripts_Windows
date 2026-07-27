@@ -250,6 +250,132 @@ pub fn preview(selected_keys: &[String]) -> Result<Vec<OptimizationItem>, AppErr
     Ok(filtered)
 }
 
+pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
+    match rule_id {
+        "telemetry_diagtrack" => {
+            let stop_res = crate::winapi::services::stop_service("DiagTrack");
+            let cfg_res = crate::winapi::services::configure_service("DiagTrack", 4);
+            if let Err(e) = stop_res {
+                Some(Err(format!("Failed to stop DiagTrack: {}", e)))
+            } else if let Err(e) = cfg_res {
+                Some(Err(format!("Failed to configure DiagTrack: {}", e)))
+            } else {
+                Some(Ok("Native WinAPI: Stopped & disabled DiagTrack service with read-back verification".to_string()))
+            }
+        }
+        "telemetry_dmwappush" => {
+            let stop_res = crate::winapi::services::stop_service("dmwappushservice");
+            let cfg_res = crate::winapi::services::configure_service("dmwappushservice", 4);
+            if let Err(e) = stop_res {
+                Some(Err(format!("Failed to stop dmwappushservice: {}", e)))
+            } else if let Err(e) = cfg_res {
+                Some(Err(format!("Failed to configure dmwappushservice: {}", e)))
+            } else {
+                Some(Ok("Native WinAPI: Stopped & disabled dmwappushservice with read-back verification".to_string()))
+            }
+        }
+        "bloatware_cortana" => {
+            match crate::winapi::registry::set_dword(
+                "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search",
+                "AllowCortana",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Cortana via registry with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "privacy_advertising_id" => {
+            match crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
+                "Enabled",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Advertising Info via registry with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "privacy_location_tracking" => {
+            match crate::winapi::registry::set_string(
+                "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location",
+                "Value",
+                "Deny",
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Location Tracking via registry with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "privacy_activity_history" => {
+            match crate::winapi::registry::set_dword(
+                "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+                "PublishUserActivities",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Activity History via registry with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "services_sysmain" => {
+            let stop_res = crate::winapi::services::stop_service("SysMain");
+            let cfg_res = crate::winapi::services::configure_service("SysMain", 4);
+            if let Err(e) = stop_res {
+                Some(Err(format!("Failed to stop SysMain: {}", e)))
+            } else if let Err(e) = cfg_res {
+                Some(Err(format!("Failed to configure SysMain: {}", e)))
+            } else {
+                Some(Ok("Native WinAPI: Stopped & disabled SysMain service with read-back verification".to_string()))
+            }
+        }
+        "services_search_indexing" => {
+            match crate::winapi::services::configure_service("WSearch", 3) {
+                Ok(()) => Some(Ok("Native WinAPI: Set WSearch service to Manual with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "services_fax_spooler" => {
+            let stop_res = crate::winapi::services::stop_service("Fax");
+            let cfg_res = crate::winapi::services::configure_service("Fax", 4);
+            if let Err(e) = stop_res {
+                Some(Err(format!("Failed to stop Fax: {}", e)))
+            } else if let Err(e) = cfg_res {
+                Some(Err(format!("Failed to configure Fax: {}", e)))
+            } else {
+                Some(Ok("Native WinAPI: Stopped & disabled Fax service with read-back verification".to_string()))
+            }
+        }
+        "ui_show_file_extensions" => {
+            match crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "HideFileExt",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Set HideFileExt=0 with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "ui_show_hidden_files" => {
+            match crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "Hidden",
+                1,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Set Hidden=1 with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "ui_classic_context_menu" => {
+            match crate::winapi::registry::set_string(
+                "HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32",
+                "",
+                "",
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Created classic context menu CLSID key with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        _ => None,
+    }
+}
+
 pub fn execute(
     app: Option<&tauri::AppHandle>,
     runner: &dyn CommandRunner,
@@ -322,20 +448,52 @@ pub fn execute(
             let _ = app_handle.emit("task-progress", &payload);
         }
 
-        let output = match runner.run_powershell(&rule.powershell_command) {
-            Ok(out) => out,
-            Err(e) => {
-                log::error!("[OptimizationEngine] Rule '{}' failed to run: {}", rule.id, e);
-                if let Some(app_handle) = app {
-                    let payload = TaskProgressPayload {
-                        current_step,
-                        total_steps,
-                        message: format!("Failed step {}/{}: {}: {}", current_step, total_steps, rule.title, e),
-                        is_error: true,
-                    };
-                    let _ = app_handle.emit("task-progress", &payload);
+        let output = if runner.is_dry_run() {
+            match runner.run_powershell(&rule.powershell_command) {
+                Ok(out) => out,
+                Err(e) => {
+                    log::error!("[OptimizationEngine] Rule '{}' failed to run in dry run: {}", rule.id, e);
+                    if let Some(app_handle) = app {
+                        let payload = TaskProgressPayload {
+                            current_step,
+                            total_steps,
+                            message: format!("Failed step {}/{}: {}: {}", current_step, total_steps, rule.title, e),
+                            is_error: true,
+                        };
+                        let _ = app_handle.emit("task-progress", &payload);
+                    }
+                    return Err(AppError::Execution(e));
                 }
-                return Err(AppError::Execution(e));
+            }
+        } else if let Some(native_res) = execute_native_rule(&rule.id) {
+            match native_res {
+                Ok(stdout_msg) => crate::runner::CommandOutput {
+                    exit_code: 0,
+                    stdout: stdout_msg,
+                    stderr: String::new(),
+                },
+                Err(err_msg) => crate::runner::CommandOutput {
+                    exit_code: 1,
+                    stdout: String::new(),
+                    stderr: err_msg,
+                },
+            }
+        } else {
+            match runner.run_powershell(&rule.powershell_command) {
+                Ok(out) => out,
+                Err(e) => {
+                    log::error!("[OptimizationEngine] Rule '{}' failed to run: {}", rule.id, e);
+                    if let Some(app_handle) = app {
+                        let payload = TaskProgressPayload {
+                            current_step,
+                            total_steps,
+                            message: format!("Failed step {}/{}: {}: {}", current_step, total_steps, rule.title, e),
+                            is_error: true,
+                        };
+                        let _ = app_handle.emit("task-progress", &payload);
+                    }
+                    return Err(AppError::Execution(e));
+                }
             }
         };
 
@@ -554,7 +712,7 @@ mod tests {
     #[test]
     fn test_execute_optimizations_runner_error() {
         let runner = ErrRunner;
-        let selected = vec!["telemetry_diagtrack".to_string()];
+        let selected = vec!["disk_clean_temp".to_string()];
         let res = execute(None, &runner, &selected, false);
 
         assert!(res.is_err(), "Runner error should propagate as AppError::Execution");
@@ -563,6 +721,14 @@ mod tests {
         } else {
             panic!("Expected AppError::Execution");
         }
+    }
+
+    #[test]
+    fn test_execute_native_rule_mapping() {
+        assert!(execute_native_rule("disk_clean_temp").is_none());
+        assert!(execute_native_rule("non_existent_rule").is_none());
+        assert!(execute_native_rule("ui_show_file_extensions").is_some());
+        assert!(execute_native_rule("privacy_advertising_id").is_some());
     }
 
     #[test]

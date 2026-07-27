@@ -11,7 +11,7 @@
 | 2 | M2: Safety, Tools & Fixes | App icon fix, ODT registry bypass, auto restore points, restore point manager UI | M1 | DONE |
 | 3 | M3: System Monitoring & Management | Dashboard real-time charts (CPU/RAM/Disk/Net), CPU/GPU temps, Startup Apps, Task Scheduler | M2 | DONE |
 | 4 | M4: Customization & Profiles | i18next RU/EN, Settings tab (theme & defaults), JSON preset import/export | M3 | DONE |
-| 5 | M5: Finalization & Release | Clean git, Conventional Commits, git push, release tag push | M1, M2, M3, M4 | IN_PROGRESS |
+| 5 | M5: Finalization & Release | Clean git, Conventional Commits, git push, release tag push | M1, M2, M3, M4 | DONE |
 
 ## Code Layout
 - Backend: `src-tauri/`

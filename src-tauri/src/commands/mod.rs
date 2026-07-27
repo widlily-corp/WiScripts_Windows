@@ -776,7 +776,7 @@ mod tests {
     #[test]
     fn test_cargo_pkg_version_matches() {
         let ver = env!("CARGO_PKG_VERSION");
-        assert_eq!(ver, "0.3.0");
+        assert_eq!(ver, "0.4.0");
     }
 
     #[test]

@@ -15,6 +15,7 @@ pub mod runner;
 pub mod scheduler;
 pub mod startup;
 pub mod system_restore;
+pub mod winapi;
 
 use std::sync::{Arc, Mutex};
 

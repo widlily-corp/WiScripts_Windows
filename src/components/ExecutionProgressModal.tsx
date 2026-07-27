@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/useAppStore';
 import { TaskProgressPayload } from '../types';
-import { Loader2, Terminal, AlertOctagon, CheckCircle2 } from 'lucide-react';
+import { Loader2, Terminal, AlertOctagon, CheckCircle2, X } from 'lucide-react';
 
 export function ExecutionProgressModal() {
   const isExecuting = useAppStore((s) => s.isExecuting);
@@ -14,6 +14,7 @@ export function ExecutionProgressModal() {
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const logs = useAppStore((s) => s.logs);
   const addLog = useAppStore((s) => s.addLog);
+  const setIsExecuting = useAppStore((s) => s.setIsExecuting);
 
   const logConsoleRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +85,7 @@ export function ExecutionProgressModal() {
     >
       <div className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border pb-4">
+        <div className="flex items-start justify-between border-b border-border pb-4 relative">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-[6px] bg-brand-subtle text-brand border border-brand/30 shrink-0">
               {isCompleted ? (
@@ -115,6 +116,15 @@ export function ExecutionProgressModal() {
               {totalSteps > 0 ? `Step ${currentStep} of ${totalSteps}` : 'Processing...'}
             </div>
           </div>
+          {isCompleted && (
+            <button
+              onClick={() => setIsExecuting(false)}
+              className="absolute -top-2 -right-2 p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
         {/* Progress Bar */}
@@ -185,6 +195,18 @@ export function ExecutionProgressModal() {
             )}
           </div>
         </div>
+
+        {/* Footer actions when completed */}
+        {isCompleted && (
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={() => setIsExecuting(false)}
+              className="px-4 py-2 bg-brand text-brand-contrast rounded-[6px] text-sm font-medium hover:bg-brand/90 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

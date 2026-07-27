@@ -51,3 +51,21 @@ Status:
   4. Inspect tauri.conf.json version (v0.3.0), create release tag (v0.3.0), and push release tag to remote repository.
 - Submit completion report when Milestone 5 is finished.
 
+## 2026-07-27T12:59:00Z (Parent Additional Requirement)
+
+ADDITIONAL REQUIREMENT FROM USER/PARENT:
+Upon completing all Deep System Engine implementation and verification steps (R1-R4), ensure that:
+1. All changes in the working directory (including recent UI & tauri.conf.json fixes) are committed using Conventional Commits.
+2. Changes are pushed to git repository (`git push`).
+3. A new git release tag (matching updated `tauri.conf.json` version e.g. `v0.4.0`) is created and pushed (`git tag -a v0.4.0 -m "..." && git push origin v0.4.0`) so that the auto-updater can pick up the new release.
+
+
+## 2026-07-27T12:49:37Z
+
+Implement "Deep System Engine" features according to the request:
+R1. Deep System Integration (Rust WinAPI): Refactor core optimization logic in Rust backend using direct Windows API calls (`windows` crate) for registry manipulation, service management, deep debloat, etc. Must include unit tests in `src-tauri` and read-back verification for state-changing WinAPI calls.
+R2. Automatic Administrator Privileges: Create `app.manifest` in `src-tauri` with `<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>` and embed via `build.rs`. Must compile with `cargo check` and `cargo build`.
+R3. Safe Execution (System Restore Point): Implement automatic System Restore Point creation routine in Rust (via WMI/WinAPI) before tweaks. Validate with unit/integration test.
+R4. Robust Verification & Error Handling: Programmatically verify every state-changing WinAPI call (e.g. read back registry key/value) to ensure actions physically applied to OS.
+
+

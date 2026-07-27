@@ -1,12 +1,12 @@
-# BRIEFING — 2026-07-27T06:52:42Z
+# BRIEFING — 2026-07-27T12:48:44Z
 
 ## Mission
-Monitor WiScripts Windows Roadmap development (Auto-Updater, Restore Points, System Monitoring, i18next, Startup/Scheduler management, Preset Import/Export, Release), maintain progress and liveness crons, dispatch Project Orchestrator, and trigger mandatory Victory Audit upon completion.
+Monitor "Deep System Engine" development (R1 Rust WinAPI core optimization refactoring using `windows` crate, R2 `app.manifest` requireAdministrator & `build.rs` embedding, R3 Native Rust System Restore Point creation, R4 Read-back verification & robust error handling), maintain progress and liveness crons, dispatch Project Orchestrator, and trigger mandatory Victory Audit upon completion.
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\sentinel
-- Orchestrator: 806fd3d5-47b8-426b-b19a-e93535dee582
+- Orchestrator: 236ae624-596e-4276-b75e-77dba2d1171e
 - Victory Auditor: TBD
 
 ## 🔒 Key Constraints
@@ -14,9 +14,9 @@ Monitor WiScripts Windows Roadmap development (Auto-Updater, Restore Points, Sys
 - Victory Audit is MANDATORY before reporting completion
 
 ## User Context
-- **Last user request**: Implement WiScripts Windows Roadmap: R1 Auto-Updater (`tauri-plugin-updater`), R2 Safety/Tools (App Icon fix, ODT bypass registry, System Restore points create & management tab), R3 System Monitoring & Management (real-time graphs CPU/RAM/Disk/Net, CPU/GPU temp sensors, Startup Apps tab, Task Scheduler tab), R4 Customization & Profiles (`i18next` RU/EN, settings tab, preset import/export `.json`), R5 Commit (Conventional Commits), push, and create release tag.
+- **Last user request**: Realize "Deep System Engine": transition from PowerShell scripts to direct Rust WinAPI calls (`windows` crate), auto-admin privileges (`app.manifest` + `build.rs`), native Rust System Restore Point creation before tweaks, read-back verification & error handling for state-changing calls.
 - **Pending clarifications**: None
-- **Delivered results**: Milestones 1, 2, 3, and 4 completed and verified CLEAN by forensic audits. Resuming for Milestone 5 (Finalization & Release).
+- **Delivered results**: [TBD]
 
 ## Project Status
 - **Phase**: in progress
@@ -29,4 +29,3 @@ Monitor WiScripts Windows Roadmap development (Auto-Updater, Restore Points, Sys
 ## Artifact Index
 - c:\Users\Widlily\Documents\projects\WiScripts_Windows\ORIGINAL_REQUEST.md — Verbatim user request record
 - c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\ORIGINAL_REQUEST.md — Agent verbatim request record
-- c:\Users\Widlily\Documents\projects\WiScripts_Windows\.agents\auditor_m4\handoff.md — Milestone 4 Forensic Audit Report (Verdict: CLEAN)

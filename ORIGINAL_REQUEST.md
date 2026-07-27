@@ -95,3 +95,46 @@ Integrity mode: development
 
 ### Release
 - [ ] Git статус чист, коммиты созданы, тег добавлен и запушен.
+
+## Follow-up — 2026-07-27T12:48:44Z
+
+Реализация "Deep System Engine": Глубокая интеграция с Windows. Архитектурный переход от базовых скриптов PowerShell к прямым, низкоуровневым вызовам WinAPI через Rust для полного контроля над системой (глубокий деблоат, управление службами ядра, мгновенное применение твиков реестра).
+
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Integrity mode: development
+
+## Requirements
+
+### R1. Deep System Integration (Rust WinAPI)
+Refactor the core optimization logic in the Rust backend to use direct Windows API calls (e.g., via the `windows` crate) for tasks like registry manipulation and service management. The goal is to bypass the overhead and limitations of PowerShell, achieving maximum execution speed and system access. 
+
+### R2. Automatic Administrator Privileges
+Configure the Tauri build process so that the generated Windows application automatically requests Administrator privileges upon launch. This involves creating an `app.manifest` with `requireAdministrator` and embedding it via `build.rs`.
+
+### R3. Safe Execution (System Restore Point)
+Implement an automatic System Restore Point creation routine in Rust (via WMI/WinAPI) that runs before any deep system tweaks are applied, ensuring the user can always revert changes safely.
+
+### R4. Robust Verification & Error Handling
+Every WinAPI call must include robust error handling. The application must not silently fail; it must programmatically verify that the action was successfully applied (e.g., reading back a registry key immediately after setting it) to guarantee the commands *actually work*.
+
+## Acceptance Criteria
+
+### Deep System Integration
+- [ ] At least one core optimization feature is rewritten entirely in Rust using the `windows` crate.
+- [ ] A unit test exists in `src-tauri` that verifies the successful execution of a native WinAPI tweak.
+- [ ] The code includes a read-back verification step for every state-changing WinAPI call to confirm the change was physically applied to the OS.
+
+### Automatic Administrator Privileges
+- [ ] An `app.manifest` file exists in `src-tauri` containing `<requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>`.
+- [ ] `build.rs` is configured to embed the manifest into the final executable using `tauri-build`.
+- [ ] The app compiles successfully via `cargo check` and `cargo build`.
+
+### Safe Execution
+- [ ] The system automatically triggers the creation of a Windows Restore Point before executing WinAPI tweaks, using native Rust calls.
+- [ ] A test or function verification exists that validates the successful initiation of a restore point.
+
+## Follow-up — 2026-07-27T07:58:31Z
+
+Пожалуйста, обратите внимание: когда вы закончите реализацию всех требований (R1-R4), убедитесь, что вы закоммитили все изменения в рабочей директории (включая недавние исправления в UI и `tauri.conf.json`, сделанные основным агентом), запушили их в репозиторий и создали новый git tag для релиза, чтобы авто-апдейтер мог подхватить новую версию.
+
+

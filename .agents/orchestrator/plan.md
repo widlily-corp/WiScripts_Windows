@@ -1,37 +1,31 @@
-# WiScripts Windows Roadmap Plan
+# WiScripts Windows Deep System Engine Plan
 
 ## Overview
-Full implementation plan for WiScripts Windows roadmap:
-- R1. Auto-Updater (`tauri-plugin-updater`, `tauri.conf.json` version fetching, Toast/Banner notifications, background update triggers).
-- R2. Safety, Tools & Fixes (Window/Taskbar app icon fix, ODT regional block bypass registry command, auto Restore Point before optimizations, System Restore manager tab with view & rollback).
-- R3. System Monitoring & Management (Real-time CPU/RAM/Disk/Network metrics & charts, CPU/GPU temperature sensors, Startup Apps manager tab, Task Scheduler background tasks manager tab).
-- R4. Customization & Profiles (`i18next` RU/EN localization, Settings tab with persistence, JSON import/export for optimization presets).
-- R5. Finalization & Release (Clean working tree, Conventional Commits, git push, release tagging).
+Implementation plan for WiScripts Windows "Deep System Engine":
+- R1. Deep System Integration (Rust WinAPI): Refactor core optimization logic in Rust backend to use direct Windows API calls (`windows` crate) for registry manipulation, service management, deep debloat, etc. Must include unit tests in `src-tauri` and read-back verification.
+- R2. Automatic Administrator Privileges: Create `app.manifest` in `src-tauri` with `requireAdministrator` and embed via `build.rs`. Ensure compilation via `cargo check` and `cargo build`.
+- R3. Safe Execution (System Restore Point): Implement native Rust System Restore Point creation routine (WMI/WinAPI) prior to applying tweaks, with unit/integration test.
+- R4. Robust Verification & Error Handling: Programmatically verify every state-changing WinAPI call (read back registry key/value immediately after setting) to ensure changes are applied to the OS.
+- R5. Release & Git Tagging (v0.4.0): Update `tauri.conf.json` version to `0.4.0`, commit all changes using Conventional Commits, push git repository (`git push`), create and push release tag (`v0.4.0`).
 
 ## Milestones Breakdown
-1. **Milestone 1: Auto-Updater Integration**
-   - Rust backend: setup `tauri-plugin-updater` dependency in `Cargo.toml`, register plugin in `main.rs`/`lib.rs`.
-   - Frontend: fetch app version dynamically from Tauri API, render Toast/Banner notification for available updates, implement silent/explicit update download & install workflow.
+1. **Phase 1: Exploration & Architecture Analysis**
+   - Explorer 1: Analyze Rust backend codebase (`src-tauri`), identify registry/service/debloat logic to convert from PowerShell to direct WinAPI calls using `windows` crate, and design read-back verification.
+   - Explorer 2: Analyze `app.manifest` configuration, `build.rs` manifest embedding setup with `tauri-build`, and UAC elevation requirements.
+   - Explorer 3: Analyze native Rust System Restore Point implementation (via WinAPI `SRSetRestorePointW` or WMI COM interface) and test harness design in `src-tauri`.
 
-2. **Milestone 2: Safety, Tools & Fixes**
-   - App Icon Fix: Verify `tauri.conf.json` icons configuration, build script, assets, and window icon assignment.
-   - ODT Regional Block Bypass: Implement registry command (`HKLM\SOFTWARE\Policies\Microsoft\office\...` or appropriate ODT bypass key) in Rust backend command runner & UI toggle/action.
-   - System Restore Automation: Implement PowerShell/WMI helper function to create restore point prior to running optimization scripts.
-   - Restore Points Tab: React tab displaying existing system restore points with date/description and ability to trigger rollback/restore.
+2. **Phase 2: Deep System Engine Implementation**
+   - Worker implementation: `app.manifest`, `build.rs`, `windows` crate dependencies, WinAPI registry & service modules with read-back verification, Rust System Restore Point function, unit & integration tests.
 
-3. **Milestone 3: System Monitoring & Management**
-   - Real-time Metrics & Graphs: Rust sysinfo / WMI backend commands polling CPU, RAM, Disk I/O, Network I/O. Dashboard live chart components.
-   - Temperature Sensors: Rust backend reading CPU & GPU temperatures via WMI/OHM/sysinfo or Win32 APIs, displaying on Dashboard.
-   - Startup Apps Manager Tab: Backend command listing registry & startup folder entries, frontend UI to view, enable, and disable startup items.
-   - Task Scheduler Manager Tab: Backend command querying scheduled tasks (`Get-ScheduledTask`), frontend UI to view, enable, disable, and run tasks.
+3. **Phase 3: Multi-Layer Verification & Audit**
+   - Reviewer 1 & 2: Independent code review (correctness, safety, error handling, clean architecture).
+   - Challenger: Empirical execution verification, edge cases, read-back verification testing.
+   - Forensic Auditor: Verification of genuine WinAPI calls, no hardcoded or fake test results.
 
-4. **Milestone 4: Customization & Profiles**
-   - i18next Localization: Configure `i18next` and `react-i18next`, extract text strings into `en.json` and `ru.json` translation files, add language selector in UI.
-   - Settings Tab: Settings state management, local storage / file persistence for theme (dark/light/system) and default preferences.
-   - Presets Import/Export: JSON schema for optimization preset files, import file dialog, export file dialog, preset application logic.
+4. **Phase 4: Release & Git Tagging (v0.4.0)**
+   - Update `tauri.conf.json` to version `0.4.0`.
+   - Commit all changes using Conventional Commits (`feat(engine): native WinAPI deep system engine with UAC manifest and restore point`).
+   - Push to remote repository (`git push`).
+   - Create annotated tag `v0.4.0` and push to origin (`git tag -a v0.4.0 -m "v0.4.0: Deep System Engine Release" && git push origin v0.4.0`).
 
-5. **Milestone 5: Verification, Git & Release Tagging**
-   - Comprehensive test pass: `cargo check`, `cargo test`, `npm run build`, `npm run test` (if present).
-   - Forensic Auditor verification.
-   - Commit history check: verify conventional commits format.
-   - Git push and release tag creation based on version in `tauri.conf.json`.
+

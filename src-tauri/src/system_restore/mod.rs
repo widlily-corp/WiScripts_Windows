@@ -7,6 +7,7 @@ pub mod native_winapi {
     use std::ffi::c_void;
 
     pub const BEGIN_SYSTEM_CHANGE: u32 = 100;
+    pub const END_SYSTEM_CHANGE: u32 = 102;
     pub const MODIFY_SETTINGS: u32 = 12;
     pub const ERROR_SUCCESS: u32 = 0;
     pub const ERROR_ALREADY_EXISTS: u32 = 183;
@@ -59,7 +60,8 @@ pub mod native_winapi {
 
             let sr_set_restore_point: FnSRSetRestorePointW = std::mem::transmute(proc_addr);
 
-            let mut spec = RESTOREPOINTINFOW {
+            // 1. Issue BEGIN_SYSTEM_CHANGE to start sequence
+            let mut begin_spec = RESTOREPOINTINFOW {
                 dw_event_type: BEGIN_SYSTEM_CHANGE,
                 dw_restore_point_type: MODIFY_SETTINGS,
                 ll_sequence_number: 0,
@@ -68,16 +70,34 @@ pub mod native_winapi {
 
             let desc_u16: Vec<u16> = std::ffi::OsStr::new(description).encode_wide().collect();
             let copy_len = desc_u16.len().min(255);
-            spec.sz_description[..copy_len].copy_from_slice(&desc_u16[..copy_len]);
+            begin_spec.sz_description[..copy_len].copy_from_slice(&desc_u16[..copy_len]);
 
-            let mut status = STATEMGRSTATUS { n_status: 0, ll_sequence_number: 0 };
-            let res = sr_set_restore_point(&spec, &mut status);
+            let mut begin_status = STATEMGRSTATUS { n_status: 0, ll_sequence_number: 0 };
+            let begin_res = sr_set_restore_point(&begin_spec, &mut begin_status);
+
+            if begin_res == 0 || (begin_status.n_status != ERROR_SUCCESS && begin_status.n_status != ERROR_ALREADY_EXISTS) {
+                FreeLibrary(h_module);
+                return Err(format!("SRSetRestorePointW (BEGIN_SYSTEM_CHANGE) failed with status code: {}", begin_status.n_status));
+            }
+
+            let seq_num = begin_status.ll_sequence_number;
+
+            // 2. Issue END_SYSTEM_CHANGE with matching sequence number to seal the restore point
+            let end_spec = RESTOREPOINTINFOW {
+                dw_event_type: END_SYSTEM_CHANGE,
+                dw_restore_point_type: MODIFY_SETTINGS,
+                ll_sequence_number: seq_num,
+                sz_description: [0u16; 256],
+            };
+
+            let mut end_status = STATEMGRSTATUS { n_status: 0, ll_sequence_number: 0 };
+            let end_res = sr_set_restore_point(&end_spec, &mut end_status);
             FreeLibrary(h_module);
 
-            if res != 0 && (status.n_status == ERROR_SUCCESS || status.n_status == ERROR_ALREADY_EXISTS) {
-                Ok(status.ll_sequence_number)
+            if end_res != 0 && (end_status.n_status == ERROR_SUCCESS || end_status.n_status == ERROR_ALREADY_EXISTS) {
+                Ok(seq_num)
             } else {
-                Err(format!("SRSetRestorePointW error status code: {}", status.n_status))
+                Err(format!("SRSetRestorePointW (END_SYSTEM_CHANGE) failed with status code: {}", end_status.n_status))
             }
         }
     }
@@ -97,6 +117,34 @@ pub struct RestorePoint {
 
     #[serde(alias = "CreationTime")]
     pub creation_time: String,
+}
+
+/// Helper to generate the PowerShell registry command to bypass the 24-hour restore point frequency limit.
+pub fn get_frequency_limit_bypass_command() -> String {
+    r#"Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" -Name "SystemRestorePointCreationFrequency" -Value 0 -Type DWord -Force"#.to_string()
+}
+
+/// Helper to generate PowerShell command to enable System Restore on C:\ drive.
+pub fn get_enable_restore_command() -> String {
+    r#"Enable-ComputerRestore -Drive "C:\""#.to_string()
+}
+
+/// Refine and parse PowerShell or WinAPI errors into clear, structured error diagnostics.
+pub fn parse_restore_point_error(raw_stderr: &str, exit_code: i32) -> String {
+    let lower = raw_stderr.to_lowercase();
+    if lower.contains("0x80041001") || lower.contains("24 hours") || lower.contains("frequency") {
+        "System Restore creation frequency limit reached (0x80041001). A restore point was created within the last 24 hours. Set SystemRestorePointCreationFrequency registry key to 0 to bypass.".to_string()
+    } else if lower.contains("0x80070422") || lower.contains("disabled") {
+        "System Restore is disabled on the system drive (0x80070422). Enable System Restore on drive C: to create restore points.".to_string()
+    } else if lower.contains("0x80070005") || lower.contains("access is denied") || lower.contains("accessdenied") {
+        "Access is denied (0x80070005). Administrator privileges are required to create a System Restore point.".to_string()
+    } else {
+        format!(
+            "Failed to create restore point (exit code {}): {}",
+            exit_code,
+            raw_stderr.trim()
+        )
+    }
 }
 
 /// Creates a new Windows System Restore Point using native SRSetRestorePointW WinAPI with PowerShell fallback.
@@ -158,13 +206,57 @@ pub fn create_restore_point(
     let output = runner.run_powershell(&ps_command)?;
 
     if output.exit_code != 0 {
-        let err_msg = format!(
-            "Failed to create restore point (exit code {}): {}",
-            output.exit_code,
-            output.stderr.trim()
-        );
-        log::warn!("[SystemRestore] {}", err_msg);
-        return Err(err_msg);
+        let lower_stderr = output.stderr.to_lowercase();
+
+        // Check if frequency limit error (0x80041001): try bypass registry tweak and retry
+        if lower_stderr.contains("0x80041001") || lower_stderr.contains("24 hours") || lower_stderr.contains("frequency") {
+            log::warn!("[SystemRestore] Frequency limit reached. Attempting registry bypass (SystemRestorePointCreationFrequency = 0)...");
+            let bypass_cmd = get_frequency_limit_bypass_command();
+            if let Ok(bypass_res) = runner.run_powershell(&bypass_cmd) {
+                if bypass_res.exit_code == 0 {
+                    log::info!("[SystemRestore] Frequency limit registry bypass applied. Retrying Checkpoint-Computer...");
+                    if let Ok(retry_output) = runner.run_powershell(&ps_command) {
+                        if retry_output.exit_code == 0 {
+                            log::info!("[SystemRestore] Checkpoint-Computer succeeded after frequency limit bypass");
+                            return Ok(ExecutedAction {
+                                id: "create_restore_point".to_string(),
+                                name: format!("Create System Restore Point ({})", description),
+                                command: ps_command,
+                                output: retry_output,
+                                skipped: false,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if disabled error (0x80070422): try auto-enabling restore on C:\ and retry
+        if lower_stderr.contains("0x80070422") || lower_stderr.contains("disabled") {
+            log::warn!("[SystemRestore] System Restore is disabled. Attempting auto-enable via Enable-ComputerRestore -Drive \"C:\\\"...");
+            let enable_cmd = get_enable_restore_command();
+            if let Ok(enable_res) = runner.run_powershell(&enable_cmd) {
+                if enable_res.exit_code == 0 {
+                    log::info!("[SystemRestore] System Restore enabled successfully. Retrying Checkpoint-Computer...");
+                    if let Ok(retry_output) = runner.run_powershell(&ps_command) {
+                        if retry_output.exit_code == 0 {
+                            log::info!("[SystemRestore] Checkpoint-Computer succeeded after auto-enabling System Restore");
+                            return Ok(ExecutedAction {
+                                id: "create_restore_point".to_string(),
+                                name: format!("Create System Restore Point ({})", description),
+                                command: ps_command,
+                                output: retry_output,
+                                skipped: false,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        let parsed_err = parse_restore_point_error(&output.stderr, output.exit_code);
+        log::warn!("[SystemRestore] {}", parsed_err);
+        return Err(parsed_err);
     }
 
     log::info!("[SystemRestore] Restore point created successfully via PowerShell fallback");
@@ -232,13 +324,14 @@ pub fn get_restore_points(runner: &dyn CommandRunner) -> Result<Vec<RestorePoint
 
 /// Helper function to parse JSON string output from ConvertTo-Json into Vec<RestorePoint>.
 pub fn parse_restore_points_json(json_str: &str) -> Result<Vec<RestorePoint>, String> {
-    if json_str.trim().is_empty() || json_str.trim() == "null" {
+    let trimmed = json_str.trim();
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
         return Ok(Vec::new());
     }
 
-    if let Ok(vec) = serde_json::from_str::<Vec<RestorePoint>>(json_str) {
+    if let Ok(vec) = serde_json::from_str::<Vec<RestorePoint>>(trimmed) {
         Ok(vec)
-    } else if let Ok(single) = serde_json::from_str::<RestorePoint>(json_str) {
+    } else if let Ok(single) = serde_json::from_str::<RestorePoint>(trimmed) {
         Ok(vec![single])
     } else {
         Err(format!("Failed to parse restore points JSON: {}", json_str))
@@ -286,6 +379,22 @@ pub fn restore_system_point(
 mod tests {
     use super::*;
     use crate::runner::{CommandOutput, DryRunRunner};
+
+    #[test]
+    fn test_winapi_begin_end_restore_point_sequence() {
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(native_winapi::BEGIN_SYSTEM_CHANGE, 100);
+            assert_eq!(native_winapi::END_SYSTEM_CHANGE, 102);
+            assert_eq!(native_winapi::MODIFY_SETTINGS, 12);
+            assert_eq!(native_winapi::ERROR_SUCCESS, 0);
+            assert_eq!(native_winapi::ERROR_ALREADY_EXISTS, 183);
+
+            use std::mem::size_of;
+            assert_eq!(size_of::<native_winapi::RESTOREPOINTINFOW>(), 528);
+            assert_eq!(size_of::<native_winapi::STATEMGRSTATUS>(), 16);
+        }
+    }
 
     #[test]
     fn test_create_restore_point_dry_run() {
@@ -352,6 +461,69 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_restore_points_empty_and_null() {
+        // Act & Assert
+        assert_eq!(parse_restore_points_json("").unwrap(), vec![]);
+        assert_eq!(parse_restore_points_json("   ").unwrap(), vec![]);
+        assert_eq!(parse_restore_points_json("null").unwrap(), vec![]);
+        assert_eq!(parse_restore_points_json("[]").unwrap(), vec![]);
+        assert_eq!(parse_restore_points_json("\n\t").unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_frequency_limit_registry_command_generation() {
+        // Act
+        let bypass_cmd = get_frequency_limit_bypass_command();
+        let enable_cmd = get_enable_restore_command();
+
+        // Assert
+        assert!(bypass_cmd.contains(r#"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore"#));
+        assert!(bypass_cmd.contains("SystemRestorePointCreationFrequency"));
+        assert!(bypass_cmd.contains("-Value 0"));
+
+        assert!(enable_cmd.contains("Enable-ComputerRestore"));
+        assert!(enable_cmd.contains(r#"-Drive "C:\""#));
+    }
+
+    #[test]
+    fn test_create_restore_point_system_disabled_error() {
+        // Arrange
+        let runner = CustomOutputRunner {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "Cannot create a system restore point because System Restore is disabled. (Exception from HRESULT: 0x80070422)".to_string(),
+        };
+
+        // Act
+        let result = create_restore_point(&runner, "Test Point");
+
+        // Assert
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("0x80070422") || err.contains("disabled"));
+        assert!(err.contains("System Restore is disabled"));
+    }
+
+    #[test]
+    fn test_create_restore_point_access_denied_error() {
+        // Arrange
+        let runner = CustomOutputRunner {
+            exit_code: 1,
+            stdout: String::new(),
+            stderr: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))".to_string(),
+        };
+
+        // Act
+        let result = create_restore_point(&runner, "Test Point");
+
+        // Assert
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("0x80070005") || err.contains("Access is denied"));
+        assert!(err.contains("Administrator privileges are required"));
+    }
+
+    #[test]
     fn test_restore_system_point_dry_run() {
         // Arrange
         let runner = DryRunRunner::new();
@@ -404,7 +576,7 @@ mod tests {
         let runner = CustomOutputRunner {
             exit_code: 1,
             stdout: String::new(),
-            stderr: "A new restore point cannot be created because one has already been created within the last 24 hours.".to_string(),
+            stderr: "A new restore point cannot be created because one has already been created within the last 24 hours. (Exception from HRESULT: 0x80041001)".to_string(),
         };
 
         // Act
@@ -413,7 +585,8 @@ mod tests {
         // Assert
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Failed to create restore point"));
-        assert!(err.contains("24 hours"));
+        assert!(err.contains("0x80041001") || err.contains("24 hours"));
+        assert!(err.contains("frequency limit reached"));
     }
 }
+

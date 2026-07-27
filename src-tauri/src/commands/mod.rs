@@ -651,6 +651,12 @@ pub async fn create_restore_point(
         description,
         dry_run
     );
+
+    if description.trim().is_empty() {
+        log::warn!("[IPC] create_restore_point rejected: description is empty");
+        return Err(AppError::InvalidConfig("Restore point description cannot be empty".to_string()));
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let start_time = std::time::Instant::now();
         let res = if dry_run {
@@ -662,13 +668,19 @@ pub async fn create_restore_point(
         };
 
         match res {
-            Ok(action) => Ok(ExecutionSummary {
-                success: true,
-                executed_actions: vec![action],
-                total_duration_ms: start_time.elapsed().as_millis() as u64,
-                is_dry_run: dry_run,
-            }),
-            Err(e) => Err(e),
+            Ok(action) => {
+                log::info!("[IPC] create_restore_point completed successfully");
+                Ok(ExecutionSummary {
+                    success: true,
+                    executed_actions: vec![action],
+                    total_duration_ms: start_time.elapsed().as_millis() as u64,
+                    is_dry_run: dry_run,
+                })
+            }
+            Err(e) => {
+                log::error!("[IPC] create_restore_point failed: {:?}", e);
+                Err(e)
+            }
         }
     })
     .await
@@ -680,7 +692,16 @@ pub async fn get_restore_points() -> Result<Vec<RestorePoint>, AppError> {
     log::info!("[IPC] get_restore_points request received");
     tauri::async_runtime::spawn_blocking(move || {
         let runner = RealRunner::new();
-        system_restore::get_restore_points(&runner).map_err(AppError::Execution)
+        match system_restore::get_restore_points(&runner) {
+            Ok(points) => {
+                log::info!("[IPC] get_restore_points succeeded: returned {} points", points.len());
+                Ok(points)
+            }
+            Err(err) => {
+                log::error!("[IPC] get_restore_points failed: {}", err);
+                Err(AppError::Execution(err))
+            }
+        }
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in get_restore_points: {}", e)))?
@@ -708,13 +729,19 @@ pub async fn restore_system_point(
         };
 
         match res {
-            Ok(action) => Ok(ExecutionSummary {
-                success: true,
-                executed_actions: vec![action],
-                total_duration_ms: start_time.elapsed().as_millis() as u64,
-                is_dry_run: dry_run,
-            }),
-            Err(e) => Err(e),
+            Ok(action) => {
+                log::info!("[IPC] restore_system_point completed successfully for seq #{}", sequence_number);
+                Ok(ExecutionSummary {
+                    success: true,
+                    executed_actions: vec![action],
+                    total_duration_ms: start_time.elapsed().as_millis() as u64,
+                    is_dry_run: dry_run,
+                })
+            }
+            Err(e) => {
+                log::error!("[IPC] restore_system_point failed for seq #{}: {:?}", sequence_number, e);
+                Err(e)
+            }
         }
     })
     .await
@@ -774,15 +801,20 @@ pub async fn toggle_startup_item(
         "[IPC] toggle_startup_item id={}, value_name={:?}, location={:?}, enable={}, dry_run={:?}",
         id, value_name, location, enable, dry_run
     );
+    let v_name = value_name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| AppError::Execution("Missing required parameter: value_name".to_string()))?;
+    let loc = location.as_deref().unwrap_or("");
+    let v_name_owned = v_name.to_string();
+    let loc_owned = loc.to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
             Box::new(DryRunRunner::new())
         } else {
             Box::new(RealRunner::new())
         };
-        let v_name = value_name.as_deref().unwrap_or(&id);
-        let loc = location.as_deref().unwrap_or("");
-        startup::toggle_startup_item(runner.as_ref(), &id, v_name, loc, enable)
+        startup::toggle_startup_item(runner.as_ref(), &id, &v_name_owned, &loc_owned, enable)
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in toggle_startup_item: {}", e)))?
@@ -799,15 +831,20 @@ pub async fn remove_startup_item(
         "[IPC] remove_startup_item id={}, value_name={:?}, location={:?}, dry_run={:?}",
         id, value_name, location, dry_run
     );
+    let v_name = value_name
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| AppError::Execution("Missing required parameter: value_name".to_string()))?;
+    let loc = location.as_deref().unwrap_or("");
+    let v_name_owned = v_name.to_string();
+    let loc_owned = loc.to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
             Box::new(DryRunRunner::new())
         } else {
             Box::new(RealRunner::new())
         };
-        let v_name = value_name.as_deref().unwrap_or(&id);
-        let loc = location.as_deref().unwrap_or("");
-        startup::remove_startup_item(runner.as_ref(), &id, v_name, loc)
+        startup::remove_startup_item(runner.as_ref(), &id, &v_name_owned, &loc_owned)
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in remove_startup_item: {}", e)))?
@@ -847,7 +884,16 @@ pub async fn toggle_scheduled_task(
         } else {
             Box::new(RealRunner::new())
         };
-        scheduler::toggle_scheduled_task(runner.as_ref(), &task_name, &task_path, enable)
+        let res = scheduler::toggle_scheduled_task(runner.as_ref(), &task_name, &task_path, enable);
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] toggle_scheduled_task completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] toggle_scheduled_task failed: {:?}", err),
+        }
+        res
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in toggle_scheduled_task: {}", e)))?
@@ -869,7 +915,16 @@ pub async fn run_scheduled_task(
         } else {
             Box::new(RealRunner::new())
         };
-        scheduler::run_scheduled_task(runner.as_ref(), &task_name, &task_path)
+        let res = scheduler::run_scheduled_task(runner.as_ref(), &task_name, &task_path);
+        match &res {
+            Ok(summary) => log::info!(
+                "[IPC] run_scheduled_task completed: success={}, duration={}ms",
+                summary.success,
+                summary.total_duration_ms
+            ),
+            Err(err) => log::error!("[IPC] run_scheduled_task failed: {:?}", err),
+        }
+        res
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in run_scheduled_task: {}", e)))?

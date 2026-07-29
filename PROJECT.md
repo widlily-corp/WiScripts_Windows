@@ -15,7 +15,7 @@
 | 2 | Diagnostic Dump Export | R2: Backend ZIP packaging of logs/system_info to Desktop; IPC command & Settings UI button. | M1 | DONE |
 | 3 | Rich UI Updater & Release Notes | R1: Fix updater release JSON check/error handling; add Markdown Release Notes dialog component. | none | DONE |
 | 4 | GitHub Issues Error Reporting | R4: Backend command for GitHub Issues API & browser fallback URL; UI trigger in Settings & ErrorBoundary. | M1 | DONE |
-| 5 | Final E2E Integration & Audit | E2E test verification, adversarial test hardening, and Forensic Auditor verification. | M1, M2, M3, M4 | PLANNED |
+| 5 | Final E2E Integration & Audit | E2E test verification, adversarial test hardening, and Forensic Auditor verification. | M1, M2, M3, M4 | DONE |
 
 ## Interface Contracts
 ### Rust Backend ↔ React Frontend (Tauri IPC)

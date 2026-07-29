@@ -89,7 +89,7 @@ pub fn run_diagnostics(
             let _ = app_handle.emit("task-progress", &payload);
         }
 
-        let output = match runner.run_powershell(&step.command) {
+        let output = match runner.run_powershell_with_timeout(&step.command, 3600) {
             Ok(out) => out,
             Err(e) => {
                 log::error!(
@@ -114,7 +114,8 @@ pub fn run_diagnostics(
             }
         };
 
-        let is_step_success = output.exit_code == 0;
+        // 0 = Success, 3010 = Success (Reboot required)
+        let is_step_success = output.exit_code == 0 || output.exit_code == 3010 || output.stdout.contains("successfully repaired");
         if is_step_success {
             log::info!(
                 "[DiagnosticsEngine] Step {}/'{}' completed successfully",

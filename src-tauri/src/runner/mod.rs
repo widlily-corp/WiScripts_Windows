@@ -38,6 +38,11 @@ pub trait CommandRunner: Send + Sync {
     /// Execute a PowerShell script block.
     fn run_powershell(&self, script: &str) -> Result<CommandOutput, String>;
 
+    /// Execute a PowerShell script block with a specific timeout in seconds.
+    fn run_powershell_with_timeout(&self, script: &str, _timeout_secs: u64) -> Result<CommandOutput, String> {
+        self.run_powershell(script)
+    }
+
     /// Execute a raw CMD command string.
     fn run_cmd(&self, command: &str) -> Result<CommandOutput, String>;
 
@@ -137,6 +142,10 @@ impl RealRunner {
 
 impl CommandRunner for RealRunner {
     fn run_powershell(&self, script: &str) -> Result<CommandOutput, String> {
+        self.run_powershell_with_timeout(script, 300)
+    }
+
+    fn run_powershell_with_timeout(&self, script: &str, timeout_secs: u64) -> Result<CommandOutput, String> {
         log::info!("[RealRunner] Executing PowerShell command: {}", script);
 
         let utf8_script = format!(
@@ -160,7 +169,7 @@ impl CommandRunner for RealRunner {
             &utf8_script,
         ]);
 
-        let res = run_command_with_timeout(cmd, 300); // 5 minutes timeout
+        let res = run_command_with_timeout(cmd, timeout_secs); // use custom timeout
         match &res {
             Ok(out) => {
                 if out.exit_code == 0 {

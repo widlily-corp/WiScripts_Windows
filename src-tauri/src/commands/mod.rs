@@ -16,6 +16,7 @@ use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
@@ -1014,6 +1015,57 @@ pub async fn delete_files(paths: Vec<String>) -> Result<storage::DeleteResult, A
         .map_err(|e| AppError::Execution(format!("Join error in delete_files: {}", e)))?
 }
 
+#[tauri::command]
+pub async fn export_diagnostic_dump() -> Result<String, AppError> {
+    log::info!("[IPC] export_diagnostic_dump request received");
+
+    let desktop_dir = dirs::desktop_dir()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let filename = format!("WiScripts_Diagnostic_Dump_{}.zip", timestamp);
+    let zip_path = desktop_dir.join(&filename);
+
+    let sys_info = get_system_info().await?;
+    let sys_info_json = serde_json::to_string_pretty(&sys_info)
+        .map_err(|e| AppError::System(format!("Failed to serialize system info: {}", e)))?;
+
+    let log_path = crate::logger::get_log_path();
+    let log_bytes = std::fs::read(&log_path).unwrap_or_default();
+
+    let zip_file = std::fs::File::create(&zip_path)
+        .map_err(|e| AppError::Io(format!("Failed to create diagnostic dump file at {:?}: {}", zip_path, e)))?;
+
+    let mut zip = zip::ZipWriter::new(zip_file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    zip.start_file("debug.log", options)
+        .map_err(|e| AppError::Io(format!("Failed to add debug.log to ZIP archive: {}", e)))?;
+    zip.write_all(&log_bytes)
+        .map_err(|e| AppError::Io(format!("Failed to write debug.log bytes to ZIP archive: {}", e)))?;
+
+    zip.start_file("system_info.json", options)
+        .map_err(|e| AppError::Io(format!("Failed to add system_info.json to ZIP archive: {}", e)))?;
+    zip.write_all(sys_info_json.as_bytes())
+        .map_err(|e| AppError::Io(format!("Failed to write system_info.json bytes to ZIP archive: {}", e)))?;
+
+    zip.finish()
+        .map_err(|e| AppError::Io(format!("Failed to finalize diagnostic dump ZIP archive: {}", e)))?;
+
+    let abs_path = zip_path
+        .to_str()
+        .ok_or_else(|| AppError::Io("Invalid ZIP path string encoding".to_string()))?
+        .to_string();
+
+    log::info!("[IPC] export_diagnostic_dump successfully created archive at {}", abs_path);
+    Ok(abs_path)
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -1206,5 +1258,42 @@ mod tests {
             assert!(summary.success);
             assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
         });
+    }
+
+    #[test]
+    fn test_export_diagnostic_dump() {
+        // Arrange
+        let _ = crate::logger::init_logger();
+
+        // Act
+        let zip_path_str = tauri::async_runtime::block_on(async {
+            export_diagnostic_dump().await.unwrap()
+        });
+
+        // Assert
+        let zip_path = std::path::PathBuf::from(&zip_path_str);
+        assert!(zip_path.exists(), "Exported ZIP archive must exist at {}", zip_path_str);
+        assert!(zip_path.is_file(), "Exported ZIP path must be a file");
+
+        let zip_file = std::fs::File::open(&zip_path).expect("Failed to open exported ZIP file");
+        let mut archive = zip::ZipArchive::new(zip_file).expect("Failed to read ZIP archive format");
+
+        let mut entry_names = Vec::new();
+        for i in 0..archive.len() {
+            let file = archive.by_index(i).expect("Failed to read ZIP archive entry");
+            entry_names.push(file.name().to_string());
+        }
+
+        assert!(
+            entry_names.contains(&"debug.log".to_string()),
+            "ZIP archive must contain debug.log entry"
+        );
+        assert!(
+            entry_names.contains(&"system_info.json".to_string()),
+            "ZIP archive must contain system_info.json entry"
+        );
+
+        // Teardown / Cleanup
+        let _ = std::fs::remove_file(zip_path);
     }
 }

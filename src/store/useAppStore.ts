@@ -91,6 +91,7 @@ interface AppState {
 
   // Feature R1: Diagnostics
   runDiagnostics: (action: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+  exportDiagnosticDump: () => Promise<string>;
 
   // Feature R2: Package & Bloatware Manager
   wingetPackages: WingetPackage[];
@@ -694,6 +695,25 @@ export const useAppStore = create<AppState>()(
             return null;
           } finally {
             setIsExecuting(false);
+          }
+        },
+        exportDiagnosticDump: async () => {
+          const { addLog } = get();
+          addLog({
+            level: 'cmd',
+            message: 'Invoking export_diagnostic_dump',
+          });
+          try {
+            const path = await invoke<string>('export_diagnostic_dump');
+            addLog({
+              level: 'info',
+              message: `Diagnostic dump exported successfully to: ${path}`,
+            });
+            return path;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            addLog({ level: 'error', message: `Failed to export diagnostic dump: ${errMsg}` });
+            throw new Error(errMsg);
           }
         },
 

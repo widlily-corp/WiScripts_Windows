@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -13,6 +13,8 @@ import {
   RefreshCw,
   Sparkles,
   Loader2,
+  Download,
+  FileArchive,
 } from 'lucide-react';
 
 export function SettingsView() {
@@ -27,6 +29,31 @@ export function SettingsView() {
   const lastUpdateCheckTime = useAppStore((s) => s.lastUpdateCheckTime);
   const checkForUpdates = useAppStore((s) => s.checkForUpdates);
   const downloadAndInstallUpdate = useAppStore((s) => s.downloadAndInstallUpdate);
+  const exportDiagnosticDump = useAppStore((s) => s.exportDiagnosticDump);
+  const addToast = useAppStore((s) => s.addToast);
+
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportDump = async () => {
+    setIsExporting(true);
+    try {
+      const path = await exportDiagnosticDump();
+      addToast({
+        type: 'success',
+        title: 'Диагностический отчет создан',
+        message: `Архив сохранен на Рабочий стол: ${path}`,
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      addToast({
+        type: 'error',
+        title: 'Ошибка экспорта отчета',
+        message: errMsg,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
@@ -279,6 +306,34 @@ export function SettingsView() {
                     High-performance native Windows administration & debloating toolkit built with Rust & Tauri.
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Diagnostics & Support */}
+          <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+            <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
+              <FileArchive className="h-4 w-4 text-brand" />
+              <h3 className="text-sm font-semibold text-text-primary">Диагностика и поддержка</h3>
+            </div>
+            <div className="space-y-3">
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Сформируйте диагностический архив (ZIP) со сведениями о системе и журналом debug.log для отладки и решения проблем.
+              </p>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-text-muted">Архив на Рабочем столе</span>
+                <button
+                  onClick={handleExportDump}
+                  disabled={isExporting}
+                  className="flex items-center gap-2 px-3.5 py-1.5 bg-brand hover:bg-brand-hover text-white rounded-[6px] text-xs font-medium transition-colors disabled:opacity-50"
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  <span>Сгенерировать отчет</span>
+                </button>
               </div>
             </div>
           </div>

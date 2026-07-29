@@ -59,6 +59,8 @@ interface AppState {
   lastUpdateCheckTime: string | null;
   setAutoCheckUpdates: (enabled: boolean) => void;
   dismissUpdateBanner: () => void;
+  openReleaseNotesModal: () => void;
+  triggerMockUpdate: (mockInfo?: Partial<UpdateInfo>) => void;
   checkForUpdates: (silent?: boolean) => Promise<boolean>;
   downloadAndInstallUpdate: () => Promise<void>;
 
@@ -453,6 +455,28 @@ export const useAppStore = create<AppState>()(
 
         setAutoCheckUpdates: (enabled) => set({ autoCheckUpdates: enabled }),
         dismissUpdateBanner: () => set({ bannerDismissed: true }),
+        openReleaseNotesModal: () => set({ bannerDismissed: false }),
+
+        triggerMockUpdate: (mockInfo) => {
+          const info: UpdateInfo = {
+            version: mockInfo?.version || '0.4.0',
+            currentVersion: get().appVersion || '0.3.0',
+            body:
+              mockInfo?.body ||
+              `# What's New in v0.4.0\n\n### Features & Enhancements\n- **Rich Markdown Release Notes Modal**: Interactive update dialog displaying formatted changelog before installation.\n- **Enhanced Error Handling**: Gracefully catches missing release manifest (\`latest.json\`) on remote repository.\n- **Refined Minimal Design System**: Deep dark aesthetics (\`#08090A\`), hairlines (\`#22252A\`), accent blue (\`#3B82F6\`), and Geist/JetBrains Mono typography.\n\n### Bug Fixes\n- Fixed window position persistence across multi-monitor displays.\n- Resolved potential unhandled promise rejections during offline background update checks.\n\n> Note: Please restart your system after updating for all low-level service adjustments to take effect. For full repository source code, visit [GitHub Repository](https://github.com/widlily/wiscripts).`,
+            date: mockInfo?.date || new Date().toISOString().split('T')[0],
+          };
+          set({
+            updateStatus: 'available',
+            updateInfo: info,
+            bannerDismissed: false,
+            updateError: null,
+          });
+          get().addLog({
+            level: 'info',
+            message: `[Dev/Test] Triggered mock update: v${info.version}`,
+          });
+        },
 
         checkForUpdates: async (silent = false) => {
           set({ updateStatus: 'checking', updateError: null });
@@ -501,7 +525,21 @@ export const useAppStore = create<AppState>()(
               return false;
             }
           } catch (err) {
-            const errMsg = typeof err === 'string' ? err : String(err);
+            let errMsg =
+              typeof err === 'string'
+                ? err
+                : err && typeof (err as any).message === 'string'
+                ? (err as any).message
+                : String(err);
+
+            if (
+              errMsg.includes('Could not fetch a valid release JSON from the remote') ||
+              errMsg.includes('latest.json') ||
+              errMsg.includes('release JSON')
+            ) {
+              errMsg = 'Update check failed: No valid release manifest found on remote repository';
+            }
+
             set({ updateStatus: 'error', updateError: errMsg });
             if (!silent) {
               get().addLog({ level: 'error', message: `Update check failed: ${errMsg}` });
@@ -1158,7 +1196,11 @@ export const useAppStore = create<AppState>()(
         setExecutionProgress: (percent) => set({ executionProgress: percent }),
         logs: [],
         addLog: (log) => {
-          invoke('log_frontend_event', { level: log.level, message: log.message }).catch(console.error);
+          try {
+            invoke('log_frontend_event', { level: log.level, message: log.message }).catch(() => {});
+          } catch (e) {
+            // Headless / non-Tauri environment fallback
+          }
           set((state) => ({
             logs: [
               ...state.logs,

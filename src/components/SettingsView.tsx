@@ -28,6 +28,9 @@ export function SettingsView() {
   const setAutoCheckUpdates = useAppStore((s) => s.setAutoCheckUpdates);
   const lastUpdateCheckTime = useAppStore((s) => s.lastUpdateCheckTime);
   const checkForUpdates = useAppStore((s) => s.checkForUpdates);
+  const openReleaseNotesModal = useAppStore((s) => s.openReleaseNotesModal);
+  const triggerMockUpdate = useAppStore((s) => s.triggerMockUpdate);
+  const updateError = useAppStore((s) => s.updateError);
   const downloadAndInstallUpdate = useAppStore((s) => s.downloadAndInstallUpdate);
   const exportDiagnosticDump = useAppStore((s) => s.exportDiagnosticDump);
   const addToast = useAppStore((s) => s.addToast);
@@ -109,9 +112,18 @@ export function SettingsView() {
 
           {/* Card 2: Software Auto-Updater */}
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
-            <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
-              <RefreshCw className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">{t('settings.autoUpdaterTitle')}</h3>
+            <div className="flex items-center gap-2 border-b border-border-subtle pb-3 justify-between">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-brand" />
+                <h3 className="text-sm font-semibold text-text-primary">{t('settings.autoUpdaterTitle')}</h3>
+              </div>
+              <button
+                onClick={() => triggerMockUpdate()}
+                className="text-[10px] font-mono px-2 py-0.5 border border-brand/30 bg-brand/10 hover:bg-brand/20 text-brand rounded transition-colors"
+                title="Simulate release notes modal & update payload"
+              >
+                Mock Update (Dev)
+              </button>
             </div>
 
             <div className="flex items-start justify-between gap-4">
@@ -154,12 +166,27 @@ export function SettingsView() {
             {updateStatus === 'available' && (
               <div className="rounded-[6px] border border-brand/40 bg-brand-subtle p-3 flex items-center justify-between text-xs text-brand">
                 <span>{t('settings.updateAvailable', { ver: updateInfo?.version })}</span>
-                <button
-                  onClick={() => downloadAndInstallUpdate()}
-                  className="px-2.5 py-1 bg-brand text-white font-medium rounded-[4px] hover:bg-brand-hover transition-colors"
-                >
-                  {t('settings.downloadInstallBtn')}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openReleaseNotesModal()}
+                    className="px-2.5 py-1 bg-surface border border-brand/40 text-brand font-medium rounded-[4px] hover:bg-surface-hover transition-colors"
+                  >
+                    Release Notes
+                  </button>
+                  <button
+                    onClick={() => downloadAndInstallUpdate()}
+                    className="px-2.5 py-1 bg-brand text-white font-medium rounded-[4px] hover:bg-brand-hover transition-colors"
+                  >
+                    {t('settings.downloadInstallBtn')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {updateStatus === 'error' && updateError && (
+              <div className="rounded-[6px] border border-status-danger/40 bg-status-dangerSubtle p-3 text-xs text-status-danger space-y-1">
+                <div className="font-semibold">Update Error</div>
+                <div className="font-mono text-[11px] text-status-danger/90">{updateError}</div>
               </div>
             )}
 

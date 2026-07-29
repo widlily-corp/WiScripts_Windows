@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
-import { Sparkles, Download, RefreshCw, X, Loader2 } from 'lucide-react';
+import { Sparkles, Download, RefreshCw, X, Loader2, FileText } from 'lucide-react';
 
 export function UpdateBanner() {
   const { t } = useTranslation();
@@ -10,6 +10,7 @@ export function UpdateBanner() {
   const updateProgress = useAppStore((s) => s.updateProgress);
   const bannerDismissed = useAppStore((s) => s.bannerDismissed);
   const dismissUpdateBanner = useAppStore((s) => s.dismissUpdateBanner);
+  const openReleaseNotesModal = useAppStore((s) => s.openReleaseNotesModal);
   const downloadAndInstallUpdate = useAppStore((s) => s.downloadAndInstallUpdate);
 
   if (
@@ -54,13 +55,22 @@ export function UpdateBanner() {
 
       <div className="flex items-center gap-2 shrink-0">
         {updateStatus === 'available' && (
-          <button
-            onClick={() => downloadAndInstallUpdate()}
-            className="flex items-center gap-1.5 px-3 py-1 bg-brand hover:bg-brand-hover text-white rounded-[6px] font-medium transition-colors text-xs"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>{t('update_banner.update_now')}</span>
-          </button>
+          <>
+            <button
+              onClick={() => openReleaseNotesModal()}
+              className="flex items-center gap-1.5 px-3 py-1 bg-surface-hover hover:bg-surface-active border border-border text-text-primary rounded-[6px] font-medium transition-colors text-xs"
+            >
+              <FileText className="h-3.5 w-3.5 text-brand" />
+              <span>Release Notes</span>
+            </button>
+            <button
+              onClick={() => downloadAndInstallUpdate()}
+              className="flex items-center gap-1.5 px-3 py-1 bg-brand hover:bg-brand-hover text-white rounded-[6px] font-medium transition-colors text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>{t('update_banner.update_now')}</span>
+            </button>
+          </>
         )}
 
         {updateStatus === 'downloading' && (

@@ -21,6 +21,7 @@ import { StartupView } from './components/StartupView';
 import { SchedulerView } from './components/SchedulerView';
 import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
+import { ReleaseNotesModal } from './components/ReleaseNotesModal';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ToastContainer } from './components/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -112,6 +113,7 @@ export function App() {
 
       <SafetyConfirmationModal />
       <ExecutionProgressModal />
+      <ReleaseNotesModal />
       <ToastContainer />
     </div>
   );

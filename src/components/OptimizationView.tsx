@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
@@ -50,6 +50,11 @@ export function OptimizationView() {
   const addLog = useAppStore((s) => s.addLog);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const setIsExecuting = useAppStore((s) => s.setIsExecuting);
+  const fetchOptimizationsStatus = useAppStore((s) => s.fetchOptimizationsStatus);
+
+  useEffect(() => {
+    fetchOptimizationsStatus();
+  }, [fetchOptimizationsStatus]);
 
   const [expandedCommandId, setExpandedCommandId] = useState<string | null>(null);
 
@@ -111,6 +116,8 @@ export function OptimizationView() {
               commandExecuted: action.command,
             });
           });
+
+          await fetchOptimizationsStatus();
 
           if (!summary.success) {
             const errAction = summary.executedActions.find((a) => a.output.exitCode !== 0);
@@ -343,6 +350,11 @@ export function OptimizationView() {
                           {t(`optimization.categories.${item.category}`)}
                         </span>
                         {getRiskBadge(item.riskLevel)}
+                        {item.isApplied && (
+                          <span className="rounded px-2 py-0.5 font-mono text-[10px] uppercase border bg-brand/10 text-brand border-brand/30">
+                            {t('optimization.applied', 'Applied')}
+                          </span>
+                        )}
                         <span
                           className={`rounded px-2 py-0.5 font-mono text-[10px] uppercase border ${
                             item.isReversible

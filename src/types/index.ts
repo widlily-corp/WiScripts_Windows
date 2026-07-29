@@ -32,7 +32,8 @@ export interface OptimizationItem {
   powershellCommand: string;
   undoCommand: string;
   isRecommended: boolean;
-  isSelected: boolean;
+  isSelected?: boolean;
+  isApplied?: boolean;
 }
 
 export interface OdtConfig {

@@ -216,7 +216,7 @@ pub fn get_rule_catalog() -> Vec<OptimizationItem> {
             description: "Safely removes temporary files and cache artifacts from Windows Temp and User Temp folders.".to_string(),
             risk_level: "low".to_string(),
             is_reversible: false,
-            powershell_command: "Remove-Item -Path \"$env:TEMP\\*\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path \"$env:SystemRoot\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue".to_string(),
+            powershell_command: "Remove-Item -Path \"$env:TEMP\\*\" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path \"$env:SystemRoot\\Temp\\*\" -Recurse -Force -ErrorAction SilentlyContinue; exit 0".to_string(),
             undo_command: "# Temp file deletion is permanent and cannot be undone".to_string(),
             is_recommended: true,
         },
@@ -248,6 +248,79 @@ pub fn preview(selected_keys: &[String]) -> Result<Vec<OptimizationItem>, AppErr
         .filter(|rule| selected_keys.contains(&rule.id))
         .collect();
     Ok(filtered)
+}
+
+pub fn check_status(
+    runner: &dyn CommandRunner,
+) -> Result<std::collections::HashMap<String, bool>, AppError> {
+    let script = r#"
+$status = @{}
+
+$svc = Get-Service -Name DiagTrack -ErrorAction SilentlyContinue
+$status['telemetry_diagtrack'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
+
+$svc = Get-Service -Name dmwappushservice -ErrorAction SilentlyContinue
+$status['telemetry_dmwappush'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
+
+$task1 = Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -TaskName 'Consolidator' -ErrorAction SilentlyContinue
+$task2 = Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -TaskName 'UsbCeip' -ErrorAction SilentlyContinue
+$status['telemetry_ceip_tasks'] = ($task1.State -eq 'Disabled' -or $null -eq $task1) -and ($task2.State -eq 'Disabled' -or $null -eq $task2)
+
+$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -ErrorAction SilentlyContinue).AllowCortana
+$status['bloatware_cortana'] = ($val -eq 0)
+
+$status['bloatware_onedrive'] = (-not (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe")) -and (-not (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe")) -and (-not (Get-Process -Name OneDrive -ErrorAction SilentlyContinue))
+
+$xbox = Get-AppxPackage -AllUsers *XboxApp* -ErrorAction SilentlyContinue
+$status['bloatware_xbox_apps'] = ($null -eq $xbox)
+
+$viewer = Get-AppxPackage *Microsoft3DViewer* -ErrorAction SilentlyContinue
+$status['bloatware_3d_viewer'] = ($null -eq $viewer)
+
+$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -ErrorAction SilentlyContinue).Enabled
+$status['privacy_advertising_id'] = ($val -eq 0)
+
+$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Name 'Value' -ErrorAction SilentlyContinue).Value
+$status['privacy_location_tracking'] = ($val -eq 'Deny')
+
+$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'PublishUserActivities' -ErrorAction SilentlyContinue).PublishUserActivities
+$status['privacy_activity_history'] = ($val -eq 0)
+
+$svc = Get-Service -Name SysMain -ErrorAction SilentlyContinue
+$status['services_sysmain'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
+
+$svc = Get-Service -Name WSearch -ErrorAction SilentlyContinue
+$status['services_search_indexing'] = if ($svc) { $svc.StartType -eq 'Manual' -or $svc.StartType -eq 'Disabled' } else { $true }
+
+$svc = Get-Service -Name Fax -ErrorAction SilentlyContinue
+$status['services_fax_spooler'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
+
+$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideFileExt' -ErrorAction SilentlyContinue).HideFileExt
+$status['ui_show_file_extensions'] = ($val -eq 0)
+
+$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Hidden' -ErrorAction SilentlyContinue).Hidden
+$status['ui_show_hidden_files'] = ($val -eq 1)
+
+$status['ui_classic_context_menu'] = (Test-Path 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32')
+
+$status['disk_clean_temp'] = $false
+$status['disk_clean_delivery_optimization'] = $false
+
+$status | ConvertTo-Json -Compress
+"#;
+
+    let output = runner
+        .run_powershell(script)
+        .map_err(|e| AppError::Execution(e))?;
+    if output.exit_code == 0 {
+        serde_json::from_str(&output.stdout)
+            .map_err(|e| AppError::Execution(format!("Failed to parse status JSON: {}", e)))
+    } else {
+        Err(AppError::Execution(format!(
+            "Failed to check optimization status: {}",
+            output.stderr
+        )))
+    }
 }
 
 pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
@@ -408,13 +481,21 @@ pub fn execute(
             let _ = app_handle.emit("task-progress", &payload);
         }
 
-        match crate::system_restore::create_restore_point(runner, "WiScripts Pre-Optimization Restore Point") {
+        match crate::system_restore::create_restore_point(
+            runner,
+            "WiScripts Pre-Optimization Restore Point",
+        ) {
             Ok(action) => {
-                log::info!("[OptimizationEngine] Pre-optimization restore point created successfully");
+                log::info!(
+                    "[OptimizationEngine] Pre-optimization restore point created successfully"
+                );
                 executed_actions.push(action);
             }
             Err(e) => {
-                log::warn!("[OptimizationEngine] Failed to create restore point (non-fatal): {}", e);
+                log::warn!(
+                    "[OptimizationEngine] Failed to create restore point (non-fatal): {}",
+                    e
+                );
                 if let Some(app_handle) = app {
                     let payload = TaskProgressPayload {
                         current_step: 0,
@@ -442,7 +523,10 @@ pub fn execute(
             let payload = TaskProgressPayload {
                 current_step,
                 total_steps,
-                message: format!("Executing step {}/{}: {}", current_step, total_steps, rule.title),
+                message: format!(
+                    "Executing step {}/{}: {}",
+                    current_step, total_steps, rule.title
+                ),
                 is_error: false,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -452,12 +536,19 @@ pub fn execute(
             match runner.run_powershell(&rule.powershell_command) {
                 Ok(out) => out,
                 Err(e) => {
-                    log::error!("[OptimizationEngine] Rule '{}' failed to run in dry run: {}", rule.id, e);
+                    log::error!(
+                        "[OptimizationEngine] Rule '{}' failed to run in dry run: {}",
+                        rule.id,
+                        e
+                    );
                     if let Some(app_handle) = app {
                         let payload = TaskProgressPayload {
                             current_step,
                             total_steps,
-                            message: format!("Failed step {}/{}: {}: {}", current_step, total_steps, rule.title, e),
+                            message: format!(
+                                "Failed step {}/{}: {}: {}",
+                                current_step, total_steps, rule.title, e
+                            ),
                             is_error: true,
                         };
                         let _ = app_handle.emit("task-progress", &payload);
@@ -482,12 +573,19 @@ pub fn execute(
             match runner.run_powershell(&rule.powershell_command) {
                 Ok(out) => out,
                 Err(e) => {
-                    log::error!("[OptimizationEngine] Rule '{}' failed to run: {}", rule.id, e);
+                    log::error!(
+                        "[OptimizationEngine] Rule '{}' failed to run: {}",
+                        rule.id,
+                        e
+                    );
                     if let Some(app_handle) = app {
                         let payload = TaskProgressPayload {
                             current_step,
                             total_steps,
-                            message: format!("Failed step {}/{}: {}: {}", current_step, total_steps, rule.title, e),
+                            message: format!(
+                                "Failed step {}/{}: {}: {}",
+                                current_step, total_steps, rule.title, e
+                            ),
                             is_error: true,
                         };
                         let _ = app_handle.emit("task-progress", &payload);
@@ -507,7 +605,10 @@ pub fn execute(
                 let payload = TaskProgressPayload {
                     current_step,
                     total_steps,
-                    message: format!("Completed step {}/{}: {}", current_step, total_steps, rule.title),
+                    message: format!(
+                        "Completed step {}/{}: {}",
+                        current_step, total_steps, rule.title
+                    ),
                     is_error: false,
                 };
                 let _ = app_handle.emit("task-progress", &payload);
@@ -703,7 +804,10 @@ mod tests {
         let selected = vec!["telemetry_diagtrack".to_string()];
         let summary = execute(None, &runner, &selected, false).unwrap();
 
-        assert!(!summary.success, "Overall success must be false on non-zero exit code");
+        assert!(
+            !summary.success,
+            "Overall success must be false on non-zero exit code"
+        );
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].output.exit_code, 1);
         assert!(!summary.is_dry_run);
@@ -715,7 +819,10 @@ mod tests {
         let selected = vec!["disk_clean_temp".to_string()];
         let res = execute(None, &runner, &selected, false);
 
-        assert!(res.is_err(), "Runner error should propagate as AppError::Execution");
+        assert!(
+            res.is_err(),
+            "Runner error should propagate as AppError::Execution"
+        );
         if let Err(AppError::Execution(msg)) = res {
             assert!(msg.contains("Spawn process failed"));
         } else {
@@ -749,18 +856,37 @@ mod tests {
         let items = get_rule_catalog();
 
         // Act
-        let ceip_item = items.iter().find(|i| i.id == "telemetry_ceip_tasks").expect("CEIP item missing");
+        let ceip_item = items
+            .iter()
+            .find(|i| i.id == "telemetry_ceip_tasks")
+            .expect("CEIP item missing");
 
         // Assert
-        assert!(ceip_item.powershell_command.contains("-TaskName 'Consolidator'"));
+        assert!(ceip_item
+            .powershell_command
+            .contains("-TaskName 'Consolidator'"));
         assert!(ceip_item.powershell_command.contains("-TaskName 'UsbCeip'"));
-        assert!(ceip_item.powershell_command.contains("; Disable-ScheduledTask"), "Sequential cmdlet invocation required (R3)");
-        assert!(!ceip_item.powershell_command.contains("'Consolidator', 'UsbCeip'"), "Array syntax for TaskName is prohibited (R3)");
+        assert!(
+            ceip_item
+                .powershell_command
+                .contains("; Disable-ScheduledTask"),
+            "Sequential cmdlet invocation required (R3)"
+        );
+        assert!(
+            !ceip_item
+                .powershell_command
+                .contains("'Consolidator', 'UsbCeip'"),
+            "Array syntax for TaskName is prohibited (R3)"
+        );
         assert!(ceip_item.undo_command.contains("-TaskName 'Consolidator'"));
         assert!(ceip_item.undo_command.contains("-TaskName 'UsbCeip'"));
-        assert!(ceip_item.undo_command.contains("; Enable-ScheduledTask"), "Sequential cmdlet invocation required (R3)");
-        assert!(!ceip_item.undo_command.contains("'Consolidator', 'UsbCeip'"), "Array syntax for TaskName is prohibited (R3)");
+        assert!(
+            ceip_item.undo_command.contains("; Enable-ScheduledTask"),
+            "Sequential cmdlet invocation required (R3)"
+        );
+        assert!(
+            !ceip_item.undo_command.contains("'Consolidator', 'UsbCeip'"),
+            "Array syntax for TaskName is prohibited (R3)"
+        );
     }
 }
-
-

@@ -46,7 +46,9 @@ pub struct DeleteResult {
 pub fn get_user_profile_dir() -> Result<PathBuf, AppError> {
     dirs::home_dir()
         .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
-        .ok_or_else(|| AppError::InvalidConfig("Could not resolve USERPROFILE directory".to_string()))
+        .ok_or_else(|| {
+            AppError::InvalidConfig("Could not resolve USERPROFILE directory".to_string())
+        })
 }
 
 fn strip_unc_prefix(path: PathBuf) -> PathBuf {
@@ -103,7 +105,10 @@ pub fn validate_path_in_user_profile<P: AsRef<Path>>(path: P) -> Result<PathBuf,
     let target_str = target_canon.to_string_lossy().to_lowercase();
     let profile_str = user_profile_canon.to_string_lossy().to_lowercase();
 
-    if target_str == profile_str || target_str.starts_with(&format!("{}\\", profile_str)) || target_str.starts_with(&format!("{}/", profile_str)) {
+    if target_str == profile_str
+        || target_str.starts_with(&format!("{}\\", profile_str))
+        || target_str.starts_with(&format!("{}/", profile_str))
+    {
         Ok(target_canon)
     } else {
         Err(AppError::InvalidConfig(format!(
@@ -150,7 +155,10 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
             if let Ok(meta) = entry.metadata() {
                 let sz = meta.len();
                 if sz > 0 {
-                    size_map.entry(sz).or_default().push(entry.path().to_path_buf());
+                    size_map
+                        .entry(sz)
+                        .or_default()
+                        .push(entry.path().to_path_buf());
                 }
             }
         }
@@ -163,16 +171,17 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
         .flat_map(|(sz, files)| files.into_iter().map(move |p| (sz, p)))
         .collect();
 
-    log::info!("[Storage] Phase 1 completed. Found {} collision candidate files", candidates.len());
+    log::info!(
+        "[Storage] Phase 1 completed. Found {} collision candidate files",
+        candidates.len()
+    );
 
     // Phase 2: Compute SHA-256 in parallel via rayon
     let hashed_files: Vec<(u64, String, PathBuf)> = candidates
         .into_par_iter()
-        .filter_map(|(sz, path)| {
-            match compute_file_hash(&path) {
-                Ok(hash) => Some((sz, hash, path)),
-                Err(_) => None,
-            }
+        .filter_map(|(sz, path)| match compute_file_hash(&path) {
+            Ok(hash) => Some((sz, hash, path)),
+            Err(_) => None,
         })
         .collect();
 
@@ -213,7 +222,10 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
         savings_b.cmp(&savings_a)
     });
 
-    log::info!("[Storage] Duplicate scan finished. Found {} duplicate groups", duplicate_groups.len());
+    log::info!(
+        "[Storage] Duplicate scan finished. Found {} duplicate groups",
+        duplicate_groups.len()
+    );
 
     Ok(duplicate_groups)
 }
@@ -228,7 +240,11 @@ pub fn scan_large_files(
     };
 
     let max_items = limit.unwrap_or(50);
-    log::info!("[Storage] Scanning for top {} large files in {:?}", max_items, base_dir);
+    log::info!(
+        "[Storage] Scanning for top {} large files in {:?}",
+        max_items,
+        base_dir
+    );
 
     let mut large_files = Vec::new();
 
@@ -263,7 +279,10 @@ pub fn scan_large_files(
     large_files.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
     large_files.truncate(max_items);
 
-    log::info!("[Storage] Large files scan finished. Returning top {} files", large_files.len());
+    log::info!(
+        "[Storage] Large files scan finished. Returning top {} files",
+        large_files.len()
+    );
 
     Ok(large_files)
 }
@@ -357,7 +376,10 @@ mod tests {
         for entry in WalkDir::new(dir.path()).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
                 let meta = entry.metadata().unwrap();
-                size_map.entry(meta.len()).or_default().push(entry.path().to_path_buf());
+                size_map
+                    .entry(meta.len())
+                    .or_default()
+                    .push(entry.path().to_path_buf());
             }
         }
 
@@ -415,7 +437,10 @@ mod tests {
         // Let's check compute_file_hash and hashing logic directly:
         let hash1 = compute_file_hash(&file1_path).unwrap();
         let hash2 = compute_file_hash(&file2_path).unwrap();
-        assert_ne!(hash1, hash2, "Hashes must differ for different content of identical size");
+        assert_ne!(
+            hash1, hash2,
+            "Hashes must differ for different content of identical size"
+        );
     }
 
     #[test]
@@ -446,20 +471,33 @@ mod tests {
     #[test]
     fn test_security_junction_point_outside_profile() {
         if let Ok(user_profile) = get_user_profile_dir() {
-            let test_dir = user_profile.join("AppData").join("Local").join("Temp").join("test_junction_test");
+            let test_dir = user_profile
+                .join("AppData")
+                .join("Local")
+                .join("Temp")
+                .join("test_junction_test");
             let _ = std::fs::create_dir_all(&test_dir);
             let junction_target = Path::new(r"C:\Windows\System32");
             let junction_link = test_dir.join("sys32_link");
 
             // Attempt junction creation using cmd mklink /J
             let output = std::process::Command::new("cmd")
-                .args(["/C", "mklink", "/J", junction_link.to_str().unwrap(), junction_target.to_str().unwrap()])
+                .args([
+                    "/C",
+                    "mklink",
+                    "/J",
+                    junction_link.to_str().unwrap(),
+                    junction_target.to_str().unwrap(),
+                ])
                 .output();
 
             if let Ok(out) = output {
                 if out.status.success() {
                     let result = validate_path_in_user_profile(&junction_link);
-                    assert!(result.is_err(), "Junction pointing outside USERPROFILE must be rejected!");
+                    assert!(
+                        result.is_err(),
+                        "Junction pointing outside USERPROFILE must be rejected!"
+                    );
                     let _ = std::fs::remove_dir(&junction_link);
                 }
             }

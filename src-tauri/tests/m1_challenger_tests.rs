@@ -23,11 +23,21 @@ fn test_m1_pipe_buffer_overflow_stress_test() {
     let res = runner.run_powershell(script);
     let elapsed = start.elapsed();
 
-    assert!(res.is_ok(), "PowerShell command producing >64KB output should complete");
+    assert!(
+        res.is_ok(),
+        "PowerShell command producing >64KB output should complete"
+    );
     let out = res.unwrap();
     assert_eq!(out.exit_code, 0);
-    assert!(out.stdout.len() > 100_000, "Output should be larger than 100KB, got {} bytes", out.stdout.len());
-    assert!(elapsed.as_secs() < 10, "Should complete within 10 seconds without deadlocking on pipe buffer");
+    assert!(
+        out.stdout.len() > 100_000,
+        "Output should be larger than 100KB, got {} bytes",
+        out.stdout.len()
+    );
+    assert!(
+        elapsed.as_secs() < 10,
+        "Should complete within 10 seconds without deadlocking on pipe buffer"
+    );
 }
 
 #[test]
@@ -38,18 +48,30 @@ fn test_m1_cmd_large_stdout_pipe_buffer() {
     let res = runner.run_cmd("for /L %i in (1,1,3000) do @echo Output line %i with padding text to flood stdout pipe buffer capacity");
     let elapsed = start.elapsed();
 
-    assert!(res.is_ok(), "CMD command producing >64KB output should complete");
+    assert!(
+        res.is_ok(),
+        "CMD command producing >64KB output should complete"
+    );
     let out = res.unwrap();
     assert_eq!(out.exit_code, 0);
-    assert!(out.stdout.len() > 100_000, "CMD output should be larger than 100KB, got {} bytes", out.stdout.len());
-    assert!(elapsed.as_secs() < 10, "Should complete within 10 seconds without deadlocking");
+    assert!(
+        out.stdout.len() > 100_000,
+        "CMD output should be larger than 100KB, got {} bytes",
+        out.stdout.len()
+    );
+    assert!(
+        elapsed.as_secs() < 10,
+        "Should complete within 10 seconds without deadlocking"
+    );
 }
 
 #[test]
 fn test_m1_verify_grandchild_process_tree_kill_behavior() {
     let mut cmd = Command::new("cmd.exe");
     cmd.args(["/C", "powershell -Command Start-Sleep -Seconds 30"]);
-    let mut child = cmd.spawn().expect("Failed to spawn cmd with powershell grandchild");
+    let mut child = cmd
+        .spawn()
+        .expect("Failed to spawn cmd with powershell grandchild");
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 

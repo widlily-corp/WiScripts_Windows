@@ -92,6 +92,7 @@ interface AppState {
   selectTelemetryOnlyOptimizations: () => void;
   applyPreset: (preset: 'recommended' | 'telemetry_only' | 'full_debloat') => void;
   setOptimizations: (items: OptimizationItem[]) => void;
+  fetchOptimizationsStatus: () => Promise<void>;
 
   // Feature R1: Diagnostics
   runDiagnostics: (action: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
@@ -703,6 +704,20 @@ export const useAppStore = create<AppState>()(
           })),
         setOptimizations: (items) => set({ optimizations: items }),
 
+        fetchOptimizationsStatus: async () => {
+          try {
+            const statusMap = await invoke<Record<string, boolean>>('get_optimizations_status');
+            set((state) => ({
+              optimizations: state.optimizations.map(item => ({
+                ...item,
+                isApplied: statusMap[item.id] ?? false
+              }))
+            }));
+          } catch (err) {
+            console.error('Failed to fetch optimizations status:', err);
+          }
+        },
+
         // Feature R1: Diagnostics
         runDiagnostics: async (action: string, dryRun?: boolean) => {
           const currentDryRun = dryRun ?? get().dryRunMode;
@@ -971,6 +986,7 @@ export const useAppStore = create<AppState>()(
               addToast({ type: 'error', title: 'Profile Application Failed', message: errMsg });
             } else {
               addToast({ type: 'success', title: 'Profile Applied', message: `Applied profile ${profileId} successfully.` });
+              await get().fetchOptimizationsStatus();
             }
             return summary;
           } catch (err) {

@@ -107,7 +107,10 @@ fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<Comma
                     let _ = child.wait();
                     let _ = stdout_handle.join();
                     let _ = stderr_handle.join();
-                    return Err(format!("Process execution timed out after {} seconds", timeout_secs));
+                    return Err(format!(
+                        "Process execution timed out after {} seconds",
+                        timeout_secs
+                    ));
                 }
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -256,7 +259,10 @@ impl DryRunRunner {
 
 impl CommandRunner for DryRunRunner {
     fn run_powershell(&self, script: &str) -> Result<CommandOutput, String> {
-        log::info!("[DryRunRunner] [DRY-RUN] Simulated PowerShell command: {}", script);
+        log::info!(
+            "[DryRunRunner] [DRY-RUN] Simulated PowerShell command: {}",
+            script
+        );
 
         self.history.lock().unwrap().push(RecordedCommand {
             runner_type: "powershell".to_string(),
@@ -273,7 +279,10 @@ impl CommandRunner for DryRunRunner {
     }
 
     fn run_cmd(&self, command: &str) -> Result<CommandOutput, String> {
-        log::info!("[DryRunRunner] [DRY-RUN] Simulated CMD command: {}", command);
+        log::info!(
+            "[DryRunRunner] [DRY-RUN] Simulated CMD command: {}",
+            command
+        );
 
         self.history.lock().unwrap().push(RecordedCommand {
             runner_type: "cmd".to_string(),
@@ -304,7 +313,9 @@ mod tests {
         let runner = DryRunRunner::new();
 
         // Act
-        let ps_res = runner.run_powershell("Stop-Service -Name DiagTrack").unwrap();
+        let ps_res = runner
+            .run_powershell("Stop-Service -Name DiagTrack")
+            .unwrap();
         let cmd_res = runner.run_cmd("echo Hello").unwrap();
 
         // Assert
@@ -346,10 +357,22 @@ mod tests {
         let json_value = serde_json::to_value(&summary).expect("Serialization failed");
 
         // Assert
-        assert!(json_value.get("executedActions").is_some(), "Key 'executedActions' missing in JSON");
-        assert!(json_value.get("totalDurationMs").is_some(), "Key 'totalDurationMs' missing in JSON");
-        assert!(json_value.get("isDryRun").is_some(), "Key 'isDryRun' missing in JSON");
-        assert!(json_value.get("success").is_some(), "Key 'success' missing in JSON");
+        assert!(
+            json_value.get("executedActions").is_some(),
+            "Key 'executedActions' missing in JSON"
+        );
+        assert!(
+            json_value.get("totalDurationMs").is_some(),
+            "Key 'totalDurationMs' missing in JSON"
+        );
+        assert!(
+            json_value.get("isDryRun").is_some(),
+            "Key 'isDryRun' missing in JSON"
+        );
+        assert!(
+            json_value.get("success").is_some(),
+            "Key 'success' missing in JSON"
+        );
 
         let action_obj = &json_value["executedActions"][0];
         assert!(action_obj.get("id").is_some());
@@ -358,12 +381,16 @@ mod tests {
         assert!(action_obj.get("skipped").is_some());
 
         let output_obj = &action_obj["output"];
-        assert!(output_obj.get("exitCode").is_some(), "Key 'exitCode' missing in JSON");
+        assert!(
+            output_obj.get("exitCode").is_some(),
+            "Key 'exitCode' missing in JSON"
+        );
         assert!(output_obj.get("stdout").is_some());
         assert!(output_obj.get("stderr").is_some());
 
         // Also test round-trip deserialization
-        let deserialized: ExecutionSummary = serde_json::from_value(json_value).expect("Deserialization failed");
+        let deserialized: ExecutionSummary =
+            serde_json::from_value(json_value).expect("Deserialization failed");
         assert_eq!(summary, deserialized);
     }
 
@@ -373,9 +400,15 @@ mod tests {
         let runner = RealRunner::new();
         // Generate > 64 KB of output in PowerShell (2000 lines of ~50 chars = ~100 KB)
         let script = "1..2000 | ForEach-Object { 'Line ' + $_ + ' with padding data to exceed 64KB pipe buffer' }";
-        let res = runner.run_powershell(script).expect("PowerShell large output execution failed");
+        let res = runner
+            .run_powershell(script)
+            .expect("PowerShell large output execution failed");
         assert_eq!(res.exit_code, 0);
-        assert!(res.stdout.len() > 65536, "Expected stdout length > 64KB, got {}", res.stdout.len());
+        assert!(
+            res.stdout.len() > 65536,
+            "Expected stdout length > 64KB, got {}",
+            res.stdout.len()
+        );
         assert!(res.stdout.contains("Line 2000"));
     }
 
@@ -390,10 +423,20 @@ mod tests {
                 [Console]::Error.WriteLine("STDERR line " + $_ + " with buffer fill text 0123456789ABCDEF")
             }
         "#;
-        let res = runner.run_powershell(script).expect("Simultaneous large stdout/stderr execution failed");
+        let res = runner
+            .run_powershell(script)
+            .expect("Simultaneous large stdout/stderr execution failed");
         assert_eq!(res.exit_code, 0);
-        assert!(res.stdout.len() > 100000, "Expected stdout > 100KB, got {}", res.stdout.len());
-        assert!(res.stderr.len() > 100000, "Expected stderr > 100KB, got {}", res.stderr.len());
+        assert!(
+            res.stdout.len() > 100000,
+            "Expected stdout > 100KB, got {}",
+            res.stdout.len()
+        );
+        assert!(
+            res.stderr.len() > 100000,
+            "Expected stderr > 100KB, got {}",
+            res.stderr.len()
+        );
         assert!(res.stdout.contains("STDOUT line 3000"));
         assert!(res.stderr.contains("STDERR line 3000"));
     }
@@ -459,13 +502,3 @@ mod tests {
         assert!(!result.contains('\u{FFFD}'));
     }
 }
-
-
-
-
-
-
-
-
-
-

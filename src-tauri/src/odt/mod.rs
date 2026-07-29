@@ -214,12 +214,18 @@ pub fn execute_odt_install(
             let _ = app_handle.emit("task-progress", &payload);
         }
     } else {
-        log::warn!("[ODTEngine] ODT install returned exit code {}", output.exit_code);
+        log::warn!(
+            "[ODTEngine] ODT install returned exit code {}",
+            output.exit_code
+        );
         if let Some(app_handle) = app {
             let payload = TaskProgressPayload {
                 current_step: 1,
                 total_steps: 1,
-                message: format!("Error in step 1/1: Office ODT Installation (exit code {})", output.exit_code),
+                message: format!(
+                    "Error in step 1/1: Office ODT Installation (exit code {})",
+                    output.exit_code
+                ),
                 is_error: true,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -247,7 +253,8 @@ pub fn execute_install(
     runner: &dyn CommandRunner,
     config: &OdtConfig,
 ) -> Result<ExecutionSummary, AppError> {
-    execute_odt_install(None, runner, config, None, runner.is_dry_run()).map_err(AppError::Execution)
+    execute_odt_install(None, runner, config, None, runner.is_dry_run())
+        .map_err(AppError::Execution)
 }
 
 /// Bypasses ODT regional block by setting Microsoft Office update policy registry keys and experiment configs.
@@ -446,10 +453,7 @@ mod tests {
             escape_powershell_literal("C:\\Test\"; calc.exe #"),
             "'C:\\Test\"; calc.exe #'"
         );
-        assert_eq!(
-            escape_powershell_literal("$(calc.exe)"),
-            "'$(calc.exe)'"
-        );
+        assert_eq!(escape_powershell_literal("$(calc.exe)"), "'$(calc.exe)'");
     }
 
     #[test]
@@ -529,7 +533,10 @@ mod tests {
         let config = OdtConfig::default();
         let summary = execute_odt_install(None, &runner, &config, None, false).unwrap();
 
-        assert!(!summary.success, "ODT execution summary success must be false on non-zero exit code");
+        assert!(
+            !summary.success,
+            "ODT execution summary success must be false on non-zero exit code"
+        );
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].output.exit_code, 1603);
         assert!(!summary.is_dry_run);
@@ -542,7 +549,9 @@ mod tests {
         let res = execute_odt_install(None, &runner, &config, None, false);
 
         assert!(res.is_err(), "Runner error should propagate as Err(String)");
-        assert!(res.unwrap_err().contains("ODT execution failed: ODT spawn failed"));
+        assert!(res
+            .unwrap_err()
+            .contains("ODT execution failed: ODT spawn failed"));
     }
 
     #[test]
@@ -554,7 +563,9 @@ mod tests {
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].id, "odt_regional_bypass");
-        assert!(summary.executed_actions[0].command.contains("PreventRegionalBlock"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("PreventRegionalBlock"));
         assert!(summary.executed_actions[0].command.contains("CountryCode"));
 
         let history = runner.get_history();

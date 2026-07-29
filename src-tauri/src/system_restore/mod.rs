@@ -51,7 +51,8 @@ pub mod native_winapi {
                 return Err("Failed to load srclient.dll".to_string());
             }
 
-            let proc_name = std::ffi::CString::new("SRSetRestorePointW").map_err(|e| e.to_string())?;
+            let proc_name =
+                std::ffi::CString::new("SRSetRestorePointW").map_err(|e| e.to_string())?;
             let proc_addr = GetProcAddress(h_module, proc_name.as_ptr() as *const u8);
             if proc_addr.is_null() {
                 FreeLibrary(h_module);
@@ -72,12 +73,21 @@ pub mod native_winapi {
             let copy_len = desc_u16.len().min(255);
             begin_spec.sz_description[..copy_len].copy_from_slice(&desc_u16[..copy_len]);
 
-            let mut begin_status = STATEMGRSTATUS { n_status: 0, ll_sequence_number: 0 };
+            let mut begin_status = STATEMGRSTATUS {
+                n_status: 0,
+                ll_sequence_number: 0,
+            };
             let begin_res = sr_set_restore_point(&begin_spec, &mut begin_status);
 
-            if begin_res == 0 || (begin_status.n_status != ERROR_SUCCESS && begin_status.n_status != ERROR_ALREADY_EXISTS) {
+            if begin_res == 0
+                || (begin_status.n_status != ERROR_SUCCESS
+                    && begin_status.n_status != ERROR_ALREADY_EXISTS)
+            {
                 FreeLibrary(h_module);
-                return Err(format!("SRSetRestorePointW (BEGIN_SYSTEM_CHANGE) failed with status code: {}", begin_status.n_status));
+                return Err(format!(
+                    "SRSetRestorePointW (BEGIN_SYSTEM_CHANGE) failed with status code: {}",
+                    begin_status.n_status
+                ));
             }
 
             let seq_num = begin_status.ll_sequence_number;
@@ -90,14 +100,23 @@ pub mod native_winapi {
                 sz_description: [0u16; 256],
             };
 
-            let mut end_status = STATEMGRSTATUS { n_status: 0, ll_sequence_number: 0 };
+            let mut end_status = STATEMGRSTATUS {
+                n_status: 0,
+                ll_sequence_number: 0,
+            };
             let end_res = sr_set_restore_point(&end_spec, &mut end_status);
             FreeLibrary(h_module);
 
-            if end_res != 0 && (end_status.n_status == ERROR_SUCCESS || end_status.n_status == ERROR_ALREADY_EXISTS) {
+            if end_res != 0
+                && (end_status.n_status == ERROR_SUCCESS
+                    || end_status.n_status == ERROR_ALREADY_EXISTS)
+            {
                 Ok(seq_num)
             } else {
-                Err(format!("SRSetRestorePointW (END_SYSTEM_CHANGE) failed with status code: {}", end_status.n_status))
+                Err(format!(
+                    "SRSetRestorePointW (END_SYSTEM_CHANGE) failed with status code: {}",
+                    end_status.n_status
+                ))
             }
         }
     }
@@ -136,7 +155,10 @@ pub fn parse_restore_point_error(raw_stderr: &str, exit_code: i32) -> String {
         "System Restore creation frequency limit reached (0x80041001). A restore point was created within the last 24 hours. Set SystemRestorePointCreationFrequency registry key to 0 to bypass.".to_string()
     } else if lower.contains("0x80070422") || lower.contains("disabled") {
         "System Restore is disabled on the system drive (0x80070422). Enable System Restore on drive C: to create restore points.".to_string()
-    } else if lower.contains("0x80070005") || lower.contains("access is denied") || lower.contains("accessdenied") {
+    } else if lower.contains("0x80070005")
+        || lower.contains("access is denied")
+        || lower.contains("accessdenied")
+    {
         "Access is denied (0x80070005). Administrator privileges are required to create a System Restore point.".to_string()
     } else {
         format!(
@@ -178,7 +200,10 @@ pub fn create_restore_point(
     {
         match native_winapi::create_restore_point_native(description) {
             Ok(seq) => {
-                log::info!("[SystemRestore] Native SRSetRestorePointW created restore point (seq #{})", seq);
+                log::info!(
+                    "[SystemRestore] Native SRSetRestorePointW created restore point (seq #{})",
+                    seq
+                );
                 return Ok(ExecutedAction {
                     id: "create_restore_point".to_string(),
                     name: format!("Create System Restore Point ({})", description),
@@ -209,7 +234,10 @@ pub fn create_restore_point(
         let lower_stderr = output.stderr.to_lowercase();
 
         // Check if frequency limit error (0x80041001): try bypass registry tweak and retry
-        if lower_stderr.contains("0x80041001") || lower_stderr.contains("24 hours") || lower_stderr.contains("frequency") {
+        if lower_stderr.contains("0x80041001")
+            || lower_stderr.contains("24 hours")
+            || lower_stderr.contains("frequency")
+        {
             log::warn!("[SystemRestore] Frequency limit reached. Attempting registry bypass (SystemRestorePointCreationFrequency = 0)...");
             let bypass_cmd = get_frequency_limit_bypass_command();
             if let Ok(bypass_res) = runner.run_powershell(&bypass_cmd) {
@@ -349,7 +377,10 @@ pub fn restore_system_point(
         runner.is_dry_run()
     );
 
-    let ps_command = format!("Restore-Computer -SequenceNumber {} -Confirm:$false", sequence_number);
+    let ps_command = format!(
+        "Restore-Computer -SequenceNumber {} -Confirm:$false",
+        sequence_number
+    );
 
     let output = runner.run_powershell(&ps_command)?;
 
@@ -364,7 +395,10 @@ pub fn restore_system_point(
         return Err(err_msg);
     }
 
-    log::info!("[SystemRestore] System restore command issued successfully for sequence number {}", sequence_number);
+    log::info!(
+        "[SystemRestore] System restore command issued successfully for sequence number {}",
+        sequence_number
+    );
 
     Ok(ExecutedAction {
         id: "restore_system_point".to_string(),
@@ -437,7 +471,10 @@ mod tests {
         // Assert
         assert!(!points.is_empty());
         assert_eq!(points[0].sequence_number, 101);
-        assert_eq!(points[0].description, "WiScripts System Optimization Checkpoint");
+        assert_eq!(
+            points[0].description,
+            "WiScripts System Optimization Checkpoint"
+        );
     }
 
     #[test]
@@ -477,7 +514,8 @@ mod tests {
         let enable_cmd = get_enable_restore_command();
 
         // Assert
-        assert!(bypass_cmd.contains(r#"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore"#));
+        assert!(bypass_cmd
+            .contains(r#"HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore"#));
         assert!(bypass_cmd.contains("SystemRestorePointCreationFrequency"));
         assert!(bypass_cmd.contains("-Value 0"));
 
@@ -510,7 +548,8 @@ mod tests {
         let runner = CustomOutputRunner {
             exit_code: 1,
             stdout: String::new(),
-            stderr: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))".to_string(),
+            stderr: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))"
+                .to_string(),
         };
 
         // Act
@@ -534,12 +573,16 @@ mod tests {
 
         // Assert
         assert_eq!(action.id, "restore_system_point");
-        assert!(action.command.contains("Restore-Computer -SequenceNumber 42 -Confirm:$false"));
+        assert!(action
+            .command
+            .contains("Restore-Computer -SequenceNumber 42 -Confirm:$false"));
         assert_eq!(action.output.exit_code, 0);
 
         let history = runner.get_history();
         assert_eq!(history.len(), 1);
-        assert!(history[0].command.contains("Restore-Computer -SequenceNumber 42"));
+        assert!(history[0]
+            .command
+            .contains("Restore-Computer -SequenceNumber 42"));
     }
 
     struct CustomOutputRunner {
@@ -589,4 +632,3 @@ mod tests {
         assert!(err.contains("frequency limit reached"));
     }
 }
-

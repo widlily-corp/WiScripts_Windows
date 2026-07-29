@@ -80,7 +80,10 @@ pub fn execute_activation(
                 let payload = TaskProgressPayload {
                     current_step: 1,
                     total_steps: 1,
-                    message: format!("Error in step 1/1: Microsoft Activation ({}): {}", method, e),
+                    message: format!(
+                        "Error in step 1/1: Microsoft Activation ({}): {}",
+                        method, e
+                    ),
                     is_error: true,
                 };
                 let _ = app_handle.emit("task-progress", &payload);
@@ -102,12 +105,18 @@ pub fn execute_activation(
             let _ = app_handle.emit("task-progress", &payload);
         }
     } else {
-        log::warn!("[MASEngine] MAS activation returned exit code {}", output.exit_code);
+        log::warn!(
+            "[MASEngine] MAS activation returned exit code {}",
+            output.exit_code
+        );
         if let Some(app_handle) = app {
             let payload = TaskProgressPayload {
                 current_step: 1,
                 total_steps: 1,
-                message: format!("Error in step 1/1: Microsoft Activation ({}) (exit code {})", method, output.exit_code),
+                message: format!(
+                    "Error in step 1/1: Microsoft Activation ({}) (exit code {})",
+                    method, output.exit_code
+                ),
                 is_error: true,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -245,7 +254,10 @@ mod tests {
         let runner = FailingRunner { exit_code: 1 };
         let summary = execute_activation(None, &runner, ActivationMethod::Hwid, false).unwrap();
 
-        assert!(!summary.success, "Activation execution summary success must be false on non-zero exit code");
+        assert!(
+            !summary.success,
+            "Activation execution summary success must be false on non-zero exit code"
+        );
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].output.exit_code, 1);
         assert!(!summary.is_dry_run);
@@ -257,6 +269,8 @@ mod tests {
         let res = execute_activation(None, &runner, ActivationMethod::Hwid, false);
 
         assert!(res.is_err(), "Runner error should propagate as Err(String)");
-        assert!(res.unwrap_err().contains("Activation execution failed: MAS script fetch failed"));
+        assert!(res
+            .unwrap_err()
+            .contains("Activation execution failed: MAS script fetch failed"));
     }
 }

@@ -48,6 +48,7 @@ pub fn run() {
             commands::get_rule_catalog,
             commands::get_rules_by_category,
             commands::preview_optimizations,
+            commands::get_optimizations_status,
             commands::execute_optimizations,
             commands::generate_odt_xml,
             commands::execute_odt_install,
@@ -81,6 +82,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-
-

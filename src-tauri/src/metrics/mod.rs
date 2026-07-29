@@ -121,7 +121,11 @@ impl MetricsCollector {
 
         let now = Instant::now();
         let elapsed_secs = now.duration_since(self.last_refresh).as_secs_f64();
-        let dt = if elapsed_secs < 0.001 { 1.0 } else { elapsed_secs };
+        let dt = if elapsed_secs < 0.001 {
+            1.0
+        } else {
+            elapsed_secs
+        };
         self.last_refresh = now;
 
         // CPU Metrics
@@ -326,7 +330,10 @@ fn query_nvidia_smi_temp() -> Option<f32> {
         cmd.creation_flags(0x08000000);
         cmd.stdin(std::process::Stdio::null());
         let output = cmd
-            .args(["--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"])
+            .args([
+                "--query-gpu=temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ])
             .output()
             .ok()?;
 

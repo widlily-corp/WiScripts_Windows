@@ -6,7 +6,9 @@ use wiscripts_windows_lib::error::AppError;
 use wiscripts_windows_lib::optimization::TaskProgressPayload;
 use wiscripts_windows_lib::packages::{self, UwpAppInfo, WingetPackage};
 use wiscripts_windows_lib::profiles::{self, OptimizationProfile};
-use wiscripts_windows_lib::runner::{CommandOutput, DryRunRunner, ExecutedAction, ExecutionSummary};
+use wiscripts_windows_lib::runner::{
+    CommandOutput, DryRunRunner, ExecutedAction, ExecutionSummary,
+};
 
 // ===========================================================================
 // CATEGORY 1: DRY-RUN BEHAVIOR & COMMAND RECORDINGS (R1-R5 FEATURES)
@@ -17,7 +19,10 @@ fn test_r1_diagnostics_dry_run_command_recordings() {
     // 1. sfc_scannow
     let runner = DryRunRunner::new();
     let summary = diagnostics::run_diagnostics(None, &runner, "sfc_scannow", true).unwrap();
-    assert!(summary.is_dry_run, "R1 sfc summary must flag is_dry_run=true");
+    assert!(
+        summary.is_dry_run,
+        "R1 sfc summary must flag is_dry_run=true"
+    );
     assert!(summary.success);
     assert_eq!(summary.executed_actions.len(), 1);
     assert_eq!(summary.executed_actions[0].command, "sfc /scannow");
@@ -32,18 +37,27 @@ fn test_r1_diagnostics_dry_run_command_recordings() {
     let summary = diagnostics::run_diagnostics(None, &runner, "dism_restorehealth", true).unwrap();
     assert!(summary.is_dry_run);
     assert!(summary.success);
-    assert_eq!(summary.executed_actions[0].command, "DISM.exe /Online /Cleanup-Image /RestoreHealth");
+    assert_eq!(
+        summary.executed_actions[0].command,
+        "DISM.exe /Online /Cleanup-Image /RestoreHealth"
+    );
 
     let history = runner.get_history();
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].command, "DISM.exe /Online /Cleanup-Image /RestoreHealth");
+    assert_eq!(
+        history[0].command,
+        "DISM.exe /Online /Cleanup-Image /RestoreHealth"
+    );
 
     // 3. reset_tcpip
     runner.clear_history();
     let summary = diagnostics::run_diagnostics(None, &runner, "reset_tcpip", true).unwrap();
     assert!(summary.is_dry_run);
     assert!(summary.success);
-    assert_eq!(summary.executed_actions[0].command, "netsh int ip reset; netsh winsock reset");
+    assert_eq!(
+        summary.executed_actions[0].command,
+        "netsh int ip reset; netsh winsock reset"
+    );
 
     // 4. all
     runner.clear_history();
@@ -54,8 +68,14 @@ fn test_r1_diagnostics_dry_run_command_recordings() {
     let history = runner.get_history();
     assert_eq!(history.len(), 3);
     assert_eq!(history[0].command, "sfc /scannow");
-    assert_eq!(history[1].command, "DISM.exe /Online /Cleanup-Image /RestoreHealth");
-    assert_eq!(history[2].command, "netsh int ip reset; netsh winsock reset");
+    assert_eq!(
+        history[1].command,
+        "DISM.exe /Online /Cleanup-Image /RestoreHealth"
+    );
+    assert_eq!(
+        history[2].command,
+        "netsh int ip reset; netsh winsock reset"
+    );
 }
 
 #[test]
@@ -63,10 +83,16 @@ fn test_r2_packages_dry_run_command_recordings() {
     // 1. winget_search
     let runner = DryRunRunner::new();
     let packages = packages::winget_search(&runner, "git").unwrap();
-    assert!(!packages.is_empty(), "Winget search in dry-run should return mock packages");
+    assert!(
+        !packages.is_empty(),
+        "Winget search in dry-run should return mock packages"
+    );
     let history = runner.get_history();
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].command, "winget search --query \"git\" --accept-source-agreements");
+    assert_eq!(
+        history[0].command,
+        "winget search --query \"git\" --accept-source-agreements"
+    );
 
     // 2. winget_install
     runner.clear_history();
@@ -161,14 +187,17 @@ fn test_r4_dns_context_dry_run_command_recordings() {
 
     // 2. set_dns_server - cloudflare with explicit interface alias
     runner.clear_history();
-    let summary = dns_context::set_dns_server(None, &runner, "cloudflare", Some("Ethernet 1"), true).unwrap();
+    let summary =
+        dns_context::set_dns_server(None, &runner, "cloudflare", Some("Ethernet 1"), true).unwrap();
     assert!(summary.is_dry_run);
     assert!(summary.success);
     let history = runner.get_history();
     assert_eq!(history.len(), 1);
     assert!(history[0].command.contains("1.1.1.1"));
     assert!(history[0].command.contains("1.0.0.1"));
-    assert!(history[0].command.contains("-InterfaceAlias \"Ethernet 1\""));
+    assert!(history[0]
+        .command
+        .contains("-InterfaceAlias \"Ethernet 1\""));
 
     // 3. set_dns_server - google
     runner.clear_history();
@@ -282,7 +311,8 @@ fn test_stress_invalid_action_and_provider_strings() {
     }
 
     // R3: Unsupported profile ID
-    let err = profiles::apply_optimization_profile(None, &runner, "non_existent_preset", true).unwrap_err();
+    let err = profiles::apply_optimization_profile(None, &runner, "non_existent_preset", true)
+        .unwrap_err();
     if let AppError::InvalidConfig(msg) = err {
         assert!(msg.contains("Optimization profile 'non_existent_preset' not found"));
     } else {
@@ -290,7 +320,8 @@ fn test_stress_invalid_action_and_provider_strings() {
     }
 
     // R4: Unsupported DNS provider
-    let err = dns_context::set_dns_server(None, &runner, "unsupported_dns", None, true).unwrap_err();
+    let err =
+        dns_context::set_dns_server(None, &runner, "unsupported_dns", None, true).unwrap_err();
     if let AppError::InvalidConfig(msg) = err {
         assert!(msg.contains("Unsupported DNS provider: unsupported_dns"));
     } else {
@@ -306,7 +337,9 @@ fn test_stress_driver_backup_paths_special_characters() {
     let path_with_spaces = "C:\\Users\\Test User\\Documents\\Driver Backups 2026";
     let summary = driver_backup::backup_drivers(None, &runner, path_with_spaces, true).unwrap();
     assert!(summary.success);
-    assert!(summary.executed_actions[0].command.contains(&format!("\"{}\"", path_with_spaces)));
+    assert!(summary.executed_actions[0]
+        .command
+        .contains(&format!("\"{}\"", path_with_spaces)));
 
     // 2. Path with Unicode / Cyrillic characters
     let cyrillic_path = "D:\\РезервныеКопии\\Драйверы_Системы";
@@ -328,7 +361,9 @@ fn test_stress_package_ids_and_full_names() {
     // Winget package ID with dots and hyphens
     let summary = packages::winget_install(None, &runner, "Mozilla.Firefox.ESR", true).unwrap();
     assert!(summary.success);
-    assert!(summary.executed_actions[0].command.contains("Mozilla.Firefox.ESR"));
+    assert!(summary.executed_actions[0]
+        .command
+        .contains("Mozilla.Firefox.ESR"));
 
     // Case-insensitivity in R1 action & R3 profile ID
     let summary = diagnostics::run_diagnostics(None, &runner, "SFC_SCANNOW", true).unwrap();
@@ -372,9 +407,18 @@ fn test_ipc_struct_uwp_app_info_serialization() {
 
     let json = serde_json::to_value(&app).unwrap();
     assert!(json.get("name").is_some());
-    assert!(json.get("packageFullName").is_some(), "Key 'packageFullName' missing in JSON!");
-    assert!(json.get("publisherId").is_some(), "Key 'publisherId' missing in JSON!");
-    assert!(json.get("isFramework").is_some(), "Key 'isFramework' missing in JSON!");
+    assert!(
+        json.get("packageFullName").is_some(),
+        "Key 'packageFullName' missing in JSON!"
+    );
+    assert!(
+        json.get("publisherId").is_some(),
+        "Key 'publisherId' missing in JSON!"
+    );
+    assert!(
+        json.get("isFramework").is_some(),
+        "Key 'isFramework' missing in JSON!"
+    );
 
     // Verify snake_case keys do NOT exist
     assert!(json.get("package_full_name").is_none());
@@ -399,8 +443,14 @@ fn test_ipc_struct_optimization_profile_serialization() {
     assert!(json.get("id").is_some());
     assert!(json.get("name").is_some());
     assert!(json.get("description").is_some());
-    assert!(json.get("iconName").is_some(), "Key 'iconName' missing in JSON!");
-    assert!(json.get("ruleIds").is_some(), "Key 'ruleIds' missing in JSON!");
+    assert!(
+        json.get("iconName").is_some(),
+        "Key 'iconName' missing in JSON!"
+    );
+    assert!(
+        json.get("ruleIds").is_some(),
+        "Key 'ruleIds' missing in JSON!"
+    );
 
     assert!(json.get("icon_name").is_none());
     assert!(json.get("rule_ids").is_none());
@@ -430,16 +480,28 @@ fn test_ipc_struct_execution_summary_serialization() {
 
     let json = serde_json::to_value(&summary).unwrap();
     assert!(json.get("success").is_some());
-    assert!(json.get("executedActions").is_some(), "Key 'executedActions' missing in JSON!");
-    assert!(json.get("totalDurationMs").is_some(), "Key 'totalDurationMs' missing in JSON!");
-    assert!(json.get("isDryRun").is_some(), "Key 'isDryRun' missing in JSON!");
+    assert!(
+        json.get("executedActions").is_some(),
+        "Key 'executedActions' missing in JSON!"
+    );
+    assert!(
+        json.get("totalDurationMs").is_some(),
+        "Key 'totalDurationMs' missing in JSON!"
+    );
+    assert!(
+        json.get("isDryRun").is_some(),
+        "Key 'isDryRun' missing in JSON!"
+    );
 
     assert!(json.get("executed_actions").is_none());
     assert!(json.get("total_duration_ms").is_none());
     assert!(json.get("is_dry_run").is_none());
 
     let action_json = &json["executedActions"][0];
-    assert!(action_json["output"].get("exitCode").is_some(), "Key 'exitCode' missing in CommandOutput JSON!");
+    assert!(
+        action_json["output"].get("exitCode").is_some(),
+        "Key 'exitCode' missing in CommandOutput JSON!"
+    );
 
     let roundtrip: ExecutionSummary = serde_json::from_value(json).unwrap();
     assert_eq!(summary, roundtrip);
@@ -455,10 +517,19 @@ fn test_ipc_struct_task_progress_payload_serialization() {
     };
 
     let json = serde_json::to_value(&payload).unwrap();
-    assert!(json.get("currentStep").is_some(), "Key 'currentStep' missing in JSON!");
-    assert!(json.get("totalSteps").is_some(), "Key 'totalSteps' missing in JSON!");
+    assert!(
+        json.get("currentStep").is_some(),
+        "Key 'currentStep' missing in JSON!"
+    );
+    assert!(
+        json.get("totalSteps").is_some(),
+        "Key 'totalSteps' missing in JSON!"
+    );
     assert!(json.get("message").is_some());
-    assert!(json.get("isError").is_some(), "Key 'isError' missing in JSON!");
+    assert!(
+        json.get("isError").is_some(),
+        "Key 'isError' missing in JSON!"
+    );
 
     assert!(json.get("current_step").is_none());
     assert!(json.get("total_steps").is_none());

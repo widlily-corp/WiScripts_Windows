@@ -3,11 +3,10 @@ use windows::{
     core::PCWSTR,
     Win32::System::Services::{
         ChangeServiceConfigW, CloseServiceHandle, ControlService, OpenSCManagerW, OpenServiceW,
-        QueryServiceConfigW, QueryServiceStatusEx, SC_MANAGER_ALL_ACCESS,
-        SC_STATUS_PROCESS_INFO, SERVICE_CHANGE_CONFIG, SERVICE_CONTROL_STOP,
-        SERVICE_ERROR, SERVICE_NO_CHANGE, SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS,
-        SERVICE_START_TYPE, SERVICE_STATUS_PROCESS, SERVICE_STOP, SERVICE_STOPPED,
-        SERVICE_STOP_PENDING,
+        QueryServiceConfigW, QueryServiceStatusEx, SC_MANAGER_ALL_ACCESS, SC_STATUS_PROCESS_INFO,
+        SERVICE_CHANGE_CONFIG, SERVICE_CONTROL_STOP, SERVICE_ERROR, SERVICE_NO_CHANGE,
+        SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START_TYPE, SERVICE_STATUS_PROCESS,
+        SERVICE_STOP, SERVICE_STOPPED, SERVICE_STOP_PENDING,
     },
 };
 
@@ -21,7 +20,12 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
 
     unsafe {
         let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
-            .map_err(|e| format!("OpenSCManagerW failed for service '{}': {:?}", service_name, e))?;
+            .map_err(|e| {
+                format!(
+                    "OpenSCManagerW failed for service '{}': {:?}",
+                    service_name, e
+                )
+            })?;
 
         let svc_handle = match OpenServiceW(
             scm_handle,
@@ -35,7 +39,10 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
                 if err_str.contains("1060") || err_str.contains("0x80070424") {
                     return Ok(());
                 }
-                return Err(format!("OpenServiceW failed for service '{}': {}", service_name, err_str));
+                return Err(format!(
+                    "OpenServiceW failed for service '{}': {}",
+                    service_name, err_str
+                ));
             }
         };
 
@@ -58,7 +65,10 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
         if let Err(e) = change_res {
             let _ = CloseServiceHandle(svc_handle);
             let _ = CloseServiceHandle(scm_handle);
-            return Err(format!("ChangeServiceConfigW failed for service '{}': {:?}", service_name, e));
+            return Err(format!(
+                "ChangeServiceConfigW failed for service '{}': {:?}",
+                service_name, e
+            ));
         }
 
         // Mandatory Read-Back Verification (R4)
@@ -66,7 +76,8 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
         let _ = QueryServiceConfigW(svc_handle, None, 0, &mut bytes_needed);
 
         let mut config_buf = vec![0u64; (bytes_needed as usize + 7) / 8];
-        let config_ptr = config_buf.as_mut_ptr() as *mut windows::Win32::System::Services::QUERY_SERVICE_CONFIGW;
+        let config_ptr =
+            config_buf.as_mut_ptr() as *mut windows::Win32::System::Services::QUERY_SERVICE_CONFIGW;
 
         let query_res = QueryServiceConfigW(
             svc_handle,
@@ -79,7 +90,10 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
         let _ = CloseServiceHandle(scm_handle);
 
         if let Err(e) = query_res {
-            return Err(format!("Read-back verification failed to query service config for '{}': {:?}", service_name, e));
+            return Err(format!(
+                "Read-back verification failed to query service config for '{}': {:?}",
+                service_name, e
+            ));
         }
 
         let current_start_type = (*config_ptr).dwStartType;
@@ -100,7 +114,12 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
 
     unsafe {
         let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
-            .map_err(|e| format!("OpenSCManagerW failed for service '{}': {:?}", service_name, e))?;
+            .map_err(|e| {
+                format!(
+                    "OpenSCManagerW failed for service '{}': {:?}",
+                    service_name, e
+                )
+            })?;
 
         let svc_handle = match OpenServiceW(
             scm_handle,
@@ -114,7 +133,10 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
                 if err_str.contains("1060") || err_str.contains("0x80070424") {
                     return Ok(());
                 }
-                return Err(format!("OpenServiceW failed for service '{}': {}", service_name, err_str));
+                return Err(format!(
+                    "OpenServiceW failed for service '{}': {}",
+                    service_name, err_str
+                ));
             }
         };
 
@@ -139,11 +161,7 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
         }
 
         let mut service_status = windows::Win32::System::Services::SERVICE_STATUS::default();
-        let control_res = ControlService(
-            svc_handle,
-            SERVICE_CONTROL_STOP,
-            &mut service_status,
-        );
+        let control_res = ControlService(svc_handle, SERVICE_CONTROL_STOP, &mut service_status);
 
         if let Err(e) = control_res {
             // Re-query status in case it was already stopped
@@ -157,7 +175,10 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
             if status_process.dwCurrentState != SERVICE_STOPPED {
                 let _ = CloseServiceHandle(svc_handle);
                 let _ = CloseServiceHandle(scm_handle);
-                return Err(format!("ControlService STOP failed for service '{}': {:?}", service_name, e));
+                return Err(format!(
+                    "ControlService STOP failed for service '{}': {:?}",
+                    service_name, e
+                ));
             }
         }
 
@@ -179,10 +200,15 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
         let _ = CloseServiceHandle(scm_handle);
 
         if let Err(e) = query_res {
-            return Err(format!("Read-back verification failed to query status after stopping service '{}': {:?}", service_name, e));
+            return Err(format!(
+                "Read-back verification failed to query status after stopping service '{}': {:?}",
+                service_name, e
+            ));
         }
 
-        if final_status.dwCurrentState != SERVICE_STOPPED && final_status.dwCurrentState != SERVICE_STOP_PENDING {
+        if final_status.dwCurrentState != SERVICE_STOPPED
+            && final_status.dwCurrentState != SERVICE_STOP_PENDING
+        {
             return Err(format!(
                 "Read-back verification failed: service '{}' is in state {:?}, not STOPPED",
                 service_name, final_status.dwCurrentState

@@ -109,11 +109,13 @@ if ($null -eq $tasks -or @($tasks).Count -eq 0) {
 pub fn parse_scheduled_tasks_json(json_str: &str) -> Result<Vec<ScheduledTaskItem>, AppError> {
     let trimmed = json_str.trim();
     if trimmed.starts_with('[') {
-        serde_json::from_str::<Vec<ScheduledTaskItem>>(trimmed)
-            .map_err(|e| AppError::Execution(format!("Failed to parse scheduled tasks array: {}", e)))
+        serde_json::from_str::<Vec<ScheduledTaskItem>>(trimmed).map_err(|e| {
+            AppError::Execution(format!("Failed to parse scheduled tasks array: {}", e))
+        })
     } else {
-        let single = serde_json::from_str::<ScheduledTaskItem>(trimmed)
-            .map_err(|e| AppError::Execution(format!("Failed to parse single scheduled task: {}", e)))?;
+        let single = serde_json::from_str::<ScheduledTaskItem>(trimmed).map_err(|e| {
+            AppError::Execution(format!("Failed to parse single scheduled task: {}", e))
+        })?;
         Ok(vec![single])
     }
 }
@@ -176,7 +178,9 @@ Write-Output "SUCCESS: Toggled $name enabled={enable}"
             verb = verb,
             enable = enable
         );
-        let output = runner.run_powershell(&script).map_err(AppError::Execution)?;
+        let output = runner
+            .run_powershell(&script)
+            .map_err(AppError::Execution)?;
         let combined_output = format!("{}\n{}", output.stdout, output.stderr);
         let is_permission_denied = combined_output.contains("Access is denied")
             || combined_output.contains("PermissionDenied")
@@ -195,7 +199,10 @@ Write-Output "SUCCESS: Toggled $name enabled={enable}"
                 } else {
                     output.stdout.trim()
                 };
-                format!("Failed to toggle scheduled task '{}': {}", task_name, err_detail)
+                format!(
+                    "Failed to toggle scheduled task '{}': {}",
+                    task_name, err_detail
+                )
             };
             return Err(AppError::Execution(err_msg));
         }
@@ -243,7 +250,10 @@ pub fn run_scheduled_task(
                 ),
                 output: CommandOutput {
                     exit_code: 0,
-                    stdout: format!("[DRY-RUN] Triggered task '{}' at '{}'", task_name, norm_path),
+                    stdout: format!(
+                        "[DRY-RUN] Triggered task '{}' at '{}'",
+                        task_name, norm_path
+                    ),
                     stderr: String::new(),
                 },
                 skipped: false,
@@ -268,7 +278,9 @@ Write-Output "SUCCESS: Started task $name"
             safe_name = safe_name,
             safe_path = safe_path
         );
-        let output = runner.run_powershell(&script).map_err(AppError::Execution)?;
+        let output = runner
+            .run_powershell(&script)
+            .map_err(AppError::Execution)?;
         let combined_output = format!("{}\n{}", output.stdout, output.stderr);
         let is_permission_denied = combined_output.contains("Access is denied")
             || combined_output.contains("PermissionDenied")
@@ -287,7 +299,10 @@ Write-Output "SUCCESS: Started task $name"
                 } else {
                     output.stdout.trim()
                 };
-                format!("Failed to run scheduled task '{}': {}", task_name, err_detail)
+                format!(
+                    "Failed to run scheduled task '{}': {}",
+                    task_name, err_detail
+                )
             };
             return Err(AppError::Execution(err_msg));
         }
@@ -357,7 +372,8 @@ fn get_mock_scheduled_tasks() -> Vec<ScheduledTaskItem> {
             author: "Adobe Inc.".to_string(),
             last_run_time: Some("2026-07-27 10:00:00".to_string()),
             next_run_time: Some("2026-07-28 10:00:00".to_string()),
-            action_summary: r"C:\Program Files (x86)\Common Files\Adobe\ARM\1.0\AdobeARM.exe".to_string(),
+            action_summary: r"C:\Program Files (x86)\Common Files\Adobe\ARM\1.0\AdobeARM.exe"
+                .to_string(),
         },
     ]
 }
@@ -371,8 +387,14 @@ mod tests {
     fn test_normalize_task_path_variations() {
         assert_eq!(normalize_task_path(""), "\\");
         assert_eq!(normalize_task_path("\\"), "\\");
-        assert_eq!(normalize_task_path("Microsoft\\Windows"), "\\Microsoft\\Windows\\");
-        assert_eq!(normalize_task_path("\\Microsoft\\Windows\\"), "\\Microsoft\\Windows\\");
+        assert_eq!(
+            normalize_task_path("Microsoft\\Windows"),
+            "\\Microsoft\\Windows\\"
+        );
+        assert_eq!(
+            normalize_task_path("\\Microsoft\\Windows\\"),
+            "\\Microsoft\\Windows\\"
+        );
         assert_eq!(normalize_task_path("  \\Test\\  "), "\\Test\\");
     }
 
@@ -393,7 +415,10 @@ mod tests {
         assert!(summary.success);
         assert!(summary.is_dry_run);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        assert!(summary.executed_actions[0]
+            .output
+            .stdout
+            .contains("[DRY-RUN]"));
     }
 
     #[test]
@@ -404,7 +429,10 @@ mod tests {
         assert!(summary.success);
         assert!(summary.is_dry_run);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        assert!(summary.executed_actions[0]
+            .output
+            .stdout
+            .contains("[DRY-RUN]"));
     }
 
     #[test]
@@ -442,7 +470,8 @@ mod tests {
                 "actionSummary": "System Task Action"
             }
         ]"#;
-        let tasks = parse_scheduled_tasks_json(json_str).expect("Parsing null dates should succeed");
+        let tasks =
+            parse_scheduled_tasks_json(json_str).expect("Parsing null dates should succeed");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].task_name, "TestNullDates");
         assert_eq!(tasks[0].last_run_time, None);
@@ -462,20 +491,23 @@ mod tests {
             "nextRunTime": null,
             "actionSummary": "C:\\cmd.exe"
         }"#;
-        let tasks = parse_scheduled_tasks_json(single_json).expect("Single object JSON parse should succeed");
+        let tasks = parse_scheduled_tasks_json(single_json)
+            .expect("Single object JSON parse should succeed");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].task_name, "SingleTask");
         assert!(!tasks[0].enabled);
 
         let empty_json = "[]";
-        let empty_tasks = parse_scheduled_tasks_json(empty_json).expect("Empty array parse should succeed");
+        let empty_tasks =
+            parse_scheduled_tasks_json(empty_json).expect("Empty array parse should succeed");
         assert_eq!(empty_tasks.len(), 0);
     }
 
     #[test]
     fn test_parse_scheduled_tasks_json_with_leading_whitespace() {
         let json_str = "\r\n  [\r\n    {\r\n      \"taskName\": \"Test\",\r\n      \"taskPath\": \"\\\\\",\r\n      \"state\": \"Ready\",\r\n      \"enabled\": true,\r\n      \"triggerType\": \"Daily\",\r\n      \"author\": \"Test\",\r\n      \"lastRunTime\": null,\r\n      \"nextRunTime\": null,\r\n      \"actionSummary\": \"test.exe\"\r\n    }\r\n  ]\r\n";
-        let tasks = parse_scheduled_tasks_json(json_str).expect("Parsing with leading whitespace should succeed");
+        let tasks = parse_scheduled_tasks_json(json_str)
+            .expect("Parsing with leading whitespace should succeed");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].task_name, "Test");
     }
@@ -490,7 +522,9 @@ mod tests {
             summary.executed_actions[0].command,
             "toggle_scheduled_task --name 'Consolidator' --path '\\Microsoft\\Windows\\' --enable false"
         );
-        assert!(summary.executed_actions[0].output.stdout.contains(r"'\Microsoft\Windows\'"));
+        assert!(summary.executed_actions[0]
+            .output
+            .stdout
+            .contains(r"'\Microsoft\Windows\'"));
     }
 }
-

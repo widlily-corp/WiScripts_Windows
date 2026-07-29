@@ -4,8 +4,8 @@ use windows::{
     Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW,
         RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CLASSES_ROOT,
-        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, KEY_ALL_ACCESS, KEY_READ,
-        REG_BINARY, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ, REG_VALUE_TYPE,
+        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, KEY_ALL_ACCESS, KEY_READ, REG_BINARY,
+        REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ, REG_VALUE_TYPE,
     },
 };
 
@@ -27,7 +27,12 @@ pub fn parse_hive_and_subpath(key_path: &str) -> Result<(HKEY, String), String> 
         "HKCU" | "HKEY_CURRENT_USER" => HKEY_CURRENT_USER,
         "HKCR" | "HKEY_CLASSES_ROOT" => HKEY_CLASSES_ROOT,
         "HKU" | "HKEY_USERS" => HKEY_USERS,
-        _ => return Err(format!("Unsupported or invalid registry hive: {}", hive_str)),
+        _ => {
+            return Err(format!(
+                "Unsupported or invalid registry hive: {}",
+                hive_str
+            ))
+        }
     };
 
     Ok((hkey, subpath.to_string()))
@@ -58,7 +63,10 @@ pub fn set_dword(key_path: &str, value_name: &str, data: u32) -> Result<(), Stri
         );
 
         if status.is_err() {
-            return Err(format!("RegCreateKeyExW failed for '{}': {:?}", key_path, status));
+            return Err(format!(
+                "RegCreateKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
         }
 
         let bytes = data.to_ne_bytes();
@@ -72,7 +80,10 @@ pub fn set_dword(key_path: &str, value_name: &str, data: u32) -> Result<(), Stri
 
         if set_res.is_err() {
             let _ = RegCloseKey(key_handle);
-            return Err(format!("RegSetValueExW failed for '{}'\\'{}' (DWORD): {:?}", key_path, value_name, set_res));
+            return Err(format!(
+                "RegSetValueExW failed for '{}'\\'{}' (DWORD): {:?}",
+                key_path, value_name, set_res
+            ));
         }
 
         // Mandatory Read-Back Verification (R4)
@@ -92,7 +103,10 @@ pub fn set_dword(key_path: &str, value_name: &str, data: u32) -> Result<(), Stri
         let _ = RegCloseKey(key_handle);
 
         if query_res.is_err() {
-            return Err(format!("Read-back verification failed to query value for '{}'\\'{}'", key_path, value_name));
+            return Err(format!(
+                "Read-back verification failed to query value for '{}'\\'{}'",
+                key_path, value_name
+            ));
         }
 
         if read_type != REG_DWORD {
@@ -130,7 +144,10 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
         );
 
         if status.is_err() {
-            return Err(format!("RegCreateKeyExW failed for '{}': {:?}", key_path, status));
+            return Err(format!(
+                "RegCreateKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
         }
 
         let bytes = std::slice::from_raw_parts(
@@ -138,17 +155,14 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
             data_u16.len() * std::mem::size_of::<u16>(),
         );
 
-        let set_res = RegSetValueExW(
-            key_handle,
-            PCWSTR(val_u16.as_ptr()),
-            0,
-            REG_SZ,
-            Some(bytes),
-        );
+        let set_res = RegSetValueExW(key_handle, PCWSTR(val_u16.as_ptr()), 0, REG_SZ, Some(bytes));
 
         if set_res.is_err() {
             let _ = RegCloseKey(key_handle);
-            return Err(format!("RegSetValueExW failed for '{}'\\'{}' (SZ): {:?}", key_path, value_name, set_res));
+            return Err(format!(
+                "RegSetValueExW failed for '{}'\\'{}' (SZ): {:?}",
+                key_path, value_name, set_res
+            ));
         }
 
         // Mandatory Read-Back Verification (R4)
@@ -177,7 +191,10 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
         let _ = RegCloseKey(key_handle);
 
         if query_res.is_err() {
-            return Err(format!("Read-back verification failed to query string for '{}'\\'{}'", key_path, value_name));
+            return Err(format!(
+                "Read-back verification failed to query string for '{}'\\'{}'",
+                key_path, value_name
+            ));
         }
 
         if read_type != REG_SZ {
@@ -217,7 +234,10 @@ pub fn set_binary(key_path: &str, value_name: &str, data: &[u8]) -> Result<(), S
         );
 
         if status.is_err() {
-            return Err(format!("RegCreateKeyExW failed for '{}': {:?}", key_path, status));
+            return Err(format!(
+                "RegCreateKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
         }
 
         let set_res = RegSetValueExW(
@@ -230,7 +250,10 @@ pub fn set_binary(key_path: &str, value_name: &str, data: &[u8]) -> Result<(), S
 
         if set_res.is_err() {
             let _ = RegCloseKey(key_handle);
-            return Err(format!("RegSetValueExW failed for '{}'\\'{}' (BINARY): {:?}", key_path, value_name, set_res));
+            return Err(format!(
+                "RegSetValueExW failed for '{}'\\'{}' (BINARY): {:?}",
+                key_path, value_name, set_res
+            ));
         }
 
         // Mandatory Read-Back Verification (R4)
@@ -259,7 +282,10 @@ pub fn set_binary(key_path: &str, value_name: &str, data: &[u8]) -> Result<(), S
         let _ = RegCloseKey(key_handle);
 
         if query_res.is_err() {
-            return Err(format!("Read-back verification failed to query binary for '{}'\\'{}'", key_path, value_name));
+            return Err(format!(
+                "Read-back verification failed to query binary for '{}'\\'{}'",
+                key_path, value_name
+            ));
         }
 
         if read_type != REG_BINARY {
@@ -267,7 +293,10 @@ pub fn set_binary(key_path: &str, value_name: &str, data: &[u8]) -> Result<(), S
         }
 
         if read_buf != data {
-            return Err(format!("Read-back verification failed: binary mismatch for '{}'\\'{}'", key_path, value_name));
+            return Err(format!(
+                "Read-back verification failed: binary mismatch for '{}'\\'{}'",
+                key_path, value_name
+            ));
         }
     }
 
@@ -285,7 +314,10 @@ pub fn delete_key(key_path: &str) -> Result<(), String> {
             // Try RegDeleteKeyW as fallback if RegDeleteTreeW failed
             let alt_status = RegDeleteKeyW(hkey, PCWSTR(subpath_u16.as_ptr()));
             if alt_status.is_err() {
-                return Err(format!("RegDeleteTreeW/RegDeleteKeyW failed for '{}': {:?}", key_path, status));
+                return Err(format!(
+                    "RegDeleteTreeW/RegDeleteKeyW failed for '{}': {:?}",
+                    key_path, status
+                ));
             }
         }
 
@@ -301,7 +333,10 @@ pub fn delete_key(key_path: &str) -> Result<(), String> {
 
         if check_res.is_ok() {
             let _ = RegCloseKey(key_handle);
-            return Err(format!("Read-back verification failed: key '{}' still exists after deletion", key_path));
+            return Err(format!(
+                "Read-back verification failed: key '{}' still exists after deletion",
+                key_path
+            ));
         }
     }
 
@@ -325,13 +360,19 @@ pub fn delete_value(key_path: &str, value_name: &str) -> Result<(), String> {
         );
 
         if status.is_err() {
-            return Err(format!("RegOpenKeyExW failed for '{}': {:?}", key_path, status));
+            return Err(format!(
+                "RegOpenKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
         }
 
         let del_res = RegDeleteValueW(key_handle, PCWSTR(val_u16.as_ptr()));
         if del_res.is_err() {
             let _ = RegCloseKey(key_handle);
-            return Err(format!("RegDeleteValueW failed for '{}'\\'{}'", key_path, value_name));
+            return Err(format!(
+                "RegDeleteValueW failed for '{}'\\'{}'",
+                key_path, value_name
+            ));
         }
 
         // Mandatory Read-Back Verification (R4): Verify value no longer exists
@@ -348,7 +389,10 @@ pub fn delete_value(key_path: &str, value_name: &str) -> Result<(), String> {
         let _ = RegCloseKey(key_handle);
 
         if query_res.is_ok() {
-            return Err(format!("Read-back verification failed: value '{}'\\'{}' still exists after deletion", key_path, value_name));
+            return Err(format!(
+                "Read-back verification failed: value '{}'\\'{}' still exists after deletion",
+                key_path, value_name
+            ));
         }
     }
 

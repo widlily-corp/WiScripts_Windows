@@ -98,7 +98,9 @@ pub fn set_dns_server(
         let _ = app_handle.emit("task-progress", &payload);
     }
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -116,7 +118,10 @@ pub fn set_dns_server(
             let payload = TaskProgressPayload {
                 current_step: 1,
                 total_steps: 1,
-                message: format!("Error in step 1/1: {} (exit code {})", name, output.exit_code),
+                message: format!(
+                    "Error in step 1/1: {} (exit code {})",
+                    name, output.exit_code
+                ),
                 is_error: true,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -140,15 +145,16 @@ pub fn set_dns_server(
 }
 
 /// Checks whether classic Windows 10 context menu registry key is enabled on Windows 11.
-pub fn get_classic_context_menu_status(
-    runner: &dyn CommandRunner,
-) -> Result<bool, AppError> {
+pub fn get_classic_context_menu_status(runner: &dyn CommandRunner) -> Result<bool, AppError> {
     log::info!("[DnsContextEngine] Checking Classic Context Menu registry status");
     let script = "Test-Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'";
     let output = runner.run_powershell(script).map_err(AppError::Execution)?;
 
     let status = output.stdout.trim().eq_ignore_ascii_case("true");
-    log::info!("[DnsContextEngine] Classic Context Menu active = {}", status);
+    log::info!(
+        "[DnsContextEngine] Classic Context Menu active = {}",
+        status
+    );
     Ok(status)
 }
 
@@ -188,7 +194,9 @@ pub fn toggle_classic_context_menu(
         "Remove-Item -Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue".to_string()
     };
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -206,7 +214,10 @@ pub fn toggle_classic_context_menu(
             let payload = TaskProgressPayload {
                 current_step: 1,
                 total_steps: 1,
-                message: format!("Error in step 1/1: {} (exit code {})", action_title, output.exit_code),
+                message: format!(
+                    "Error in step 1/1: {} (exit code {})",
+                    action_title, output.exit_code
+                ),
                 is_error: true,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -272,7 +283,9 @@ mod tests {
 
         assert!(summary.is_dry_run);
         assert!(summary.success);
-        assert!(summary.executed_actions[0].command.contains("ResetServerAddresses"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("ResetServerAddresses"));
     }
 
     #[test]

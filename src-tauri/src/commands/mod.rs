@@ -162,7 +162,10 @@ pub async fn get_rule_catalog() -> Result<Vec<OptimizationItem>, AppError> {
 
 #[tauri::command]
 pub async fn get_rules_by_category(category: String) -> Result<Vec<OptimizationItem>, AppError> {
-    log::debug!("[IPC] get_rules_by_category request received for category '{}'", category);
+    log::debug!(
+        "[IPC] get_rules_by_category request received for category '{}'",
+        category
+    );
     Ok(optimization::get_rules_by_category(&category))
 }
 
@@ -170,8 +173,23 @@ pub async fn get_rules_by_category(category: String) -> Result<Vec<OptimizationI
 pub async fn preview_optimizations(
     selected_keys: Vec<String>,
 ) -> Result<Vec<OptimizationItem>, AppError> {
-    log::info!("[IPC] preview_optimizations request received for {} keys", selected_keys.len());
+    log::info!(
+        "[IPC] preview_optimizations request received for {} keys",
+        selected_keys.len()
+    );
     optimization::preview(&selected_keys)
+}
+
+#[tauri::command]
+pub async fn get_optimizations_status() -> Result<std::collections::HashMap<String, bool>, AppError>
+{
+    log::info!("[IPC] get_optimizations_status request received");
+    tauri::async_runtime::spawn_blocking(move || {
+        let runner = RealRunner::new();
+        optimization::check_status(&runner)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in get_optimizations_status: {}", e)))?
 }
 
 #[tauri::command]
@@ -239,10 +257,12 @@ pub async fn execute_odt_install(
     tauri::async_runtime::spawn_blocking(move || {
         let res = if dry_run {
             let runner = DryRunRunner::new();
-            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, true).map_err(AppError::Execution)
+            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, true)
+                .map_err(AppError::Execution)
         } else {
             let runner = RealRunner::new();
-            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, false).map_err(AppError::Execution)
+            odt::execute_odt_install(Some(&app), &runner, &config, setup_path, false)
+                .map_err(AppError::Execution)
         };
 
         match &res {
@@ -275,7 +295,8 @@ pub async fn execute_odt_regional_bypass(
             odt::execute_odt_regional_bypass(Some(&app), &runner, true).map_err(AppError::Execution)
         } else {
             let runner = RealRunner::new();
-            odt::execute_odt_regional_bypass(Some(&app), &runner, false).map_err(AppError::Execution)
+            odt::execute_odt_regional_bypass(Some(&app), &runner, false)
+                .map_err(AppError::Execution)
         };
 
         match &res {
@@ -551,10 +572,22 @@ pub async fn set_dns_server(
     tauri::async_runtime::spawn_blocking(move || {
         let res = if dry_run {
             let runner = DryRunRunner::new();
-            dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), true)
+            dns_context::set_dns_server(
+                Some(&app),
+                &runner,
+                &provider,
+                interface_alias.as_deref(),
+                true,
+            )
         } else {
             let runner = RealRunner::new();
-            dns_context::set_dns_server(Some(&app), &runner, &provider, interface_alias.as_deref(), false)
+            dns_context::set_dns_server(
+                Some(&app),
+                &runner,
+                &provider,
+                interface_alias.as_deref(),
+                false,
+            )
         };
 
         match &res {
@@ -580,7 +613,12 @@ pub async fn get_classic_context_menu_status() -> Result<bool, AppError> {
         dns_context::get_classic_context_menu_status(&runner)
     })
     .await
-    .map_err(|e| AppError::Execution(format!("Join error in get_classic_context_menu_status: {}", e)))?
+    .map_err(|e| {
+        AppError::Execution(format!(
+            "Join error in get_classic_context_menu_status: {}",
+            e
+        ))
+    })?
 }
 
 #[tauri::command]
@@ -667,7 +705,9 @@ pub async fn create_restore_point(
 
     if description.trim().is_empty() {
         log::warn!("[IPC] create_restore_point rejected: description is empty");
-        return Err(AppError::InvalidConfig("Restore point description cannot be empty".to_string()));
+        return Err(AppError::InvalidConfig(
+            "Restore point description cannot be empty".to_string(),
+        ));
     }
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -707,7 +747,10 @@ pub async fn get_restore_points() -> Result<Vec<RestorePoint>, AppError> {
         let runner = RealRunner::new();
         match system_restore::get_restore_points(&runner) {
             Ok(points) => {
-                log::info!("[IPC] get_restore_points succeeded: returned {} points", points.len());
+                log::info!(
+                    "[IPC] get_restore_points succeeded: returned {} points",
+                    points.len()
+                );
                 Ok(points)
             }
             Err(err) => {
@@ -735,15 +778,20 @@ pub async fn restore_system_point(
         let start_time = std::time::Instant::now();
         let res = if dry_run {
             let runner = DryRunRunner::new();
-            system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+            system_restore::restore_system_point(&runner, sequence_number)
+                .map_err(AppError::Execution)
         } else {
             let runner = RealRunner::new();
-            system_restore::restore_system_point(&runner, sequence_number).map_err(AppError::Execution)
+            system_restore::restore_system_point(&runner, sequence_number)
+                .map_err(AppError::Execution)
         };
 
         match res {
             Ok(action) => {
-                log::info!("[IPC] restore_system_point completed successfully for seq #{}", sequence_number);
+                log::info!(
+                    "[IPC] restore_system_point completed successfully for seq #{}",
+                    sequence_number
+                );
                 Ok(ExecutionSummary {
                     success: true,
                     executed_actions: vec![action],
@@ -752,7 +800,11 @@ pub async fn restore_system_point(
                 })
             }
             Err(e) => {
-                log::error!("[IPC] restore_system_point failed for seq #{}: {:?}", sequence_number, e);
+                log::error!(
+                    "[IPC] restore_system_point failed for seq #{}: {:?}",
+                    sequence_number,
+                    e
+                );
                 Err(e)
             }
         }
@@ -789,7 +841,10 @@ pub async fn get_system_temperatures() -> Result<metrics::SystemTemperaturesPayl
 pub async fn get_startup_items(
     dry_run: Option<bool>,
 ) -> Result<Vec<startup::StartupItem>, AppError> {
-    log::debug!("[IPC] get_startup_items request received, dry_run={:?}", dry_run);
+    log::debug!(
+        "[IPC] get_startup_items request received, dry_run={:?}",
+        dry_run
+    );
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
             Box::new(DryRunRunner::new())
@@ -812,7 +867,11 @@ pub async fn toggle_startup_item(
 ) -> Result<ExecutionSummary, AppError> {
     log::info!(
         "[IPC] toggle_startup_item id={}, value_name={:?}, location={:?}, enable={}, dry_run={:?}",
-        id, value_name, location, enable, dry_run
+        id,
+        value_name,
+        location,
+        enable,
+        dry_run
     );
     let v_name = value_name
         .as_deref()
@@ -842,7 +901,10 @@ pub async fn remove_startup_item(
 ) -> Result<ExecutionSummary, AppError> {
     log::info!(
         "[IPC] remove_startup_item id={}, value_name={:?}, location={:?}, dry_run={:?}",
-        id, value_name, location, dry_run
+        id,
+        value_name,
+        location,
+        dry_run
     );
     let v_name = value_name
         .as_deref()
@@ -867,7 +929,10 @@ pub async fn remove_startup_item(
 pub async fn get_scheduled_tasks(
     dry_run: Option<bool>,
 ) -> Result<Vec<scheduler::ScheduledTaskItem>, AppError> {
-    log::debug!("[IPC] get_scheduled_tasks request received, dry_run={:?}", dry_run);
+    log::debug!(
+        "[IPC] get_scheduled_tasks request received, dry_run={:?}",
+        dry_run
+    );
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
             Box::new(DryRunRunner::new())
@@ -889,7 +954,10 @@ pub async fn toggle_scheduled_task(
 ) -> Result<ExecutionSummary, AppError> {
     log::info!(
         "[IPC] toggle_scheduled_task name={}, path={}, enable={}, dry_run={:?}",
-        task_name, task_path, enable, dry_run
+        task_name,
+        task_path,
+        enable,
+        dry_run
     );
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
@@ -920,7 +988,9 @@ pub async fn run_scheduled_task(
 ) -> Result<ExecutionSummary, AppError> {
     log::info!(
         "[IPC] run_scheduled_task name={}, path={}, dry_run={:?}",
-        task_name, task_path, dry_run
+        task_name,
+        task_path,
+        dry_run
     );
     tauri::async_runtime::spawn_blocking(move || {
         let runner: Box<dyn CommandRunner> = if dry_run.unwrap_or(false) {
@@ -980,7 +1050,10 @@ pub async fn scan_system_cleaner() -> Result<cleaner::CleanerScanResult, AppErro
 pub async fn clean_system_items(
     category_ids: Vec<String>,
 ) -> Result<cleaner::CleanerCleanResult, AppError> {
-    log::info!("[IPC] clean_system_items request received for {} categories", category_ids.len());
+    log::info!(
+        "[IPC] clean_system_items request received for {} categories",
+        category_ids.len()
+    );
     tauri::async_runtime::spawn_blocking(move || cleaner::clean_items(category_ids))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in clean_system_items: {}", e)))?
@@ -990,7 +1063,10 @@ pub async fn clean_system_items(
 pub async fn scan_duplicate_files(
     target_dir: Option<String>,
 ) -> Result<Vec<storage::DuplicateGroup>, AppError> {
-    log::info!("[IPC] scan_duplicate_files request received: target_dir={:?}", target_dir);
+    log::info!(
+        "[IPC] scan_duplicate_files request received: target_dir={:?}",
+        target_dir
+    );
     tauri::async_runtime::spawn_blocking(move || storage::scan_duplicate_files(target_dir))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in scan_duplicate_files: {}", e)))?
@@ -1001,7 +1077,11 @@ pub async fn scan_large_files(
     target_dir: Option<String>,
     limit: Option<usize>,
 ) -> Result<Vec<storage::LargeFileItem>, AppError> {
-    log::info!("[IPC] scan_large_files request received: target_dir={:?}, limit={:?}", target_dir, limit);
+    log::info!(
+        "[IPC] scan_large_files request received: target_dir={:?}, limit={:?}",
+        target_dir,
+        limit
+    );
     tauri::async_runtime::spawn_blocking(move || storage::scan_large_files(target_dir, limit))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in scan_large_files: {}", e)))?
@@ -1009,7 +1089,10 @@ pub async fn scan_large_files(
 
 #[tauri::command]
 pub async fn delete_files(paths: Vec<String>) -> Result<storage::DeleteResult, AppError> {
-    log::info!("[IPC] delete_files request received for {} paths", paths.len());
+    log::info!(
+        "[IPC] delete_files request received for {} paths",
+        paths.len()
+    );
     tauri::async_runtime::spawn_blocking(move || storage::delete_target_files(paths))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in delete_files: {}", e)))?
@@ -1019,8 +1102,9 @@ pub async fn delete_files(paths: Vec<String>) -> Result<storage::DeleteResult, A
 pub async fn export_diagnostic_dump() -> Result<String, AppError> {
     log::info!("[IPC] export_diagnostic_dump request received");
 
-    let desktop_dir = dirs::desktop_dir()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+    let desktop_dir = dirs::desktop_dir().unwrap_or_else(|| {
+        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+    });
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1037,8 +1121,12 @@ pub async fn export_diagnostic_dump() -> Result<String, AppError> {
     let log_path = crate::logger::get_log_path();
     let log_bytes = std::fs::read(&log_path).unwrap_or_default();
 
-    let zip_file = std::fs::File::create(&zip_path)
-        .map_err(|e| AppError::Io(format!("Failed to create diagnostic dump file at {:?}: {}", zip_path, e)))?;
+    let zip_file = std::fs::File::create(&zip_path).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to create diagnostic dump file at {:?}: {}",
+            zip_path, e
+        ))
+    })?;
 
     let mut zip = zip::ZipWriter::new(zip_file);
     let options = zip::write::SimpleFileOptions::default()
@@ -1046,23 +1134,42 @@ pub async fn export_diagnostic_dump() -> Result<String, AppError> {
 
     zip.start_file("debug.log", options)
         .map_err(|e| AppError::Io(format!("Failed to add debug.log to ZIP archive: {}", e)))?;
-    zip.write_all(&log_bytes)
-        .map_err(|e| AppError::Io(format!("Failed to write debug.log bytes to ZIP archive: {}", e)))?;
+    zip.write_all(&log_bytes).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to write debug.log bytes to ZIP archive: {}",
+            e
+        ))
+    })?;
 
-    zip.start_file("system_info.json", options)
-        .map_err(|e| AppError::Io(format!("Failed to add system_info.json to ZIP archive: {}", e)))?;
-    zip.write_all(sys_info_json.as_bytes())
-        .map_err(|e| AppError::Io(format!("Failed to write system_info.json bytes to ZIP archive: {}", e)))?;
+    zip.start_file("system_info.json", options).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to add system_info.json to ZIP archive: {}",
+            e
+        ))
+    })?;
+    zip.write_all(sys_info_json.as_bytes()).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to write system_info.json bytes to ZIP archive: {}",
+            e
+        ))
+    })?;
 
-    zip.finish()
-        .map_err(|e| AppError::Io(format!("Failed to finalize diagnostic dump ZIP archive: {}", e)))?;
+    zip.finish().map_err(|e| {
+        AppError::Io(format!(
+            "Failed to finalize diagnostic dump ZIP archive: {}",
+            e
+        ))
+    })?;
 
     let abs_path = zip_path
         .to_str()
         .ok_or_else(|| AppError::Io("Invalid ZIP path string encoding".to_string()))?
         .to_string();
 
-    log::info!("[IPC] export_diagnostic_dump successfully created archive at {}", abs_path);
+    log::info!(
+        "[IPC] export_diagnostic_dump successfully created archive at {}",
+        abs_path
+    );
     Ok(abs_path)
 }
 
@@ -1105,10 +1212,14 @@ pub fn urlencode(s: &str) -> String {
 pub fn sanitize_log_text(text: &str) -> String {
     let mut sanitized = text.to_string();
     if let Ok(re_user) = regex::Regex::new(r"(?i)[a-z]:\\users\\[^\s\\]+") {
-        sanitized = re_user.replace_all(&sanitized, r"C:\Users\[REDACTED]").to_string();
+        sanitized = re_user
+            .replace_all(&sanitized, r"C:\Users\[REDACTED]")
+            .to_string();
     }
     if let Ok(re_token) = regex::Regex::new(r"(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{82})") {
-        sanitized = re_token.replace_all(&sanitized, "[REDACTED_TOKEN]").to_string();
+        sanitized = re_token
+            .replace_all(&sanitized, "[REDACTED_TOKEN]")
+            .to_string();
     }
     sanitized
 }
@@ -1141,12 +1252,22 @@ pub fn build_github_issue_body(
     if payload.include_system_info {
         if let Some(sys) = sys_info {
             body.push_str(&format!("- **OS Name**: {}\n", sys.os_name));
-            body.push_str(&format!("- **OS Version**: {} (Build {})\n", sys.os_version, sys.os_build));
+            body.push_str(&format!(
+                "- **OS Version**: {} (Build {})\n",
+                sys.os_version, sys.os_build
+            ));
             body.push_str(&format!(
                 "- **Elevation Status**: {}\n",
-                if sys.is_elevated { "Elevated (Administrator)" } else { "Non-elevated" }
+                if sys.is_elevated {
+                    "Elevated (Administrator)"
+                } else {
+                    "Non-elevated"
+                }
             ));
-            body.push_str(&format!("- **Telemetry Service Status**: {}\n", sys.telemetry_status));
+            body.push_str(&format!(
+                "- **Telemetry Service Status**: {}\n",
+                sys.telemetry_status
+            ));
         } else {
             body.push_str("- **System Info**: Not available\n");
         }
@@ -1243,7 +1364,10 @@ pub async fn create_github_issue(
                             .get("html_url")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
-                        log::info!("[IPC] GitHub issue successfully created via API: {:?}", html_url);
+                        log::info!(
+                            "[IPC] GitHub issue successfully created via API: {:?}",
+                            html_url
+                        );
                         return Ok(GitHubIssueResult {
                             success: true,
                             issue_url: html_url,
@@ -1275,7 +1399,10 @@ pub async fn create_github_issue(
         enc_title, enc_body
     );
 
-    log::info!("[IPC] Opening pre-filled issue URL in browser: {}", browser_url);
+    log::info!(
+        "[IPC] Opening pre-filled issue URL in browser: {}",
+        browser_url
+    );
     match tauri_plugin_opener::open_url(&browser_url, None::<&str>) {
         Ok(_) => Ok(GitHubIssueResult {
             success: true,
@@ -1343,8 +1470,8 @@ mod tests {
     fn test_execute_activation_ipc_dry_run() {
         tauri::async_runtime::block_on(async {
             let runner = DryRunRunner::new();
-            let summary = mas::execute_activation(None, &runner, ActivationMethod::Hwid, true)
-                .unwrap();
+            let summary =
+                mas::execute_activation(None, &runner, ActivationMethod::Hwid, true).unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
             assert!(summary.executed_actions[0].command.contains("/HWID"));
@@ -1423,7 +1550,10 @@ mod tests {
             .unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
-            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+            assert!(summary.executed_actions[0]
+                .output
+                .stdout
+                .contains("[DRY-RUN]"));
         });
     }
 
@@ -1440,7 +1570,10 @@ mod tests {
             .unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
-            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+            assert!(summary.executed_actions[0]
+                .output
+                .stdout
+                .contains("[DRY-RUN]"));
         });
     }
 
@@ -1466,7 +1599,10 @@ mod tests {
             .unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
-            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+            assert!(summary.executed_actions[0]
+                .output
+                .stdout
+                .contains("[DRY-RUN]"));
         });
     }
 
@@ -1482,7 +1618,10 @@ mod tests {
             .unwrap();
             assert!(summary.is_dry_run);
             assert!(summary.success);
-            assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+            assert!(summary.executed_actions[0]
+                .output
+                .stdout
+                .contains("[DRY-RUN]"));
         });
     }
 
@@ -1492,21 +1631,27 @@ mod tests {
         let _ = crate::logger::init_logger();
 
         // Act
-        let zip_path_str = tauri::async_runtime::block_on(async {
-            export_diagnostic_dump().await.unwrap()
-        });
+        let zip_path_str =
+            tauri::async_runtime::block_on(async { export_diagnostic_dump().await.unwrap() });
 
         // Assert
         let zip_path = std::path::PathBuf::from(&zip_path_str);
-        assert!(zip_path.exists(), "Exported ZIP archive must exist at {}", zip_path_str);
+        assert!(
+            zip_path.exists(),
+            "Exported ZIP archive must exist at {}",
+            zip_path_str
+        );
         assert!(zip_path.is_file(), "Exported ZIP path must be a file");
 
         let zip_file = std::fs::File::open(&zip_path).expect("Failed to open exported ZIP file");
-        let mut archive = zip::ZipArchive::new(zip_file).expect("Failed to read ZIP archive format");
+        let mut archive =
+            zip::ZipArchive::new(zip_file).expect("Failed to read ZIP archive format");
 
         let mut entry_names = Vec::new();
         for i in 0..archive.len() {
-            let file = archive.by_index(i).expect("Failed to read ZIP archive entry");
+            let file = archive
+                .by_index(i)
+                .expect("Failed to read ZIP archive entry");
             entry_names.push(file.name().to_string());
         }
 
@@ -1529,7 +1674,8 @@ mod tests {
         let payload = GitHubIssuePayload {
             title: "App crash when running optimization".to_string(),
             category: "bug".to_string(),
-            description: "App crashed with error code 0x80070005 when disabling DiagTrack.".to_string(),
+            description: "App crashed with error code 0x80070005 when disabling DiagTrack."
+                .to_string(),
             include_logs: true,
             include_system_info: true,
             github_token: None,
@@ -1550,19 +1696,55 @@ mod tests {
         let body = build_github_issue_body(&payload, Some(&sys_info), "0.5.6", Some(raw_logs));
 
         // Assert
-        assert!(body.contains("### Description"), "Body must contain Description header");
-        assert!(body.contains("App crashed with error code 0x80070005"), "Body must contain user description");
-        assert!(body.contains("### Category"), "Body must contain Category header");
-        assert!(body.contains("Bug Report 🐛"), "Body must display Bug Report category label");
-        assert!(body.contains("### Environment Details"), "Body must contain Environment Details header");
+        assert!(
+            body.contains("### Description"),
+            "Body must contain Description header"
+        );
+        assert!(
+            body.contains("App crashed with error code 0x80070005"),
+            "Body must contain user description"
+        );
+        assert!(
+            body.contains("### Category"),
+            "Body must contain Category header"
+        );
+        assert!(
+            body.contains("Bug Report 🐛"),
+            "Body must display Bug Report category label"
+        );
+        assert!(
+            body.contains("### Environment Details"),
+            "Body must contain Environment Details header"
+        );
         assert!(body.contains("Windows 11 Pro"), "Body must contain OS name");
         assert!(body.contains("v0.5.6"), "Body must contain app version");
-        assert!(body.contains("Elevated (Administrator)"), "Body must contain elevation status");
-        assert!(body.contains("Active"), "Body must contain telemetry status");
-        assert!(body.contains("### Debug Logs (Last 50 lines)"), "Body must contain Debug Logs header");
-        assert!(!body.contains("JohnDoe"), "User home directory path must be sanitized");
-        assert!(body.contains(r"C:\Users\[REDACTED]"), "User home directory path should be replaced with redacted marker");
-        assert!(!body.contains("ghp_123456789012345678901234567890123456"), "GitHub PAT token must be sanitized");
-        assert!(body.contains("[REDACTED_TOKEN]"), "Token should be replaced with redacted marker");
+        assert!(
+            body.contains("Elevated (Administrator)"),
+            "Body must contain elevation status"
+        );
+        assert!(
+            body.contains("Active"),
+            "Body must contain telemetry status"
+        );
+        assert!(
+            body.contains("### Debug Logs (Last 50 lines)"),
+            "Body must contain Debug Logs header"
+        );
+        assert!(
+            !body.contains("JohnDoe"),
+            "User home directory path must be sanitized"
+        );
+        assert!(
+            body.contains(r"C:\Users\[REDACTED]"),
+            "User home directory path should be replaced with redacted marker"
+        );
+        assert!(
+            !body.contains("ghp_123456789012345678901234567890123456"),
+            "GitHub PAT token must be sanitized"
+        );
+        assert!(
+            body.contains("[REDACTED_TOKEN]"),
+            "Token should be replaced with redacted marker"
+        );
     }
 }

@@ -161,7 +161,9 @@ pub fn winget_install(
         clean_id
     );
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -242,7 +244,9 @@ pub fn winget_update(
         clean_id
     );
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -299,13 +303,15 @@ pub fn get_uwp_apps(runner: &dyn CommandRunner) -> Result<Vec<UwpAppInfo>, AppEr
         return Ok(vec![
             UwpAppInfo {
                 name: "Microsoft.54482D60F4E4D".to_string(),
-                package_full_name: "Microsoft.54482D60F4E4D_11.2307.4.0_x64__8wekyb3d8bbwe".to_string(),
+                package_full_name: "Microsoft.54482D60F4E4D_11.2307.4.0_x64__8wekyb3d8bbwe"
+                    .to_string(),
                 publisher_id: "8wekyb3d8bbwe".to_string(),
                 is_framework: false,
             },
             UwpAppInfo {
                 name: "Microsoft.YourPhone".to_string(),
-                package_full_name: "Microsoft.YourPhone_1.23082.128.0_x64__8wekyb3d8bbwe".to_string(),
+                package_full_name: "Microsoft.YourPhone_1.23082.128.0_x64__8wekyb3d8bbwe"
+                    .to_string(),
                 publisher_id: "8wekyb3d8bbwe".to_string(),
                 is_framework: false,
             },
@@ -342,9 +348,13 @@ pub fn get_uwp_apps(runner: &dyn CommandRunner) -> Result<Vec<UwpAppInfo>, AppEr
     }
 
     let raw_apps: Vec<RawUwpApp> = if stdout.starts_with('[') {
-        serde_json::from_str(stdout).map_err(|e| AppError::Execution(format!("Failed to parse UWP apps JSON array: {}", e)))?
+        serde_json::from_str(stdout).map_err(|e| {
+            AppError::Execution(format!("Failed to parse UWP apps JSON array: {}", e))
+        })?
     } else if stdout.starts_with('{') {
-        let single: RawUwpApp = serde_json::from_str(stdout).map_err(|e| AppError::Execution(format!("Failed to parse UWP app JSON object: {}", e)))?;
+        let single: RawUwpApp = serde_json::from_str(stdout).map_err(|e| {
+            AppError::Execution(format!("Failed to parse UWP app JSON object: {}", e))
+        })?;
         vec![single]
     } else {
         Vec::new()
@@ -404,7 +414,9 @@ pub fn remove_uwp_app(
         clean_full_name
     );
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -459,7 +471,9 @@ mod tests {
         let packages = winget_search(&runner, "git").unwrap();
 
         assert!(!packages.is_empty());
-        assert!(packages.iter().any(|p| p.id == "Git.Git" || p.id.contains("git")));
+        assert!(packages
+            .iter()
+            .any(|p| p.id == "Git.Git" || p.id.contains("git")));
     }
 
     #[test]
@@ -477,7 +491,9 @@ mod tests {
         assert!(summary.is_dry_run);
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].command.contains("winget install --id \"Git.Git\""));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("winget install --id \"Git.Git\""));
     }
 
     #[test]
@@ -495,7 +511,9 @@ mod tests {
         assert!(summary.is_dry_run);
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].command.contains("winget upgrade --id \"7zip.7zip\""));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("winget upgrade --id \"7zip.7zip\""));
     }
 
     #[test]
@@ -504,18 +522,28 @@ mod tests {
         let apps = get_uwp_apps(&runner).unwrap();
 
         assert!(!apps.is_empty());
-        assert!(apps.iter().any(|a| a.name.contains("YourPhone") || a.name.contains("XboxApp") || a.name.contains("Microsoft")));
+        assert!(apps.iter().any(|a| a.name.contains("YourPhone")
+            || a.name.contains("XboxApp")
+            || a.name.contains("Microsoft")));
     }
 
     #[test]
     fn test_remove_uwp_app_dry_run() {
         let runner = DryRunRunner::new();
-        let summary = remove_uwp_app(None, &runner, "Microsoft.YourPhone_1.23082.128.0_x64__8wekyb3d8bbwe", true).unwrap();
+        let summary = remove_uwp_app(
+            None,
+            &runner,
+            "Microsoft.YourPhone_1.23082.128.0_x64__8wekyb3d8bbwe",
+            true,
+        )
+        .unwrap();
 
         assert!(summary.is_dry_run);
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].command.contains("Remove-AppxPackage"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("Remove-AppxPackage"));
     }
 
     #[test]

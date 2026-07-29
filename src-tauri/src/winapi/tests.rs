@@ -15,7 +15,11 @@ mod tests {
         let res = set_dword(TEST_KEY_PATH, value_name, test_dword);
 
         // Assert
-        assert!(res.is_ok(), "set_dword should succeed with readback: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "set_dword should succeed with readback: {:?}",
+            res
+        );
 
         // Clean up
         let del_res = delete_value(TEST_KEY_PATH, value_name);
@@ -33,7 +37,11 @@ mod tests {
         let res = set_string(TEST_KEY_PATH, value_name, test_str);
 
         // Assert
-        assert!(res.is_ok(), "set_string should succeed with readback: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "set_string should succeed with readback: {:?}",
+            res
+        );
 
         // Clean up
         let del_res = delete_value(TEST_KEY_PATH, value_name);
@@ -51,7 +59,11 @@ mod tests {
         let res = set_binary(TEST_KEY_PATH, value_name, &test_bytes);
 
         // Assert
-        assert!(res.is_ok(), "set_binary should succeed with readback: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "set_binary should succeed with readback: {:?}",
+            res
+        );
 
         // Clean up
         let del_res = delete_value(TEST_KEY_PATH, value_name);
@@ -70,6 +82,10 @@ mod tests {
         let del_res = delete_key(&subkey_path);
 
         // Assert
-        assert!(del_res.is_ok(), "delete_key should succeed and verify key non-existence: {:?}", del_res);
+        assert!(
+            del_res.is_ok(),
+            "delete_key should succeed and verify key non-existence: {:?}",
+            del_res
+        );
     }
 }

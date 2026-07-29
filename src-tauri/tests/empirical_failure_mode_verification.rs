@@ -67,7 +67,7 @@ fn test_scheduled_tasks_run_access_denied_error_propagation() {
         is_dry: false,
     };
 
-    let result = scheduler::run_scheduled_task(&runner, "ProgramDataUpdater", r"\Microsoft\", );
+    let result = scheduler::run_scheduled_task(&runner, "ProgramDataUpdater", r"\Microsoft\");
     assert!(result.is_err());
     if let Err(AppError::Execution(err_msg)) = result {
         assert!(err_msg.contains("Access is denied"));
@@ -87,7 +87,7 @@ fn test_scheduled_tasks_generic_execution_error() {
         is_dry: false,
     };
 
-    let result = scheduler::run_scheduled_task(&runner, "NonExistentTask", r"\", );
+    let result = scheduler::run_scheduled_task(&runner, "NonExistentTask", r"\");
     assert!(result.is_err());
     if let Err(AppError::Execution(err_msg)) = result {
         assert!(err_msg.contains("Failed to run scheduled task 'NonExistentTask'"));
@@ -162,7 +162,8 @@ fn test_startup_items_toggle_access_denied_error_propagation() {
         is_dry: false,
     };
 
-    let result = startup::toggle_startup_item(&runner, "hklm_run_app", "SystemApp", "HKLM Run", false);
+    let result =
+        startup::toggle_startup_item(&runner, "hklm_run_app", "SystemApp", "HKLM Run", false);
     assert!(result.is_err());
     if let Err(AppError::Execution(err_msg)) = result {
         assert!(err_msg.contains("Administrator privileges are required"));
@@ -178,14 +179,16 @@ fn test_startup_items_query_access_denied_error_propagation() {
     let runner = MockRunner {
         exit_code: 1,
         stdout: String::new(),
-        stderr: "Get-ItemProperty : UnauthorizedAccessException: HKLM:\\Software\\Microsoft\\...".to_string(),
+        stderr: "Get-ItemProperty : UnauthorizedAccessException: HKLM:\\Software\\Microsoft\\..."
+            .to_string(),
         is_dry: false,
     };
 
     let result = startup::get_startup_items(&runner);
     assert!(result.is_err());
     if let Err(AppError::Execution(err_msg)) = result {
-        assert!(err_msg.contains("Administrator privileges are required to query startup registry paths"));
+        assert!(err_msg
+            .contains("Administrator privileges are required to query startup registry paths"));
         assert!(err_msg.contains("Access is denied"));
     } else {
         panic!("Expected AppError::Execution for query access denied");
@@ -216,7 +219,8 @@ fn test_system_restore_access_denied_0x80070005_error() {
     let runner = MockRunner {
         exit_code: 1,
         stdout: String::new(),
-        stderr: "Checkpoint-Computer : Access is denied. (Exception from HRESULT: 0x80070005)".to_string(),
+        stderr: "Checkpoint-Computer : Access is denied. (Exception from HRESULT: 0x80070005)"
+            .to_string(),
         is_dry: false,
     };
 

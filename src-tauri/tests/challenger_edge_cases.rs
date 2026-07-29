@@ -39,7 +39,10 @@ fn test_stress_null_date_parsing() {
     assert_eq!(tasks.len(), 2);
     assert_eq!(tasks[0].last_run_time, None);
     assert_eq!(tasks[0].next_run_time, None);
-    assert_eq!(tasks[1].last_run_time, Some("2026-07-27 12:00:00".to_string()));
+    assert_eq!(
+        tasks[1].last_run_time,
+        Some("2026-07-27 12:00:00".to_string())
+    );
     assert_eq!(tasks[1].next_run_time, None);
 
     // 2. System Restore Points JSON with empty/null/valid dates
@@ -55,11 +58,26 @@ fn test_stress_task_path_backslash_normalization() {
     assert_eq!(scheduler::normalize_task_path(""), "\\");
     assert_eq!(scheduler::normalize_task_path("\\"), "\\");
     assert_eq!(scheduler::normalize_task_path("   "), "\\");
-    assert_eq!(scheduler::normalize_task_path("Microsoft\\Windows"), "\\Microsoft\\Windows\\");
-    assert_eq!(scheduler::normalize_task_path("\\Microsoft\\Windows"), "\\Microsoft\\Windows\\");
-    assert_eq!(scheduler::normalize_task_path("Microsoft\\Windows\\"), "\\Microsoft\\Windows\\");
-    assert_eq!(scheduler::normalize_task_path("\\Microsoft\\Windows\\"), "\\Microsoft\\Windows\\");
-    assert_eq!(scheduler::normalize_task_path("  \\Microsoft\\Windows  "), "\\Microsoft\\Windows\\");
+    assert_eq!(
+        scheduler::normalize_task_path("Microsoft\\Windows"),
+        "\\Microsoft\\Windows\\"
+    );
+    assert_eq!(
+        scheduler::normalize_task_path("\\Microsoft\\Windows"),
+        "\\Microsoft\\Windows\\"
+    );
+    assert_eq!(
+        scheduler::normalize_task_path("Microsoft\\Windows\\"),
+        "\\Microsoft\\Windows\\"
+    );
+    assert_eq!(
+        scheduler::normalize_task_path("\\Microsoft\\Windows\\"),
+        "\\Microsoft\\Windows\\"
+    );
+    assert_eq!(
+        scheduler::normalize_task_path("  \\Microsoft\\Windows  "),
+        "\\Microsoft\\Windows\\"
+    );
     assert_eq!(scheduler::normalize_task_path("MyTask"), "\\MyTask\\");
 }
 
@@ -118,7 +136,8 @@ fn test_stress_missing_ipc_parameters() {
     }
 
     // 3. Winget search with empty query -> Graceful Ok(vec![])
-    let search_res = packages::winget_search(&runner, "").expect("Empty search query returns Ok(Vec::new())");
+    let search_res =
+        packages::winget_search(&runner, "").expect("Empty search query returns Ok(Vec::new())");
     assert_eq!(search_res.len(), 0);
 
     // 4. Remove UWP app with empty name -> Error
@@ -165,7 +184,10 @@ fn test_stress_frequency_limit_commands() {
     assert!(cmd.contains("SystemRestorePointCreationFrequency"));
     assert!(cmd.contains("-Value 0"));
 
-    let err_frequency = system_restore::parse_restore_point_error("Error 0x80041001: 24 hours frequency limit reached", 1);
+    let err_frequency = system_restore::parse_restore_point_error(
+        "Error 0x80041001: 24 hours frequency limit reached",
+        1,
+    );
     assert!(err_frequency.contains("frequency limit reached"));
     assert!(err_frequency.contains("Set SystemRestorePointCreationFrequency registry key to 0"));
 }

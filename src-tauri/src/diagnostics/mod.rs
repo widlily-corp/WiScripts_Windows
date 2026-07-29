@@ -80,7 +80,10 @@ pub fn run_diagnostics(
             let payload = TaskProgressPayload {
                 current_step,
                 total_steps,
-                message: format!("Executing step {}/{}: {}", current_step, total_steps, step.title),
+                message: format!(
+                    "Executing step {}/{}: {}",
+                    current_step, total_steps, step.title
+                ),
                 is_error: false,
             };
             let _ = app_handle.emit("task-progress", &payload);
@@ -202,7 +205,9 @@ mod tests {
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].id, "dism_restorehealth");
-        assert!(summary.executed_actions[0].command.contains("RestoreHealth"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("RestoreHealth"));
     }
 
     #[test]
@@ -214,7 +219,9 @@ mod tests {
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
         assert_eq!(summary.executed_actions[0].id, "reset_tcpip");
-        assert!(summary.executed_actions[0].command.contains("netsh int ip reset"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("netsh int ip reset"));
     }
 
     #[test]
@@ -255,4 +262,3 @@ mod tests {
         }
     }
 }
-

@@ -61,7 +61,8 @@ impl CommandRunner for SpawnErrorRunner {
 fn verify_diagnostics_all_step_indexes_and_failing_subprocess() {
     // 1. Verify multi-step dry run for action "all"
     let dry_runner = DryRunRunner::new();
-    let summary = diagnostics::run_diagnostics(None, &dry_runner, "all", true).expect("Diagnostics all failed");
+    let summary = diagnostics::run_diagnostics(None, &dry_runner, "all", true)
+        .expect("Diagnostics all failed");
     assert!(summary.is_dry_run);
     assert!(summary.success);
     assert_eq!(summary.executed_actions.len(), 3);
@@ -76,7 +77,10 @@ fn verify_diagnostics_all_step_indexes_and_failing_subprocess() {
     };
     let failing_summary = diagnostics::run_diagnostics(None, &failing_runner, "all", false)
         .expect("Diagnostics run returned error instead of ExecutionSummary");
-    assert!(!failing_summary.success, "Summary success must be false when subprocess fails");
+    assert!(
+        !failing_summary.success,
+        "Summary success must be false when subprocess fails"
+    );
     assert_eq!(failing_summary.executed_actions.len(), 3);
     for action in failing_summary.executed_actions {
         assert_eq!(action.output.exit_code, 1);
@@ -120,7 +124,8 @@ fn verify_packages_failing_subprocesses_and_validation() {
         exit_code: 1603,
         stderr: "Fatal error during installation".to_string(),
     };
-    let failing_summary = packages::winget_install(None, &failing_runner, "Git.Git", false).unwrap();
+    let failing_summary =
+        packages::winget_install(None, &failing_runner, "Git.Git", false).unwrap();
     assert!(!failing_summary.success);
     assert_eq!(failing_summary.executed_actions[0].output.exit_code, 1603);
 
@@ -140,14 +145,21 @@ fn verify_packages_failing_subprocesses_and_validation() {
     }
 
     // 2. winget_update validation & failure
-    let failing_summary_upd = packages::winget_update(None, &failing_runner, "7zip.7zip", false).unwrap();
+    let failing_summary_upd =
+        packages::winget_update(None, &failing_runner, "7zip.7zip", false).unwrap();
     assert!(!failing_summary_upd.success);
 
     let empty_upd_res = packages::winget_update(None, &dry_runner, "", true);
     assert!(empty_upd_res.is_err());
 
     // 3. remove_uwp_app validation & failure
-    let failing_uwp_summary = packages::remove_uwp_app(None, &failing_runner, "Microsoft.YourPhone_1.0_x64__8wekyb3d8bbwe", false).unwrap();
+    let failing_uwp_summary = packages::remove_uwp_app(
+        None,
+        &failing_runner,
+        "Microsoft.YourPhone_1.0_x64__8wekyb3d8bbwe",
+        false,
+    )
+    .unwrap();
     assert!(!failing_uwp_summary.success);
 
     let empty_uwp_res = packages::remove_uwp_app(None, &dry_runner, "   ", true);
@@ -163,17 +175,20 @@ fn verify_profiles_step_indexes_and_failing_subprocess() {
     let dry_runner = DryRunRunner::new();
 
     // 1. Gaming profile: 6 steps
-    let gaming_summary = profiles::apply_optimization_profile(None, &dry_runner, "gaming", true).unwrap();
+    let gaming_summary =
+        profiles::apply_optimization_profile(None, &dry_runner, "gaming", true).unwrap();
     assert!(gaming_summary.success);
     assert_eq!(gaming_summary.executed_actions.len(), 6);
 
     // 2. Privacy profile: 7 steps
-    let privacy_summary = profiles::apply_optimization_profile(None, &dry_runner, "privacy", true).unwrap();
+    let privacy_summary =
+        profiles::apply_optimization_profile(None, &dry_runner, "privacy", true).unwrap();
     assert!(privacy_summary.success);
     assert_eq!(privacy_summary.executed_actions.len(), 7);
 
     // 3. Work profile: 6 steps
-    let work_summary = profiles::apply_optimization_profile(None, &dry_runner, "work", true).unwrap();
+    let work_summary =
+        profiles::apply_optimization_profile(None, &dry_runner, "work", true).unwrap();
     assert!(work_summary.success);
     assert_eq!(work_summary.executed_actions.len(), 6);
 
@@ -182,7 +197,8 @@ fn verify_profiles_step_indexes_and_failing_subprocess() {
         exit_code: 5,
         stderr: "Access denied writing registry key".to_string(),
     };
-    let failing_summary = profiles::apply_optimization_profile(None, &failing_runner, "gaming", false).unwrap();
+    let failing_summary =
+        profiles::apply_optimization_profile(None, &failing_runner, "gaming", false).unwrap();
     assert!(!failing_summary.success);
     assert_eq!(failing_summary.executed_actions.len(), 6);
     for action in failing_summary.executed_actions {
@@ -190,7 +206,8 @@ fn verify_profiles_step_indexes_and_failing_subprocess() {
     }
 
     // 5. Invalid profile ID returns AppError::InvalidConfig
-    let invalid_res = profiles::apply_optimization_profile(None, &dry_runner, "invalid_profile", true);
+    let invalid_res =
+        profiles::apply_optimization_profile(None, &dry_runner, "invalid_profile", true);
     assert!(invalid_res.is_err());
     if let Err(AppError::InvalidConfig(msg)) = invalid_res {
         assert!(msg.contains("Optimization profile 'invalid_profile' not found"));
@@ -206,7 +223,8 @@ fn verify_dns_context_failing_subprocesses_and_invalid_providers() {
     let dry_runner = DryRunRunner::new();
 
     // 1. set_dns_server valid vs invalid provider
-    let adguard_summary = dns_context::set_dns_server(None, &dry_runner, "adguard", None, true).unwrap();
+    let adguard_summary =
+        dns_context::set_dns_server(None, &dry_runner, "adguard", None, true).unwrap();
     assert!(adguard_summary.success);
 
     let invalid_dns_res = dns_context::set_dns_server(None, &dry_runner, "unknown_dns", None, true);
@@ -220,11 +238,14 @@ fn verify_dns_context_failing_subprocesses_and_invalid_providers() {
         exit_code: 1,
         stderr: "Network interface not found".to_string(),
     };
-    let failing_dns_summary = dns_context::set_dns_server(None, &failing_runner, "cloudflare", Some("Ethernet"), false).unwrap();
+    let failing_dns_summary =
+        dns_context::set_dns_server(None, &failing_runner, "cloudflare", Some("Ethernet"), false)
+            .unwrap();
     assert!(!failing_dns_summary.success);
 
     // 3. toggle_classic_context_menu failing subprocess
-    let failing_toggle_summary = dns_context::toggle_classic_context_menu(None, &failing_runner, true, false).unwrap();
+    let failing_toggle_summary =
+        dns_context::toggle_classic_context_menu(None, &failing_runner, true, false).unwrap();
     assert!(!failing_toggle_summary.success);
 }
 
@@ -237,7 +258,8 @@ fn verify_driver_backup_failing_subprocesses_and_validation() {
     let dry_runner = DryRunRunner::new();
 
     // 1. backup_drivers valid dry run
-    let summary = driver_backup::backup_drivers(None, &dry_runner, "C:\\DriverBackupTest", true).unwrap();
+    let summary =
+        driver_backup::backup_drivers(None, &dry_runner, "C:\\DriverBackupTest", true).unwrap();
     assert!(summary.success);
     assert_eq!(summary.executed_actions.len(), 1);
 
@@ -253,7 +275,8 @@ fn verify_driver_backup_failing_subprocesses_and_validation() {
         exit_code: 2,
         stderr: "Export-WindowsDriver: Parameter -Destination path invalid".to_string(),
     };
-    let failing_summary = driver_backup::backup_drivers(None, &failing_runner, "Z:\\NonExistent", false).unwrap();
+    let failing_summary =
+        driver_backup::backup_drivers(None, &failing_runner, "Z:\\NonExistent", false).unwrap();
     assert!(!failing_summary.success);
     assert_eq!(failing_summary.executed_actions[0].output.exit_code, 2);
 

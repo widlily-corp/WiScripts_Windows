@@ -40,7 +40,9 @@ pub fn backup_drivers(
         clean_dir, clean_dir, clean_dir
     );
 
-    let output = runner.run_powershell(&command).map_err(AppError::Execution)?;
+    let output = runner
+        .run_powershell(&command)
+        .map_err(AppError::Execution)?;
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -97,8 +99,12 @@ mod tests {
         assert!(summary.is_dry_run);
         assert!(summary.success);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].command.contains("Export-WindowsDriver"));
-        assert!(summary.executed_actions[0].command.contains("C:\\DriverBackup"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("Export-WindowsDriver"));
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("C:\\DriverBackup"));
     }
 
     #[test]

@@ -30,13 +30,14 @@ pub fn init_logger() -> Result<(), String> {
         .open(&log_path)
         .map_err(|e| format!("Failed to open log file '{:?}': {}", log_path, e))?;
 
-    let config = ConfigBuilder::new()
-        .set_time_format_rfc3339()
-        .build();
+    let config = ConfigBuilder::new().set_time_format_rfc3339().build();
 
     match WriteLogger::init(LevelFilter::Debug, config, file) {
         Ok(()) => {
-            log::info!("[Logger] Persistent debug logger initialized at {:?}", log_path);
+            log::info!(
+                "[Logger] Persistent debug logger initialized at {:?}",
+                log_path
+            );
             Ok(())
         }
         Err(_set_logger_err) => {
@@ -49,9 +50,9 @@ pub fn init_logger() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runner::{CommandRunner, DryRunRunner};
     use std::fs;
     use std::path::Path;
-    use crate::runner::{CommandRunner, DryRunRunner};
 
     #[test]
     fn test_get_log_path_returns_expected_structure() {
@@ -166,7 +167,10 @@ mod tests {
     fn regex_check_rfc3339(content: &str) -> bool {
         // Check for pattern like "2026-" or ISO timestamp "T" delimiter e.g. "2026-07-22T"
         content.lines().any(|line| {
-            line.len() > 10 && line.chars().nth(4) == Some('-') && line.chars().nth(7) == Some('-') && line.contains('T')
+            line.len() > 10
+                && line.chars().nth(4) == Some('-')
+                && line.chars().nth(7) == Some('-')
+                && line.contains('T')
         })
     }
 }

@@ -132,7 +132,10 @@ pub fn scan_system() -> Result<CleanerScanResult, AppError> {
     for (id, name, description, paths) in cat_defs {
         let mut cat_size: u64 = 0;
         let mut cat_files: u64 = 0;
-        let path_strings: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        let path_strings: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
 
         for path in &paths {
             let (sz, fc) = scan_directory(path);
@@ -168,7 +171,10 @@ pub fn scan_system() -> Result<CleanerScanResult, AppError> {
 }
 
 pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppError> {
-    log::info!("[Cleaner] Starting cleanup for categories: {:?}", category_ids);
+    log::info!(
+        "[Cleaner] Starting cleanup for categories: {:?}",
+        category_ids
+    );
     let cat_defs = get_default_categories();
 
     let mut bytes_freed: u64 = 0;
@@ -205,7 +211,11 @@ pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppE
                 let mut files_to_delete = Vec::new();
                 let mut dirs_to_check = Vec::new();
 
-                for entry in WalkDir::new(&path).contents_first(true).into_iter().filter_map(|e| e.ok()) {
+                for entry in WalkDir::new(&path)
+                    .contents_first(true)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                {
                     let entry_path = entry.path().to_path_buf();
                     if entry_path == path {
                         continue; // Do not delete root category folder itself

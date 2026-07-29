@@ -235,7 +235,9 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
         .uninstall_string
         .as_deref()
         .or(app.quiet_uninstall_string.as_deref())
-        .ok_or_else(|| AppError::Execution("No uninstall string found for application".to_string()))?;
+        .ok_or_else(|| {
+            AppError::Execution("No uninstall string found for application".to_string())
+        })?;
 
     let (program, args) = parse_uninstall_string(raw_cmd);
     let full_command = if args.is_empty() {
@@ -452,12 +454,18 @@ mod tests {
         );
 
         // Ensure user apps exist
-        assert!(!user_apps.is_empty(), "Expected at least one non-system user app");
+        assert!(
+            !user_apps.is_empty(),
+            "Expected at least one non-system user app"
+        );
 
         // Verify deduplication: no two apps have identical (name.to_lowercase(), version)
         let mut seen = std::collections::HashSet::new();
         for app in &apps {
-            let key = (app.name.to_lowercase(), app.version.clone().unwrap_or_default());
+            let key = (
+                app.name.to_lowercase(),
+                app.version.clone().unwrap_or_default(),
+            );
             assert!(
                 seen.insert(key.clone()),
                 "Duplicate app found after scan: {:?}",
@@ -466,4 +474,3 @@ mod tests {
         }
     }
 }
-

@@ -158,8 +158,7 @@ if ($items.Count -eq 0) {
             parse_startup_items_json(stdout)
         } else {
             let stderr = &output.stderr;
-            if stderr.contains("Access is denied")
-                || stderr.contains("UnauthorizedAccessException")
+            if stderr.contains("Access is denied") || stderr.contains("UnauthorizedAccessException")
             {
                 return Err(AppError::Execution(
                     "Administrator privileges are required to query startup registry paths: Access is denied".to_string(),
@@ -188,8 +187,9 @@ pub fn parse_startup_items_json(json_str: &str) -> Result<Vec<StartupItem>, AppE
         serde_json::from_str::<Vec<StartupItem>>(trimmed)
             .map_err(|e| AppError::Execution(format!("Failed to parse startup items array: {}", e)))
     } else {
-        let single = serde_json::from_str::<StartupItem>(trimmed)
-            .map_err(|e| AppError::Execution(format!("Failed to parse single startup item: {}", e)))?;
+        let single = serde_json::from_str::<StartupItem>(trimmed).map_err(|e| {
+            AppError::Execution(format!("Failed to parse single startup item: {}", e))
+        })?;
         Ok(vec![single])
     }
 }
@@ -208,7 +208,10 @@ pub fn toggle_startup_item(
             "Startup item value_name cannot be empty".to_string(),
         ));
     }
-    let action_name = format!("Toggle startup item '{}' (enable={})", target_value_name, enable);
+    let action_name = format!(
+        "Toggle startup item '{}' (enable={})",
+        target_value_name, enable
+    );
 
     if runner.is_dry_run() {
         return Ok(ExecutionSummary {
@@ -268,7 +271,9 @@ Write-Output "Toggled $valueName to enabled={enable} at $apPath"
             byte_val = byte_val,
             enable = enable
         );
-        let output = runner.run_powershell(&script).map_err(AppError::Execution)?;
+        let output = runner
+            .run_powershell(&script)
+            .map_err(AppError::Execution)?;
         if output.exit_code != 0 {
             let stderr = &output.stderr;
             if stderr.contains("Access is denied")
@@ -402,7 +407,9 @@ Write-Output "Removed startup entry $valueName"
             safe_value_name = safe_value_name,
             safe_location = safe_location
         );
-        let output = runner.run_powershell(&script).map_err(AppError::Execution)?;
+        let output = runner
+            .run_powershell(&script)
+            .map_err(AppError::Execution)?;
         if output.exit_code != 0 {
             let stderr = &output.stderr;
             if stderr.contains("Access is denied")
@@ -446,7 +453,8 @@ fn get_mock_startup_items() -> Vec<StartupItem> {
             id: "hkcu_run_discord".to_string(),
             name: "Discord".to_string(),
             value_name: "Discord".to_string(),
-            command: r"C:\Users\User\AppData\Local\Discord\Update.exe --processStart Discord.exe".to_string(),
+            command: r"C:\Users\User\AppData\Local\Discord\Update.exe --processStart Discord.exe"
+                .to_string(),
             location: "HKCU Run".to_string(),
             enabled: true,
             item_type: "Registry".to_string(),
@@ -476,7 +484,8 @@ fn get_mock_startup_items() -> Vec<StartupItem> {
             id: "hklm_run_edgeupdate".to_string(),
             name: "Microsoft Edge AutoUpdate".to_string(),
             value_name: "Microsoft Edge AutoUpdate".to_string(),
-            command: r"C:\Program Files (x86)\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe".to_string(),
+            command: r"C:\Program Files (x86)\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe"
+                .to_string(),
             location: "HKLM Run".to_string(),
             enabled: true,
             item_type: "Registry".to_string(),
@@ -513,12 +522,16 @@ mod tests {
     #[test]
     fn test_toggle_startup_item_dry_run() {
         let runner = DryRunRunner::new();
-        let summary = toggle_startup_item(&runner, "hkcu_run_discord", "Discord", "HKCU Run", false)
-            .expect("Toggle dry run should succeed");
+        let summary =
+            toggle_startup_item(&runner, "hkcu_run_discord", "Discord", "HKCU Run", false)
+                .expect("Toggle dry run should succeed");
         assert!(summary.success);
         assert!(summary.is_dry_run);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        assert!(summary.executed_actions[0]
+            .output
+            .stdout
+            .contains("[DRY-RUN]"));
     }
 
     #[test]
@@ -529,7 +542,10 @@ mod tests {
         assert!(summary.success);
         assert!(summary.is_dry_run);
         assert_eq!(summary.executed_actions.len(), 1);
-        assert!(summary.executed_actions[0].output.stdout.contains("[DRY-RUN]"));
+        assert!(summary.executed_actions[0]
+            .output
+            .stdout
+            .contains("[DRY-RUN]"));
     }
 
     #[test]
@@ -557,7 +573,8 @@ mod tests {
     #[test]
     fn test_parse_startup_items_json_with_whitespace() {
         let json_with_ws = "\r\n  [\r\n    {\r\n      \"id\": \"item_ws\",\r\n      \"name\": \"App WS\",\r\n      \"valueName\": \"App WS\",\r\n      \"command\": \"C:\\\\app.exe\",\r\n      \"location\": \"HKCU Run\",\r\n      \"enabled\": true,\r\n      \"itemType\": \"Registry\",\r\n      \"publisher\": \"Vendor WS\"\r\n    }\r\n  ]\r\n";
-        let parsed = parse_startup_items_json(json_with_ws).expect("Whitespace JSON parsing should succeed");
+        let parsed =
+            parse_startup_items_json(json_with_ws).expect("Whitespace JSON parsing should succeed");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].id, "item_ws");
         assert_eq!(parsed[0].name, "App WS");
@@ -566,7 +583,8 @@ mod tests {
     #[test]
     fn test_parse_startup_items_single_object() {
         let single_json = "  {\r\n    \"id\": \"single_app\",\r\n    \"name\": \"Single App\",\r\n    \"valueName\": \"Single App\",\r\n    \"command\": \"C:\\\\single.exe\",\r\n    \"location\": \"HKCU Run\",\r\n    \"enabled\": false,\r\n    \"itemType\": \"Registry\",\r\n    \"publisher\": \"Single Vendor\"\r\n  }\r\n";
-        let parsed = parse_startup_items_json(single_json).expect("Single object JSON parsing should succeed");
+        let parsed = parse_startup_items_json(single_json)
+            .expect("Single object JSON parsing should succeed");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].id, "single_app");
         assert_eq!(parsed[0].name, "Single App");
@@ -576,15 +594,30 @@ mod tests {
     #[test]
     fn test_property_filter_preserves_ps_named_apps() {
         let ps_apps = vec!["Photoshop", "Postman", "PSPad", "PStudio", "PSReadline"];
-        let ps_internal = vec!["PSPath", "PSParentPath", "PSChildName", "PSDrive", "PSProvider", "PSIsContainer"];
+        let ps_internal = vec![
+            "PSPath",
+            "PSParentPath",
+            "PSChildName",
+            "PSDrive",
+            "PSProvider",
+            "PSIsContainer",
+        ];
 
         for app in &ps_apps {
             let is_excluded = ps_internal.contains(app);
-            assert!(!is_excluded, "Application '{}' starting with 'PS' should NOT be excluded by property filter", app);
+            assert!(
+                !is_excluded,
+                "Application '{}' starting with 'PS' should NOT be excluded by property filter",
+                app
+            );
         }
 
         for internal in &ps_internal {
-            assert!(ps_internal.contains(internal), "PowerShell internal property '{}' MUST be excluded", internal);
+            assert!(
+                ps_internal.contains(internal),
+                "PowerShell internal property '{}' MUST be excluded",
+                internal
+            );
         }
     }
 
@@ -614,9 +647,17 @@ mod tests {
             }
         }
 
-        let runner = CapturingRunner { captured_script: std::sync::Mutex::new(String::new()) };
-        let summary = toggle_startup_item(&runner, "user_folder_steam", "Steam.lnk", "User Startup Folder", false)
-            .expect("Toggle shortcut should succeed");
+        let runner = CapturingRunner {
+            captured_script: std::sync::Mutex::new(String::new()),
+        };
+        let summary = toggle_startup_item(
+            &runner,
+            "user_folder_steam",
+            "Steam.lnk",
+            "User Startup Folder",
+            false,
+        )
+        .expect("Toggle shortcut should succeed");
         assert!(summary.success);
 
         let script = runner.captured_script.lock().unwrap().clone();
@@ -631,20 +672,33 @@ mod tests {
     fn test_ipc_missing_value_name_handling() {
         let runner = DryRunRunner::new();
         let result_toggle = toggle_startup_item(&runner, "hkcu_run_discord", "", "HKCU Run", false);
-        assert!(result_toggle.is_err(), "toggle_startup_item with empty value_name should return an error");
+        assert!(
+            result_toggle.is_err(),
+            "toggle_startup_item with empty value_name should return an error"
+        );
         if let Err(AppError::Execution(msg)) = result_toggle {
-            assert!(msg.contains("cannot be empty"), "Error message should mention value_name cannot be empty: {}", msg);
+            assert!(
+                msg.contains("cannot be empty"),
+                "Error message should mention value_name cannot be empty: {}",
+                msg
+            );
         } else {
             panic!("Expected AppError::Execution for empty value_name");
         }
 
         let result_remove = remove_startup_item(&runner, "hkcu_run_discord", "   ", "HKCU Run");
-        assert!(result_remove.is_err(), "remove_startup_item with whitespace value_name should return an error");
+        assert!(
+            result_remove.is_err(),
+            "remove_startup_item with whitespace value_name should return an error"
+        );
         if let Err(AppError::Execution(msg)) = result_remove {
-            assert!(msg.contains("cannot be empty"), "Error message should mention value_name cannot be empty: {}", msg);
+            assert!(
+                msg.contains("cannot be empty"),
+                "Error message should mention value_name cannot be empty: {}",
+                msg
+            );
         } else {
             panic!("Expected AppError::Execution for empty value_name");
         }
     }
 }
-

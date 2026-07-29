@@ -142,6 +142,18 @@ pub async fn get_system_info() -> Result<SystemInfo, AppError> {
 }
 
 #[tauri::command]
+pub async fn log_frontend_event(level: String, message: String) -> Result<(), AppError> {
+    match level.as_str() {
+        "info" => log::info!("[Frontend] {}", message),
+        "warn" => log::warn!("[Frontend] {}", message),
+        "error" => log::error!("[Frontend] {}", message),
+        "cmd" => log::debug!("[Frontend] [CMD] {}", message),
+        _ => log::debug!("[Frontend] {}", message),
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_rule_catalog() -> Result<Vec<OptimizationItem>, AppError> {
     log::debug!("[IPC] get_rule_catalog request received");
     Ok(optimization::get_rule_catalog())

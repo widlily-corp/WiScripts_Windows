@@ -113,7 +113,7 @@ pub struct RestorePoint {
     pub description: String,
 
     #[serde(alias = "RestorePointType")]
-    pub restore_point_type: String,
+    pub restore_point_type: serde_json::Value,
 
     #[serde(alias = "CreationTime")]
     pub creation_time: String,
@@ -303,13 +303,13 @@ pub fn get_restore_points(runner: &dyn CommandRunner) -> Result<Vec<RestorePoint
             RestorePoint {
                 sequence_number: 101,
                 description: "WiScripts System Optimization Checkpoint".to_string(),
-                restore_point_type: "MODIFY_SETTINGS".to_string(),
+                restore_point_type: serde_json::Value::String("MODIFY_SETTINGS".to_string()),
                 creation_time: "2026-07-27T10:00:00.000Z".to_string(),
             },
             RestorePoint {
                 sequence_number: 100,
                 description: "Windows Update Auto Restore Point".to_string(),
-                restore_point_type: "DEVICE_DRIVER_INSTALL".to_string(),
+                restore_point_type: serde_json::Value::String("DEVICE_DRIVER_INSTALL".to_string()),
                 creation_time: "2026-07-26T18:30:00.000Z".to_string(),
             },
         ]);

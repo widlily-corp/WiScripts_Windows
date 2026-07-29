@@ -1137,7 +1137,8 @@ export const useAppStore = create<AppState>()(
         setCurrentProgress: (currentStep, totalSteps) => set({ currentStep, totalSteps }),
         setExecutionProgress: (percent) => set({ executionProgress: percent }),
         logs: [],
-        addLog: (log) =>
+        addLog: (log) => {
+          invoke('log_frontend_event', { level: log.level, message: log.message }).catch(console.error);
           set((state) => ({
             logs: [
               ...state.logs,
@@ -1147,7 +1148,8 @@ export const useAppStore = create<AppState>()(
                 timestamp: new Date().toISOString(),
               },
             ],
-          })),
+          }));
+        },
         clearLogs: () => set({ logs: [] }),
 
         pendingSafetyModal: null,

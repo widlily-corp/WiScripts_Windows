@@ -35,6 +35,7 @@ pub fn run() {
         .manage(metrics_collector)
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
+            commands::log_frontend_event,
             commands::get_system_info,
             commands::get_system_metrics,
             commands::get_system_temperatures,

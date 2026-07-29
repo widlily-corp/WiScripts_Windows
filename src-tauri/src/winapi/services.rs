@@ -31,7 +31,11 @@ pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), Stri
             Ok(h) => h,
             Err(e) => {
                 let _ = CloseServiceHandle(scm_handle);
-                return Err(format!("OpenServiceW failed for service '{}': {:?}", service_name, e));
+                let err_str = format!("{:?}", e);
+                if err_str.contains("1060") || err_str.contains("0x80070424") {
+                    return Ok(());
+                }
+                return Err(format!("OpenServiceW failed for service '{}': {}", service_name, err_str));
             }
         };
 
@@ -106,7 +110,11 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
             Ok(h) => h,
             Err(e) => {
                 let _ = CloseServiceHandle(scm_handle);
-                return Err(format!("OpenServiceW failed for service '{}': {:?}", service_name, e));
+                let err_str = format!("{:?}", e);
+                if err_str.contains("1060") || err_str.contains("0x80070424") {
+                    return Ok(());
+                }
+                return Err(format!("OpenServiceW failed for service '{}': {}", service_name, err_str));
             }
         };
 

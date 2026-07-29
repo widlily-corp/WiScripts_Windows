@@ -86,6 +86,7 @@ export interface TaskProgressPayload {
 
 export type TabType =
   | 'dashboard'
+  | 'audio_manager'
   | 'optimization'
   | 'package_manager'
   | 'app_uninstaller'
@@ -376,5 +377,42 @@ export interface GitHubIssueResult {
   error?: string;
 }
 
+export type AudioFlow = 'render' | 'capture' | 'Render' | 'Capture';
+export type AudioRole = 'console' | 'multimedia' | 'communications' | 'Console' | 'Multimedia' | 'Communications';
 
+export interface AudioDevice {
+  id: string;
+  name: string;
+  flow: AudioFlow;
+  isDefault: boolean;
+  isDefaultMultimedia?: boolean;
+  isDefaultCommunications?: boolean;
+  volume?: number;
+  isMuted?: boolean;
+  state: 'active' | 'disabled' | 'notpresent' | 'unplugged' | 'Active' | 'Disabled' | 'Unplugged' | string;
+  icon?: string;
+  channels?: number;
+}
 
+export interface AudioDevicesPayload {
+  renderDevices: AudioDevice[];
+  captureDevices: AudioDevice[];
+  defaultRenderId: string | null;
+  defaultCaptureId: string | null;
+}
+
+export interface AppAudioSession {
+  pid: number;
+  name: string;
+  processName?: string;
+  displayName?: string;
+  sessionId?: string;
+  volume: number;
+  isMuted: boolean;
+  deviceId?: string | null;
+  outputDeviceId?: string | null;
+  inputDeviceId?: string | null;
+  flow?: AudioFlow;
+  icon?: string | null;
+  iconPath?: string | null;
+}

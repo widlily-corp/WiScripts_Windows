@@ -1,3 +1,4 @@
+use crate::audio;
 use crate::cleaner;
 use crate::diagnostics;
 use crate::dns_context;
@@ -1419,6 +1420,75 @@ pub async fn create_github_issue(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Audio Device Management & Session Control IPC Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_audio_devices() -> Result<audio::types::AudioDevicesPayload, AppError> {
+    log::info!("[IPC] get_audio_devices request received");
+    tauri::async_runtime::spawn_blocking(move || audio::get_audio_devices())
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in get_audio_devices: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn set_global_audio_device(
+    device_id: String,
+    flow: audio::types::AudioFlow,
+) -> Result<(), AppError> {
+    log::info!(
+        "[IPC] set_global_audio_device request received: device_id='{}', flow={}",
+        device_id,
+        flow
+    );
+    tauri::async_runtime::spawn_blocking(move || audio::set_global_audio_device(&device_id, flow))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in set_global_audio_device: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn get_app_audio_sessions() -> Result<Vec<audio::types::AppAudioSession>, AppError> {
+    log::info!("[IPC] get_app_audio_sessions request received");
+    tauri::async_runtime::spawn_blocking(move || audio::get_app_audio_sessions())
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in get_app_audio_sessions: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn set_app_audio_device(
+    pid: u32,
+    device_id: String,
+    flow: audio::types::AudioFlow,
+) -> Result<(), AppError> {
+    log::info!(
+        "[IPC] set_app_audio_device request received: pid={}, device_id='{}', flow={}",
+        pid,
+        device_id,
+        flow
+    );
+    tauri::async_runtime::spawn_blocking(move || audio::set_app_audio_device(pid, &device_id, flow))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in set_app_audio_device: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn set_app_volume(
+    pid: u32,
+    volume: f32,
+    muted: bool,
+) -> Result<(), AppError> {
+    log::info!(
+        "[IPC] set_app_volume request received: pid={}, volume={}, muted={}",
+        pid,
+        volume,
+        muted
+    );
+    tauri::async_runtime::spawn_blocking(move || audio::set_app_volume(pid, volume, muted))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in set_app_volume: {}", e)))?
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -1430,7 +1500,7 @@ mod tests {
         let ver = env!("CARGO_PKG_VERSION");
 
         // Assert
-        assert_eq!(ver, "0.5.6");
+        assert_eq!(ver, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

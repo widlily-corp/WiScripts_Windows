@@ -7,6 +7,7 @@ import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive } from 'lucide-reac
 
 const TAB_TITLES: Record<string, string> = {
   dashboard: 'header.tab_titles.dashboard',
+  audio_manager: 'header.tab_titles.audio_manager',
   optimization: 'header.tab_titles.optimization',
   package_manager: 'header.tab_titles.package_manager',
   app_uninstaller: 'header.tab_titles.app_uninstaller',

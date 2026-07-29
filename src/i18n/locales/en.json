@@ -28,6 +28,7 @@
   "nav": {
     "items": {
       "dashboard": "Dashboard",
+      "audio_manager": "Audio Devices & Volume",
       "optimization": "Optimizations",
       "package_manager": "Package Manager",
       "app_uninstaller": "App Uninstaller",
@@ -70,6 +71,7 @@
   "header": {
     "tab_titles": {
       "dashboard": "System Overview Dashboard",
+      "audio_manager": "Windows Audio Device Management & Per-App Routing",
       "optimization": "Windows Optimizations & Debloat",
       "package_manager": "Package & Bloatware Manager (Winget / UWP)",
       "app_uninstaller": "Application Uninstaller",
@@ -915,5 +917,29 @@
     "downloading_progress": "Downloading... {{progress}}%",
     "restart_apply": "Restart & Apply",
     "dismiss": "Dismiss banner"
+  },
+  "audioView": {
+    "title": "Windows Audio Manager",
+    "description": "Manage system playback/recording endpoints and configure per-application audio routing and volume levels.",
+    "refresh": "Refresh Devices",
+    "totalDevices": "Audio Endpoints",
+    "activeSessions": "Active App Sessions",
+    "outputDevices": "Playback (Output) Devices",
+    "inputDevices": "Recording (Input) Devices",
+    "defaultOutput": "System Output",
+    "defaultInput": "System Input",
+    "activeDefault": "Active Default",
+    "setAsDefault": "Set Default Device",
+    "appRoutingTitle": "Per-Application Audio Routing & Volume Control",
+    "searchAppPlaceholder": "Search application process or PID...",
+    "noAppSessions": "No active audio sessions found",
+    "noAppSessionsDesc": "Applications currently producing or recording audio will automatically appear here.",
+    "masterVolume": "Master Volume",
+    "appOutputDevice": "Output Route",
+    "appInputDevice": "Input Route",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "resetRouting": "Reset Route",
+    "systemDefault": "Default System Device"
   }
 }

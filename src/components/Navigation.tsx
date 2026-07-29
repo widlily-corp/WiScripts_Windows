@@ -4,6 +4,7 @@ import { useAppStore } from '../store/useAppStore';
 import { TabType } from '../types';
 import {
   LayoutDashboard,
+  Volume2,
   Sliders,
   Package,
   Trash2,
@@ -31,6 +32,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', labelKey: 'nav.items.dashboard', icon: LayoutDashboard },
+  { id: 'audio_manager', labelKey: 'nav.items.audio_manager', icon: Volume2 },
   { id: 'optimization', labelKey: 'nav.items.optimization', icon: Sliders },
   { id: 'package_manager', labelKey: 'nav.items.package_manager', icon: Package },
   { id: 'app_uninstaller', labelKey: 'nav.items.app_uninstaller', icon: Trash2 },

@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod cleaner;
 pub mod commands;
 pub mod diagnostics;
@@ -78,6 +79,11 @@ pub fn run() {
             commands::delete_files,
             commands::export_diagnostic_dump,
             commands::create_github_issue,
+            commands::get_audio_devices,
+            commands::set_global_audio_device,
+            commands::get_app_audio_sessions,
+            commands::set_app_audio_device,
+            commands::set_app_volume,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

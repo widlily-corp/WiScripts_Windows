@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertOctagon, RotateCcw } from 'lucide-react';
+import { AlertOctagon, RotateCcw, Bug } from 'lucide-react';
+import { GitHubIssueModal } from './GitHubIssueModal';
 
 interface Props {
   children: ReactNode;
@@ -9,16 +10,18 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  isGitHubModalOpen: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
+    isGitHubModalOpen: false,
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, isGitHubModalOpen: false };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -26,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReset = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, isGitHubModalOpen: false });
     window.location.reload();
   };
 
@@ -35,6 +38,8 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
+
+      const errMessage = this.state.error?.toString() || 'Unknown application error';
 
       return (
         <div className="flex h-screen w-screen items-center justify-center bg-background p-6 text-text-primary">
@@ -51,11 +56,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
             {this.state.error && (
               <div className="max-h-40 overflow-y-auto rounded-[6px] border border-border-subtle bg-surface-subtle p-3 font-mono text-xs text-status-danger">
-                {this.state.error.toString()}
+                {errMessage}
               </div>
             )}
 
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between pt-2">
+              <button
+                onClick={() => this.setState({ isGitHubModalOpen: true })}
+                className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
+              >
+                <Bug className="h-3.5 w-3.5 text-status-danger" />
+                <span>Report Crash on GitHub</span>
+              </button>
+
               <button
                 onClick={this.handleReset}
                 className="flex items-center gap-2 rounded-[6px] bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-hover transition-colors"
@@ -65,6 +78,14 @@ export class ErrorBoundary extends Component<Props, State> {
               </button>
             </div>
           </div>
+
+          <GitHubIssueModal
+            isOpen={this.state.isGitHubModalOpen}
+            onClose={() => this.setState({ isGitHubModalOpen: false })}
+            initialCategory="bug"
+            initialTitle={`[Crash] Uncaught React Error: ${this.state.error?.message || ''}`}
+            initialDescription={`Uncaught Error in React Component Tree:\n\n\`\`\`text\n${errMessage}\n\`\`\``}
+          />
         </div>
       );
     }

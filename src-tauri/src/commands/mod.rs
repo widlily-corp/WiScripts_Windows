@@ -1066,6 +1066,232 @@ pub async fn export_diagnostic_dump() -> Result<String, AppError> {
     Ok(abs_path)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubIssuePayload {
+    pub title: String,
+    pub category: String,
+    pub description: String,
+    pub include_logs: bool,
+    pub include_system_info: bool,
+    pub github_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubIssueResult {
+    pub success: bool,
+    pub issue_url: Option<String>,
+    pub method: String,
+    pub error: Option<String>,
+}
+
+pub fn urlencode(s: &str) -> String {
+    let mut encoded = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(b as char);
+            }
+            b' ' => encoded.push_str("%20"),
+            _ => {
+                encoded.push_str(&format!("%{:02X}", b));
+            }
+        }
+    }
+    encoded
+}
+
+pub fn sanitize_log_text(text: &str) -> String {
+    let mut sanitized = text.to_string();
+    if let Ok(re_user) = regex::Regex::new(r"(?i)[a-z]:\\users\\[^\s\\]+") {
+        sanitized = re_user.replace_all(&sanitized, r"C:\Users\[REDACTED]").to_string();
+    }
+    if let Ok(re_token) = regex::Regex::new(r"(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{82})") {
+        sanitized = re_token.replace_all(&sanitized, "[REDACTED_TOKEN]").to_string();
+    }
+    sanitized
+}
+
+pub fn build_github_issue_body(
+    payload: &GitHubIssuePayload,
+    sys_info: Option<&SystemInfo>,
+    app_version: &str,
+    log_lines: Option<&str>,
+) -> String {
+    let mut body = String::new();
+
+    body.push_str("### Description\n");
+    body.push_str(payload.description.trim());
+    body.push_str("\n\n");
+
+    body.push_str("### Category\n");
+    let category_display = match payload.category.as_str() {
+        "bug" => "Bug Report 🐛",
+        "enhancement" => "Feature Request ✨",
+        "question" => "Question / Support ❓",
+        other => other,
+    };
+    body.push_str(category_display);
+    body.push_str("\n\n");
+
+    body.push_str("### Environment Details\n");
+    body.push_str(&format!("- **App Version**: v{}\n", app_version));
+
+    if payload.include_system_info {
+        if let Some(sys) = sys_info {
+            body.push_str(&format!("- **OS Name**: {}\n", sys.os_name));
+            body.push_str(&format!("- **OS Version**: {} (Build {})\n", sys.os_version, sys.os_build));
+            body.push_str(&format!(
+                "- **Elevation Status**: {}\n",
+                if sys.is_elevated { "Elevated (Administrator)" } else { "Non-elevated" }
+            ));
+            body.push_str(&format!("- **Telemetry Service Status**: {}\n", sys.telemetry_status));
+        } else {
+            body.push_str("- **System Info**: Not available\n");
+        }
+    } else {
+        body.push_str("- **System Info**: Excluded by user\n");
+    }
+    body.push_str("\n");
+
+    if payload.include_logs {
+        body.push_str("### Debug Logs (Last 50 lines)\n");
+        if let Some(logs) = log_lines {
+            let sanitized = sanitize_log_text(logs);
+            body.push_str("```text\n");
+            body.push_str(&sanitized);
+            if !sanitized.ends_with('\n') {
+                body.push('\n');
+            }
+            body.push_str("```\n");
+        } else {
+            body.push_str("_No debug log entries found._\n");
+        }
+    }
+
+    body
+}
+
+#[tauri::command]
+pub async fn create_github_issue(
+    payload: GitHubIssuePayload,
+) -> Result<GitHubIssueResult, AppError> {
+    log::info!(
+        "[IPC] create_github_issue request received: title='{}', category='{}', include_logs={}, include_sys_info={}",
+        payload.title,
+        payload.category,
+        payload.include_logs,
+        payload.include_system_info
+    );
+
+    let app_version = env!("CARGO_PKG_VERSION");
+    let sys_info = if payload.include_system_info {
+        get_system_info().await.ok()
+    } else {
+        None
+    };
+
+    let log_lines = if payload.include_logs {
+        let log_path = crate::logger::get_log_path();
+        if let Ok(raw_logs) = std::fs::read_to_string(&log_path) {
+            let lines: Vec<&str> = raw_logs.lines().collect();
+            let last_50 = if lines.len() > 50 {
+                &lines[lines.len() - 50..]
+            } else {
+                &lines[..]
+            };
+            Some(last_50.join("\n"))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let body_markdown = build_github_issue_body(
+        &payload,
+        sys_info.as_ref(),
+        app_version,
+        log_lines.as_deref(),
+    );
+
+    let issue_title = format!("[{}] {}", payload.category.to_uppercase(), payload.title);
+
+    if let Some(ref token) = payload.github_token {
+        let trimmed_token = token.trim();
+        if !trimmed_token.is_empty() {
+            log::info!("[IPC] Attempting GitHub API issue submission with provided token");
+            let client = reqwest::Client::new();
+            let res = client
+                .post("https://api.github.com/repos/widlily-corp/WiScripts_Windows/issues")
+                .header("User-Agent", "WiScripts-App")
+                .header("Accept", "application/vnd.github+json")
+                .header("Authorization", format!("Bearer {}", trimmed_token))
+                .json(&serde_json::json!({
+                    "title": issue_title,
+                    "body": body_markdown,
+                    "labels": vec![payload.category.clone()]
+                }))
+                .send()
+                .await;
+
+            match res {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        let html_url = json
+                            .get("html_url")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        log::info!("[IPC] GitHub issue successfully created via API: {:?}", html_url);
+                        return Ok(GitHubIssueResult {
+                            success: true,
+                            issue_url: html_url,
+                            method: "api".to_string(),
+                            error: None,
+                        });
+                    }
+                }
+                Ok(resp) => {
+                    log::warn!(
+                        "[IPC] GitHub API request failed with status: {}. Falling back to browser URL.",
+                        resp.status()
+                    );
+                }
+                Err(err) => {
+                    log::warn!(
+                        "[IPC] GitHub API request error: {}. Falling back to browser URL.",
+                        err
+                    );
+                }
+            }
+        }
+    }
+
+    let enc_title = urlencode(&issue_title);
+    let enc_body = urlencode(&body_markdown);
+    let browser_url = format!(
+        "https://github.com/widlily-corp/WiScripts_Windows/issues/new?title={}&body={}",
+        enc_title, enc_body
+    );
+
+    log::info!("[IPC] Opening pre-filled issue URL in browser: {}", browser_url);
+    match tauri_plugin_opener::open_url(&browser_url, None::<&str>) {
+        Ok(_) => Ok(GitHubIssueResult {
+            success: true,
+            issue_url: Some(browser_url),
+            method: "browser".to_string(),
+            error: None,
+        }),
+        Err(e) => Ok(GitHubIssueResult {
+            success: false,
+            issue_url: Some(browser_url),
+            method: "browser".to_string(),
+            error: Some(format!("Failed to open browser URL: {}", e)),
+        }),
+    }
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -1295,5 +1521,48 @@ mod tests {
 
         // Teardown / Cleanup
         let _ = std::fs::remove_file(zip_path);
+    }
+
+    #[test]
+    fn test_create_github_issue_body_builder() {
+        // Arrange
+        let payload = GitHubIssuePayload {
+            title: "App crash when running optimization".to_string(),
+            category: "bug".to_string(),
+            description: "App crashed with error code 0x80070005 when disabling DiagTrack.".to_string(),
+            include_logs: true,
+            include_system_info: true,
+            github_token: None,
+        };
+        let sys_info = SystemInfo {
+            os_name: "Windows 11 Pro".to_string(),
+            os_version: "23H2".to_string(),
+            os_build: "22631.3880".to_string(),
+            is_elevated: true,
+            cpu_usage_percent: 15,
+            memory_used_mb: 4096,
+            memory_total_mb: 16384,
+            telemetry_status: "Active".to_string(),
+        };
+        let raw_logs = "2026-07-29T10:00:00Z [INFO] Initializing app\n2026-07-29T10:00:01Z [ERROR] Failed to access C:\\Users\\JohnDoe\\AppData\\Local\\Temp with token ghp_123456789012345678901234567890123456";
+
+        // Act
+        let body = build_github_issue_body(&payload, Some(&sys_info), "0.5.6", Some(raw_logs));
+
+        // Assert
+        assert!(body.contains("### Description"), "Body must contain Description header");
+        assert!(body.contains("App crashed with error code 0x80070005"), "Body must contain user description");
+        assert!(body.contains("### Category"), "Body must contain Category header");
+        assert!(body.contains("Bug Report 🐛"), "Body must display Bug Report category label");
+        assert!(body.contains("### Environment Details"), "Body must contain Environment Details header");
+        assert!(body.contains("Windows 11 Pro"), "Body must contain OS name");
+        assert!(body.contains("v0.5.6"), "Body must contain app version");
+        assert!(body.contains("Elevated (Administrator)"), "Body must contain elevation status");
+        assert!(body.contains("Active"), "Body must contain telemetry status");
+        assert!(body.contains("### Debug Logs (Last 50 lines)"), "Body must contain Debug Logs header");
+        assert!(!body.contains("JohnDoe"), "User home directory path must be sanitized");
+        assert!(body.contains(r"C:\Users\[REDACTED]"), "User home directory path should be replaced with redacted marker");
+        assert!(!body.contains("ghp_123456789012345678901234567890123456"), "GitHub PAT token must be sanitized");
+        assert!(body.contains("[REDACTED_TOKEN]"), "Token should be replaced with redacted marker");
     }
 }

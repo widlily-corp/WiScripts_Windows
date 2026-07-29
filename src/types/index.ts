@@ -357,5 +357,23 @@ export interface PresetValidationResult {
   validationErrors: string[];
 }
 
+export type GitHubIssueCategory = 'bug' | 'enhancement' | 'question';
+
+export interface GitHubIssuePayload {
+  title: string;
+  category: GitHubIssueCategory | string;
+  description: string;
+  includeLogs: boolean;
+  includeSystemInfo: boolean;
+  githubToken?: string;
+}
+
+export interface GitHubIssueResult {
+  success: boolean;
+  issueUrl?: string;
+  method: 'api' | 'browser' | string;
+  error?: string;
+}
+
 
 

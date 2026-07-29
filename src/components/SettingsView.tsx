@@ -15,7 +15,10 @@ import {
   Loader2,
   Download,
   FileArchive,
+  Bug,
+  Send,
 } from 'lucide-react';
+import { GitHubIssueModal } from './GitHubIssueModal';
 
 export function SettingsView() {
   const { t, i18n } = useTranslation();
@@ -36,6 +39,7 @@ export function SettingsView() {
   const addToast = useAppStore((s) => s.addToast);
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
 
   const handleExportDump = async () => {
     setIsExporting(true);
@@ -362,10 +366,29 @@ export function SettingsView() {
                   <span>Сгенерировать отчет</span>
                 </button>
               </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-medium text-text-primary">Обратная связь и ошибки</div>
+                  <div className="text-[11px] text-text-muted">Создать обращение в репозиторий GitHub</div>
+                </div>
+                <button
+                  onClick={() => setIsGitHubModalOpen(true)}
+                  className="flex items-center gap-2 px-3.5 py-1.5 bg-surface-subtle hover:bg-surface-hover border border-border text-text-primary rounded-[6px] text-xs font-medium transition-colors"
+                >
+                  <Bug className="h-3.5 w-3.5 text-brand" />
+                  <span>Сообщить на GitHub</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <GitHubIssueModal
+        isOpen={isGitHubModalOpen}
+        onClose={() => setIsGitHubModalOpen(false)}
+      />
     </div>
   );
 }

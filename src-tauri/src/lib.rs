@@ -76,6 +76,7 @@ pub fn run() {
             commands::scan_large_files,
             commands::delete_files,
             commands::export_diagnostic_dump,
+            commands::create_github_issue,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

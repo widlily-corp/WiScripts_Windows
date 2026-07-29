@@ -28,6 +28,8 @@ import {
   StartupItem,
   ScheduledTaskItem,
   InstalledApp,
+  GitHubIssuePayload,
+  GitHubIssueResult,
 } from '../types';
 
 export interface PendingSafetyModal {
@@ -94,6 +96,7 @@ interface AppState {
   // Feature R1: Diagnostics
   runDiagnostics: (action: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
   exportDiagnosticDump: () => Promise<string>;
+  createGitHubIssue: (payload: GitHubIssuePayload) => Promise<GitHubIssueResult>;
 
   // Feature R2: Package & Bloatware Manager
   wingetPackages: WingetPackage[];
@@ -751,6 +754,33 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             const errMsg = typeof err === 'string' ? err : String(err);
             addLog({ level: 'error', message: `Failed to export diagnostic dump: ${errMsg}` });
+            throw new Error(errMsg);
+          }
+        },
+
+        createGitHubIssue: async (payload: GitHubIssuePayload) => {
+          const { addLog } = get();
+          addLog({
+            level: 'cmd',
+            message: `Creating GitHub Issue: "${payload.title}" (${payload.category})`,
+          });
+          try {
+            const res = await invoke<GitHubIssueResult>('create_github_issue', { payload });
+            if (res.success) {
+              addLog({
+                level: 'info',
+                message: `GitHub Issue submitted successfully via ${res.method}: ${res.issueUrl || ''}`,
+              });
+            } else {
+              addLog({
+                level: 'error',
+                message: `GitHub Issue submission error: ${res.error || 'Unknown error'}`,
+              });
+            }
+            return res;
+          } catch (err) {
+            const errMsg = typeof err === 'string' ? err : String(err);
+            addLog({ level: 'error', message: `Failed to submit GitHub Issue: ${errMsg}` });
             throw new Error(errMsg);
           }
         },

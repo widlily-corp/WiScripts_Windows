@@ -5418,7 +5418,7 @@ dependencies = [
 
 [[package]]
 name = "wiscripts_windows"
-version = "0.5.0"
+version = "0.5.6"
 dependencies = [
  "dirs 5.0.1",
  "encoding_rs",

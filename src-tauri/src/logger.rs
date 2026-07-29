@@ -2,10 +2,12 @@ use simplelog::{ConfigBuilder, LevelFilter, WriteLogger};
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 
-/// Returns the absolute path to `debug.log` in the current working directory.
+/// Returns the absolute path to `debug.log` in the local application data directory.
 pub fn get_log_path() -> PathBuf {
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
+    dirs::data_local_dir()
+        .unwrap_or_else(|| std::env::temp_dir())
+        .join("WiScripts")
+        .join("logs")
         .join("debug.log")
 }
 
@@ -16,6 +18,12 @@ pub fn get_log_path() -> PathBuf {
 /// instead of panicking.
 pub fn init_logger() -> Result<(), String> {
     let log_path = get_log_path();
+
+    if let Some(log_dir) = log_path.parent() {
+        std::fs::create_dir_all(log_dir)
+            .map_err(|e| format!("Failed to create log directory '{:?}': {}", log_dir, e))?;
+    }
+
     let file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -42,7 +50,25 @@ pub fn init_logger() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::Path;
     use crate::runner::{CommandRunner, DryRunRunner};
+
+    #[test]
+    fn test_get_log_path_returns_expected_structure() {
+        // Arrange
+        let expected_suffix = Path::new("WiScripts").join("logs").join("debug.log");
+
+        // Act
+        let path = get_log_path();
+
+        // Assert
+        assert!(
+            path.ends_with(&expected_suffix),
+            "Log path {:?} should end with {:?}",
+            path,
+            expected_suffix
+        );
+    }
 
     #[test]
     fn test_init_logger_creates_debug_log() {
@@ -52,7 +78,10 @@ mod tests {
         // Assert
         assert!(res.is_ok(), "init_logger() should return Ok");
         let path = get_log_path();
-        assert!(path.exists(), "debug.log file must exist in CWD");
+        let log_dir = path.parent().expect("Log path must have parent directory");
+        assert!(log_dir.exists(), "Log directory must exist");
+        assert!(log_dir.is_dir(), "Log directory path must be a directory");
+        assert!(path.exists(), "debug.log file must exist");
     }
 
     #[test]

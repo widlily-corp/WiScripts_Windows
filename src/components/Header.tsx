@@ -116,6 +116,7 @@ export function Header() {
           disabled={isRefreshing}
           className="p-1.5 rounded-[6px] border border-border bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-opacity disabled:opacity-50"
           title={t('header.refresh_btn_title')}
+          aria-label={t('header.refresh_btn_title')}
         >
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>

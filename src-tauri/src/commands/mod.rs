@@ -1,4 +1,5 @@
 use crate::audio;
+use crate::autoruns::{self, AutorunEntry, QuarantineResult};
 use crate::cleaner;
 use crate::diagnostics;
 use crate::dns_context;
@@ -10,9 +11,10 @@ use crate::odt::{self, OdtConfig};
 use crate::optimization::{self, OptimizationItem};
 use crate::packages::{self, UwpAppInfo, WingetPackage};
 use crate::profiles::{self, OptimizationProfile};
-use crate::runner::{decode_bytes, CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
+use crate::runner::{CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
 use crate::scheduler;
 use crate::startup;
+use crate::state_engine::{self, RollbackResult, SystemSnapshot};
 use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
@@ -58,33 +60,63 @@ fn check_is_elevated() -> bool {
 fn probe_telemetry_status() -> String {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = std::process::Command::new("powershell.exe");
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
-        }
-        let output = cmd
-            .stdin(Stdio::null())
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Get-Service -Name DiagTrack -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Status",
-            ])
-            .output();
-        match output {
-            Ok(out) => {
-                let status_str = decode_bytes(&out.stdout).trim().to_string();
-                if status_str.eq_ignore_ascii_case("Running") {
+        use windows::{
+            core::PCWSTR,
+            Win32::System::Services::{
+                CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx,
+                SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO, SERVICE_QUERY_STATUS,
+                SERVICE_RUNNING, SERVICE_STOPPED, SERVICE_STATUS_PROCESS,
+            },
+        };
+
+        let service_name_u16: Vec<u16> = "DiagTrack\0".encode_utf16().collect();
+
+        unsafe {
+            let scm_handle = match OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) {
+                Ok(h) => h,
+                Err(_) => return "Unknown".to_string(),
+            };
+
+            let svc_handle = match OpenServiceW(
+                scm_handle,
+                PCWSTR(service_name_u16.as_ptr()),
+                SERVICE_QUERY_STATUS,
+            ) {
+                Ok(h) => h,
+                Err(_) => {
+                    let _ = CloseServiceHandle(scm_handle);
+                    return "Disabled".to_string();
+                }
+            };
+
+            let mut status_process = SERVICE_STATUS_PROCESS::default();
+            let mut bytes_needed = 0u32;
+            let status_slice = std::slice::from_raw_parts_mut(
+                (&mut status_process as *mut SERVICE_STATUS_PROCESS) as *mut u8,
+                std::mem::size_of::<SERVICE_STATUS_PROCESS>(),
+            );
+
+            let query_res = QueryServiceStatusEx(
+                svc_handle,
+                SC_STATUS_PROCESS_INFO,
+                Some(status_slice),
+                &mut bytes_needed,
+            );
+
+            let _ = CloseServiceHandle(svc_handle);
+            let _ = CloseServiceHandle(scm_handle);
+
+            if query_res.is_ok() {
+                if status_process.dwCurrentState == SERVICE_RUNNING {
                     "Active".to_string()
-                } else if status_str.eq_ignore_ascii_case("Stopped") || status_str.is_empty() {
+                } else if status_process.dwCurrentState == SERVICE_STOPPED {
                     "Disabled".to_string()
                 } else {
                     "Minimized".to_string()
                 }
+            } else {
+                "Disabled".to_string()
             }
-            Err(_) => "Unknown".to_string(),
         }
     }
     #[cfg(not(target_os = "windows"))]
@@ -348,6 +380,50 @@ pub async fn execute_activation(
     })
     .await
     .map_err(|e| AppError::Execution(format!("Join error in execute_activation: {}", e)))?
+}
+
+// ---------------------------------------------------------------------------
+// AutoRuns & Security Inspector IPC Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn scan_autorun_entries() -> Result<Vec<AutorunEntry>, String> {
+    log::info!("[IPC] scan_autorun_entries request received");
+    tauri::async_runtime::spawn_blocking(move || {
+        autoruns::scan_autorun_entries()
+    })
+    .await
+    .map_err(|e| format!("Join error in scan_autorun_entries: {}", e))?
+}
+
+#[tauri::command]
+pub async fn verify_file_authenticode(file_path: String) -> Result<String, String> {
+    log::info!("[IPC] verify_file_authenticode request received for path '{}'", file_path);
+    tauri::async_runtime::spawn_blocking(move || {
+        autoruns::verify_file_authenticode(file_path)
+    })
+    .await
+    .map_err(|e| format!("Join error in verify_file_authenticode: {}", e))?
+}
+
+#[tauri::command]
+pub async fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, String> {
+    log::info!("[IPC] toggle_autorun_entry request received for entry_id '{}', enable={}", entry_id, enable);
+    tauri::async_runtime::spawn_blocking(move || {
+        autoruns::toggle_autorun_entry(entry_id, enable)
+    })
+    .await
+    .map_err(|e| format!("Join error in toggle_autorun_entry: {}", e))?
+}
+
+#[tauri::command]
+pub async fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, String> {
+    log::info!("[IPC] quarantine_autorun_entry request received for entry_id '{}'", entry_id);
+    tauri::async_runtime::spawn_blocking(move || {
+        autoruns::quarantine_autorun_entry(entry_id)
+    })
+    .await
+    .map_err(|e| format!("Join error in quarantine_autorun_entry: {}", e))?
 }
 
 // ---------------------------------------------------------------------------
@@ -1489,6 +1565,111 @@ pub async fn set_app_volume(
         .map_err(|e| AppError::Execution(format!("Join error in set_app_volume: {}", e)))?
 }
 
+#[tauri::command]
+pub async fn create_state_snapshot(
+    label: String,
+    trigger_source: Option<String>,
+) -> Result<SystemSnapshot, AppError> {
+    log::info!(
+        "[IPC] create_state_snapshot request received: label='{}', trigger_source={:?}",
+        label,
+        trigger_source
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        state_engine::create_snapshot(label, trigger_source).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in create_state_snapshot: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn rollback_state_snapshot(snapshot_id: String) -> Result<RollbackResult, AppError> {
+    log::info!(
+        "[IPC] rollback_state_snapshot request received: snapshot_id='{}'",
+        snapshot_id
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        state_engine::rollback_snapshot(&snapshot_id).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in rollback_state_snapshot: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn list_state_snapshots() -> Result<Vec<SystemSnapshot>, AppError> {
+    log::info!("[IPC] list_state_snapshots request received");
+    tauri::async_runtime::spawn_blocking(move || {
+        state_engine::list_snapshots().map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in list_state_snapshots: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn delete_state_snapshot(snapshot_id: String) -> Result<bool, AppError> {
+    log::info!(
+        "[IPC] delete_state_snapshot request received: snapshot_id='{}'",
+        snapshot_id
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        state_engine::delete_snapshot(&snapshot_id).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in delete_state_snapshot: {}", e)))?
+}
+
+// ---------------------------------------------------------------------------
+// Resource Governor IPC Commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn apply_process_governor_rule(
+    rule: crate::governor::ResourceGovernorRule,
+) -> Result<bool, String> {
+    log::info!(
+        "[IPC] apply_process_governor_rule request received for process '{}'",
+        rule.process_name
+    );
+    tauri::async_runtime::spawn_blocking(move || crate::governor::apply_process_governor_rule(rule))
+        .await
+        .map_err(|e| format!("Join error in apply_process_governor_rule: {}", e))?
+}
+
+#[tauri::command]
+pub async fn trim_process_working_set(pid: u32) -> Result<u64, String> {
+    log::info!("[IPC] trim_process_working_set request received for PID {}", pid);
+    tauri::async_runtime::spawn_blocking(move || crate::governor::trim_process_working_set(pid))
+        .await
+        .map_err(|e| format!("Join error in trim_process_working_set: {}", e))?
+}
+
+#[tauri::command]
+pub async fn get_governor_status() -> Result<crate::governor::GovernorStatus, String> {
+    log::debug!("[IPC] get_governor_status request received");
+    tauri::async_runtime::spawn_blocking(move || crate::governor::get_governor_status())
+        .await
+        .map_err(|e| format!("Join error in get_governor_status: {}", e))?
+}
+
+#[tauri::command]
+pub async fn list_active_rules() -> Result<Vec<crate::governor::ResourceGovernorRule>, String> {
+    log::debug!("[IPC] list_active_rules request received");
+    tauri::async_runtime::spawn_blocking(move || crate::governor::list_active_rules())
+        .await
+        .map_err(|e| format!("Join error in list_active_rules: {}", e))?
+}
+
+#[tauri::command]
+pub async fn delete_governor_rule(process_name: String) -> Result<bool, String> {
+    log::info!(
+        "[IPC] delete_governor_rule request received for process '{}'",
+        process_name
+    );
+    tauri::async_runtime::spawn_blocking(move || crate::governor::delete_governor_rule(process_name))
+        .await
+        .map_err(|e| format!("Join error in delete_governor_rule: {}", e))?
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -1763,7 +1944,7 @@ mod tests {
         let raw_logs = "2026-07-29T10:00:00Z [INFO] Initializing app\n2026-07-29T10:00:01Z [ERROR] Failed to access C:\\Users\\JohnDoe\\AppData\\Local\\Temp with token ghp_123456789012345678901234567890123456";
 
         // Act
-        let body = build_github_issue_body(&payload, Some(&sys_info), "0.5.6", Some(raw_logs));
+        let body = build_github_issue_body(&payload, Some(&sys_info), "0.9.0", Some(raw_logs));
 
         // Assert
         assert!(
@@ -1787,7 +1968,7 @@ mod tests {
             "Body must contain Environment Details header"
         );
         assert!(body.contains("Windows 11 Pro"), "Body must contain OS name");
-        assert!(body.contains("v0.5.6"), "Body must contain app version");
+        assert!(body.contains("v0.9.0"), "Body must contain app version");
         assert!(
             body.contains("Elevated (Administrator)"),
             "Body must contain elevation status"

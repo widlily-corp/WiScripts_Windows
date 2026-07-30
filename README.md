@@ -16,6 +16,9 @@ WiScripts Windows empowers you to take full control of your operating system wit
 *   **💾 Driver Backup:** Safely backup all your 3rd-party installed drivers before reinstalling Windows.
 *   **🌍 Localization:** Full English and Russian interface support (i18n).
 *   **🔑 Microsoft Activation:** Seamless integration with MAS for Windows/Office activation.
+*   **⏪ StateEngine (Undo System):** Granular transactional snapshots of your system state (Registry/Services) for safe, surgical rollbacks without system restarts.
+*   **🔎 AutoRuns & Security Inspector:** High-speed parallel scanning of 25+ autostart locations with Authenticode digital signature verification.
+*   **🧠 ProFlow Resource Governor:** Dynamic RAM trimming and process priority/core affinity management (P/E-Cores) to maintain system responsiveness.
 
 ## 🛠️ Technology Stack
 

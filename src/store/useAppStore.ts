@@ -555,7 +555,7 @@ export const useAppStore = create<AppState>()(
         setActiveTab: (tab) => set({ activeTab: tab }),
 
         // Application Version & Auto-Updater Implementation
-        appVersion: '0.3.0',
+        appVersion: '0.9.0',
         setAppVersion: (ver) => set({ appVersion: ver }),
         fetchAppVersion: async () => {
           try {
@@ -567,7 +567,7 @@ export const useAppStore = create<AppState>()(
           } catch (err) {
             // Dev mode fallback
           }
-          const current = get().appVersion || '0.3.0';
+          const current = get().appVersion || '0.9.0';
           return current;
         },
 
@@ -585,11 +585,11 @@ export const useAppStore = create<AppState>()(
 
         triggerMockUpdate: (mockInfo) => {
           const info: UpdateInfo = {
-            version: mockInfo?.version || '0.4.0',
-            currentVersion: get().appVersion || '0.3.0',
+            version: mockInfo?.version || '0.9.5',
+            currentVersion: get().appVersion || '0.9.0',
             body:
               mockInfo?.body ||
-              `# What's New in v0.4.0\n\n### Features & Enhancements\n- **Rich Markdown Release Notes Modal**: Interactive update dialog displaying formatted changelog before installation.\n- **Enhanced Error Handling**: Gracefully catches missing release manifest (\`latest.json\`) on remote repository.\n- **Refined Minimal Design System**: Deep dark aesthetics (\`#08090A\`), hairlines (\`#22252A\`), accent blue (\`#3B82F6\`), and Geist/JetBrains Mono typography.\n\n### Bug Fixes\n- Fixed window position persistence across multi-monitor displays.\n- Resolved potential unhandled promise rejections during offline background update checks.\n\n> Note: Please restart your system after updating for all low-level service adjustments to take effect. For full repository source code, visit [GitHub Repository](https://github.com/widlily/wiscripts).`,
+              `# What's New in v0.9.0\n\n### Features & Enhancements\n- **Rich Markdown Release Notes Modal**: Interactive update dialog displaying formatted changelog before installation.\n- **Enhanced Error Handling**: Gracefully catches missing release manifest (\`latest.json\`) on remote repository.\n- **Refined Minimal Design System**: Deep dark aesthetics (\`#08090A\`), hairlines (\`#22252A\`), accent blue (\`#3B82F6\`), and Geist/JetBrains Mono typography.\n\n### Bug Fixes\n- Fixed window position persistence across multi-monitor displays.\n- Resolved potential unhandled promise rejections during offline background update checks.\n\n> Note: Please restart your system after updating for all low-level service adjustments to take effect. For full repository source code, visit [GitHub Repository](https://github.com/widlily/wiscripts).`,
             date: mockInfo?.date || new Date().toISOString().split('T')[0],
           };
           set({

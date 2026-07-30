@@ -5,6 +5,7 @@ import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { AudioView } from './components/AudioView';
+import { GovernorView } from './views/GovernorView';
 import { OptimizationView } from './components/OptimizationView';
 import { PackageManagerView } from './components/PackageManagerView';
 import { UninstallerView } from './views/UninstallerView';
@@ -18,8 +19,10 @@ import { MasView } from './components/MasView';
 import { DiagnosticsView } from './components/DiagnosticsView';
 import { SettingsView } from './components/SettingsView';
 import { RestorePointsView } from './components/RestorePointsView';
+import { StateEngineView } from './components/StateEngineView';
 import { StartupView } from './components/StartupView';
 import { SchedulerView } from './components/SchedulerView';
+import { AutorunsView } from './views/AutorunsView';
 import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
 import { ReleaseNotesModal } from './components/ReleaseNotesModal';
@@ -94,6 +97,7 @@ export function App() {
           <ErrorBoundary>
             {activeTab === 'dashboard' && <Dashboard />}
             {activeTab === 'audio_manager' && <AudioView />}
+            {activeTab === 'governor' && <GovernorView />}
             {activeTab === 'optimization' && <OptimizationView />}
             {activeTab === 'package_manager' && <PackageManagerView />}
             {activeTab === 'app_uninstaller' && <UninstallerView />}
@@ -102,12 +106,14 @@ export function App() {
             {activeTab === 'storage_utilities' && <StorageUtilities />}
             {activeTab === 'startup' && <StartupView />}
             {activeTab === 'scheduler' && <SchedulerView />}
+            {activeTab === 'autoruns' && <AutorunsView />}
             {activeTab === 'dns_context' && <DnsContextMenuView />}
             {activeTab === 'driver_backup' && <DriverBackupView />}
             {activeTab === 'diagnostics' && <DiagnosticsView />}
             {activeTab === 'odt' && <OdtView />}
             {activeTab === 'activation' && <MasView />}
             {activeTab === 'restore_points' && <RestorePointsView />}
+            {activeTab === 'state_engine' && <StateEngineView />}
             {activeTab === 'settings' && <SettingsView />}
           </ErrorBoundary>
         </main>

@@ -32,7 +32,7 @@ export function parseInline(text: string): React.ReactNode[] {
           href={match[2]}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#3B82F6] hover:underline font-medium"
+          className="text-brand hover:underline font-medium"
         >
           {match[1]}
         </a>
@@ -42,7 +42,7 @@ export function parseInline(text: string): React.ReactNode[] {
       nodes.push(
         <code
           key={`code-${match.index}`}
-          className="font-mono text-[11px] bg-[#22252A] text-[#3B82F6] px-1.5 py-0.5 rounded border border-[#22252A]"
+          className="font-mono text-[11px] bg-surface-active text-brand px-1.5 py-0.5 rounded border border-border"
         >
           {match[3]}
         </code>
@@ -196,7 +196,7 @@ export function MarkdownRenderer({ content, children, className = '' }: Markdown
             }
             if (block.level === 2) {
               return (
-                <h2 key={idx} className="text-sm font-semibold text-text-primary mt-3 mb-1.5 pb-1 border-b border-[#22252A] tracking-tight">
+                <h2 key={idx} className="text-sm font-semibold text-text-primary mt-3 mb-1.5 pb-1 border-b border-border tracking-tight">
                   {parseInline(block.text)}
                 </h2>
               );
@@ -211,7 +211,7 @@ export function MarkdownRenderer({ content, children, className = '' }: Markdown
             return (
               <ul key={idx} className="list-disc list-inside space-y-1.5 my-2 pl-2 text-xs text-text-secondary leading-relaxed">
                 {block.items.map((item, itemIdx) => (
-                  <li key={itemIdx} className="marker:text-[#3B82F6]">
+                  <li key={itemIdx} className="marker:text-brand">
                     {parseInline(item)}
                   </li>
                 ))}
@@ -222,7 +222,7 @@ export function MarkdownRenderer({ content, children, className = '' }: Markdown
             return (
               <blockquote
                 key={idx}
-                className="border-l-2 border-[#3B82F6] pl-3 py-2 my-2 text-xs text-text-secondary italic bg-[#121417] rounded-r border-t border-b border-r border-[#22252A]/80 leading-relaxed"
+                className="border-l-2 border-brand pl-3 py-2 my-2 text-xs text-text-secondary italic bg-surface rounded-r border-t border-b border-r border-border/80 leading-relaxed"
               >
                 {parseInline(block.text)}
               </blockquote>
@@ -232,7 +232,7 @@ export function MarkdownRenderer({ content, children, className = '' }: Markdown
             return (
               <pre
                 key={idx}
-                className="font-mono text-xs bg-[#08090A] p-3 rounded-[6px] border border-[#22252A] text-text-primary overflow-x-auto my-2 font-mono leading-relaxed select-text"
+                className="font-mono text-xs bg-background p-3 rounded-[6px] border border-border text-text-primary overflow-x-auto my-2 font-mono leading-relaxed select-text"
               >
                 <code>{block.code}</code>
               </pre>

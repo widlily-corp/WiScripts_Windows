@@ -26,6 +26,19 @@ export function formatAppSize(sizeKb?: number | null): string {
   return `${(sizeKb / (1024 * 1024)).toFixed(2)} GB`;
 }
 
+export function parseInstallDate(dateStr?: string | null): number {
+  if (!dateStr || !dateStr.trim()) return 0;
+  const s = dateStr.trim();
+  if (/^\d{8}$/.test(s)) {
+    const year = parseInt(s.slice(0, 4), 10);
+    const month = parseInt(s.slice(4, 6), 10);
+    const day = parseInt(s.slice(6, 8), 10);
+    return new Date(year, month - 1, day).getTime();
+  }
+  const parsed = Date.parse(s);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 export type SortField = 'name' | 'size' | 'publisher' | 'date';
 export type SortOrder = 'asc' | 'desc';
 
@@ -71,7 +84,9 @@ export function UninstallerView() {
       } else if (sortField === 'publisher') {
         cmp = (a.publisher || '').localeCompare(b.publisher || '');
       } else if (sortField === 'date') {
-        cmp = (a.installDate || '').localeCompare(b.installDate || '');
+        const dateA = parseInstallDate(a.installDate);
+        const dateB = parseInstallDate(b.installDate);
+        cmp = dateA - dateB;
       }
       return sortOrder === 'asc' ? cmp : -cmp;
     });
@@ -214,6 +229,7 @@ export function UninstallerView() {
             <button
               onClick={toggleSortOrder}
               title={`Sort Order: ${sortOrder.toUpperCase()}`}
+              aria-label={`Sort Order: ${sortOrder.toUpperCase()}`}
               className="p-1.5 rounded-[6px] border border-border-subtle bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             >
               <ArrowUpDown className="h-3.5 w-3.5" />

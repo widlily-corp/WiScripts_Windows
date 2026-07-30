@@ -1,10 +1,12 @@
 pub mod audio;
+pub mod autoruns;
 pub mod cleaner;
 pub mod commands;
 pub mod diagnostics;
 pub mod dns_context;
 pub mod driver_backup;
 pub mod error;
+pub mod governor;
 pub mod logger;
 pub mod mas;
 pub mod metrics;
@@ -15,6 +17,7 @@ pub mod profiles;
 pub mod runner;
 pub mod scheduler;
 pub mod startup;
+pub mod state_engine;
 pub mod storage;
 pub mod system_restore;
 pub mod uninstaller;
@@ -46,6 +49,10 @@ pub fn run() {
             commands::get_scheduled_tasks,
             commands::toggle_scheduled_task,
             commands::run_scheduled_task,
+            commands::scan_autorun_entries,
+            commands::verify_file_authenticode,
+            commands::toggle_autorun_entry,
+            commands::quarantine_autorun_entry,
             commands::get_rule_catalog,
             commands::get_rules_by_category,
             commands::preview_optimizations,
@@ -84,7 +91,17 @@ pub fn run() {
             commands::get_app_audio_sessions,
             commands::set_app_audio_device,
             commands::set_app_volume,
+            commands::create_state_snapshot,
+            commands::rollback_state_snapshot,
+            commands::list_state_snapshots,
+            commands::delete_state_snapshot,
+            commands::apply_process_governor_rule,
+            commands::trim_process_working_set,
+            commands::get_governor_status,
+            commands::list_active_rules,
+            commands::delete_governor_rule,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

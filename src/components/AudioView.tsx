@@ -87,11 +87,11 @@ export function AudioView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)] bg-[#08090A]">
+    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)] bg-background">
       <AdminElevationBanner featureName={t('audioView.title')} />
 
       {/* Header Bar */}
-      <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-5 flex items-center justify-between">
+      <div className="rounded-[6px] border border-border bg-surface p-5 flex items-center justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Volume2 className="h-5 w-5 text-brand" />
@@ -127,7 +127,7 @@ export function AudioView() {
           <button
             onClick={handleRefresh}
             disabled={isAudioLoading}
-            className="flex items-center gap-2 rounded-[6px] border border-[#22252A] bg-[#181A1F] px-3.5 py-1.5 text-xs font-mono text-text-secondary hover:bg-[#1F2228] transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 rounded-[6px] border border-border bg-surface-hover px-3.5 py-1.5 text-xs font-mono text-text-secondary hover:bg-surface-active transition-colors disabled:opacity-50"
             aria-label={t('audioView.refresh')}
           >
             <RefreshCw className={`h-3.5 w-3.5 text-brand ${isAudioLoading ? 'animate-spin' : ''}`} />
@@ -138,7 +138,7 @@ export function AudioView() {
 
       {/* Summary Metrics Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-4 flex items-center justify-between">
+        <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.totalDevices')} (Render)</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
@@ -150,7 +150,7 @@ export function AudioView() {
           </div>
         </div>
 
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-4 flex items-center justify-between">
+        <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.totalDevices')} (Capture)</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
@@ -162,7 +162,7 @@ export function AudioView() {
           </div>
         </div>
 
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-4 flex items-center justify-between">
+        <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div className="space-y-1 overflow-hidden pr-2">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.defaultOutput')}</span>
             <div className="text-xs font-semibold text-text-primary truncate" title={activeRenderDevice?.name || 'N/A'}>
@@ -174,7 +174,7 @@ export function AudioView() {
           </div>
         </div>
 
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-4 flex items-center justify-between">
+        <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.activeSessions')}</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
@@ -190,8 +190,8 @@ export function AudioView() {
       {/* Section 1: Global Audio Devices Management */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Output Devices Card */}
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#22252A]">
+        <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <Speaker className="h-4 w-4 text-brand" />
               <h3 className="text-sm font-semibold text-text-primary">{t('audioView.outputDevices')}</h3>
@@ -207,7 +207,7 @@ export function AudioView() {
             <select
               value={defaultRenderId || activeRenderDevice?.id || ''}
               onChange={(e) => setGlobalAudioDevice(e.target.value, 'render')}
-              className="w-full rounded-[6px] border border-[#22252A] bg-[#181A1F] px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-brand transition-colors"
+              className="w-full rounded-[6px] border border-border bg-surface-hover px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-brand transition-colors"
               aria-label={t('audioView.defaultOutput')}
             >
               {renderDevices.map((dev) => (
@@ -228,7 +228,7 @@ export function AudioView() {
                   className={`rounded-[6px] border p-3 flex items-center justify-between transition-colors ${
                     isCurrentDefault
                       ? 'border-emerald-500/30 bg-emerald-500/5'
-                      : 'border-[#22252A] bg-[#181A1F] hover:bg-[#1F2228]'
+                      : 'border-border bg-surface-hover hover:bg-surface-active'
                   }`}
                 >
                   <div className="flex items-center gap-3 overflow-hidden pr-2">
@@ -265,8 +265,8 @@ export function AudioView() {
         </div>
 
         {/* Input Devices Card */}
-        <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[#22252A]">
+        <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <Mic className="h-4 w-4 text-emerald-400" />
               <h3 className="text-sm font-semibold text-text-primary">{t('audioView.inputDevices')}</h3>
@@ -282,7 +282,7 @@ export function AudioView() {
             <select
               value={defaultCaptureId || activeCaptureDevice?.id || ''}
               onChange={(e) => setGlobalAudioDevice(e.target.value, 'capture')}
-              className="w-full rounded-[6px] border border-[#22252A] bg-[#181A1F] px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-emerald-400 transition-colors"
+              className="w-full rounded-[6px] border border-border bg-surface-hover px-3 py-2 text-xs font-mono text-text-primary focus:outline-none focus:border-emerald-400 transition-colors"
               aria-label={t('audioView.defaultInput')}
             >
               {captureDevices.map((dev) => (
@@ -303,7 +303,7 @@ export function AudioView() {
                   className={`rounded-[6px] border p-3 flex items-center justify-between transition-colors ${
                     isCurrentDefault
                       ? 'border-emerald-500/30 bg-emerald-500/5'
-                      : 'border-[#22252A] bg-[#181A1F] hover:bg-[#1F2228]'
+                      : 'border-border bg-surface-hover hover:bg-surface-active'
                   }`}
                 >
                   <div className="flex items-center gap-3 overflow-hidden pr-2">
@@ -341,8 +341,8 @@ export function AudioView() {
       </div>
 
       {/* Section 2: Per-Application Audio Routing & Volume Control */}
-      <div className="rounded-[6px] border border-[#22252A] bg-[#121417] p-5 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#22252A]">
+      <div className="rounded-[6px] border border-border bg-surface p-5 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Sliders className="h-5 w-5 text-brand" />
             <h3 className="text-sm font-semibold text-text-primary">{t('audioView.appRoutingTitle')}</h3>
@@ -356,14 +356,14 @@ export function AudioView() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('audioView.searchAppPlaceholder')}
-              className="w-full rounded-[6px] border border-[#22252A] bg-[#181A1F] pl-9 pr-3 py-1.5 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand transition-colors"
+              className="w-full rounded-[6px] border border-border bg-surface-hover pl-9 pr-3 py-1.5 text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand transition-colors"
             />
           </div>
         </div>
 
         {/* Sessions List */}
         {filteredSessions.length === 0 ? (
-          <div className="rounded-[6px] border border-dashed border-[#22252A] p-8 text-center space-y-3">
+          <div className="rounded-[6px] border border-dashed border-border p-8 text-center space-y-3">
             <div className="mx-auto w-10 h-10 rounded-full bg-surface-subtle flex items-center justify-center text-text-muted">
               <AlertCircle className="h-5 w-5" />
             </div>
@@ -385,11 +385,11 @@ export function AudioView() {
               return (
                 <div
                   key={session.pid}
-                  className="rounded-[6px] border border-[#22252A] bg-[#181A1F] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors hover:border-[#2A2E35]"
+                  className="rounded-[6px] border border-border bg-surface-hover p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors hover:border-border"
                 >
                   {/* App Header & Process Meta */}
                   <div className="flex items-center gap-3 min-w-[220px]">
-                    <div className="p-2 rounded-[6px] bg-[#121417] border border-[#22252A]">
+                    <div className="p-2 rounded-[6px] bg-surface border border-border">
                       {resolveAppIcon(session)}
                     </div>
                     <div className="space-y-0.5">
@@ -429,7 +429,7 @@ export function AudioView() {
                           const val = parseFloat(e.target.value) / 100;
                           setAppVolume(session.pid, val, false);
                         }}
-                        className="w-full h-1.5 bg-[#08090A] rounded-lg appearance-none cursor-pointer accent-brand"
+                        className="w-full h-1.5 bg-background rounded-lg appearance-none cursor-pointer accent-brand"
                         aria-label={`Volume level for ${session.name} PID ${session.pid}`}
                       />
                       <span className="text-xs font-mono tabular-nums text-text-primary w-9 text-right shrink-0">
@@ -447,7 +447,7 @@ export function AudioView() {
                       <select
                         value={currentOutputId}
                         onChange={(e) => setAppAudioDevice(session.pid, e.target.value, 'render')}
-                        className="rounded-[6px] border border-[#22252A] bg-[#121417] px-2.5 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand transition-colors max-w-[180px] truncate"
+                        className="rounded-[6px] border border-border bg-surface px-2.5 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand transition-colors max-w-[180px] truncate"
                         aria-label={`Output audio route for ${session.name}`}
                       >
                         <option value="">{t('audioView.systemDefault')}</option>
@@ -466,7 +466,7 @@ export function AudioView() {
                       <select
                         value={currentInputId}
                         onChange={(e) => setAppAudioDevice(session.pid, e.target.value, 'capture')}
-                        className="rounded-[6px] border border-[#22252A] bg-[#121417] px-2.5 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-emerald-400 transition-colors max-w-[180px] truncate"
+                        className="rounded-[6px] border border-border bg-surface px-2.5 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-emerald-400 transition-colors max-w-[180px] truncate"
                         aria-label={`Input audio route for ${session.name}`}
                       >
                         <option value="">{t('audioView.systemDefault')}</option>

@@ -132,6 +132,15 @@ pub fn compute_file_hash<P: AsRef<Path>>(path: P) -> Result<String, std::io::Err
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+pub fn compute_partial_file_hash<P: AsRef<Path>>(path: P) -> Result<String, std::io::Error> {
+    let mut file = File::open(path)?;
+    let mut buffer = [0u8; 4096];
+    let count = file.read(&mut buffer)?;
+    let mut hasher = Sha256::new();
+    hasher.update(&buffer[..count]);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
 fn get_modified_timestamp(path: &Path) -> u64 {
     path.metadata()
         .and_then(|m| m.modified())
@@ -165,19 +174,45 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
     }
 
     // Filter candidate files that have size collisions
-    let candidates: Vec<(u64, PathBuf)> = size_map
+    let size_candidates: Vec<(u64, PathBuf)> = size_map
         .into_iter()
         .filter(|(_, files)| files.len() > 1)
         .flat_map(|(sz, files)| files.into_iter().map(move |p| (sz, p)))
         .collect();
 
     log::info!(
-        "[Storage] Phase 1 completed. Found {} collision candidate files",
-        candidates.len()
+        "[Storage] Phase 1 completed. Found {} size collision candidate files",
+        size_candidates.len()
     );
 
-    // Phase 2: Compute SHA-256 in parallel via rayon
-    let hashed_files: Vec<(u64, String, PathBuf)> = candidates
+    // Phase 1b: Compute 4KB partial hash in parallel for size collision candidates
+    let partial_hashed: Vec<(u64, String, PathBuf)> = size_candidates
+        .into_par_iter()
+        .filter_map(|(sz, path)| match compute_partial_file_hash(&path) {
+            Ok(hash) => Some((sz, hash, path)),
+            Err(_) => None,
+        })
+        .collect();
+
+    let mut partial_map: HashMap<(u64, String), Vec<PathBuf>> = HashMap::new();
+    for (sz, partial_hash, path) in partial_hashed {
+        partial_map.entry((sz, partial_hash)).or_default().push(path);
+    }
+
+    // Filter candidate files that match in both size AND 4KB partial hash
+    let full_hash_candidates: Vec<(u64, PathBuf)> = partial_map
+        .into_iter()
+        .filter(|(_, files)| files.len() > 1)
+        .flat_map(|((sz, _), files)| files.into_iter().map(move |p| (sz, p)))
+        .collect();
+
+    log::info!(
+        "[Storage] Phase 1b completed. Found {} partial hash collision candidate files",
+        full_hash_candidates.len()
+    );
+
+    // Phase 2: Compute full SHA-256 in parallel for files matching size AND partial hash
+    let hashed_files: Vec<(u64, String, PathBuf)> = full_hash_candidates
         .into_par_iter()
         .filter_map(|(sz, path)| match compute_file_hash(&path) {
             Ok(hash) => Some((sz, hash, path)),
@@ -503,5 +538,26 @@ mod tests {
             }
             let _ = std::fs::remove_dir_all(&test_dir);
         }
+    }
+
+    #[test]
+    fn test_compute_partial_file_hash() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        let content = vec![0xABu8; 8192];
+        std::fs::write(temp.path(), &content).unwrap();
+
+        let partial_hash = compute_partial_file_hash(temp.path()).unwrap();
+        let full_hash = compute_file_hash(temp.path()).unwrap();
+
+        assert_ne!(partial_hash, full_hash);
+
+        let temp_small = tempfile::NamedTempFile::new().unwrap();
+        let content_small = vec![0xCDu8; 1024];
+        std::fs::write(temp_small.path(), &content_small).unwrap();
+
+        let partial_small = compute_partial_file_hash(temp_small.path()).unwrap();
+        let full_small = compute_file_hash(temp_small.path()).unwrap();
+
+        assert_eq!(partial_small, full_small);
     }
 }

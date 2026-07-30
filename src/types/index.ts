@@ -84,9 +84,14 @@ export interface TaskProgressPayload {
   isError: boolean;
 }
 
+export * from './stateEngine';
+export * from './autoruns';
+export * from './governor';
+
 export type TabType =
   | 'dashboard'
   | 'audio_manager'
+  | 'governor'
   | 'optimization'
   | 'package_manager'
   | 'app_uninstaller'
@@ -95,12 +100,14 @@ export type TabType =
   | 'storage_utilities'
   | 'startup'
   | 'scheduler'
+  | 'autoruns'
   | 'dns_context'
   | 'driver_backup'
   | 'diagnostics'
   | 'odt'
   | 'activation'
   | 'restore_points'
+  | 'state_engine'
   | 'settings';
 
 export interface CleanerCategoryItem {

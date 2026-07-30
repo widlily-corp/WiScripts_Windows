@@ -5,6 +5,7 @@ import { TabType } from '../types';
 import {
   LayoutDashboard,
   Volume2,
+  Cpu,
   Sliders,
   Package,
   Trash2,
@@ -22,6 +23,7 @@ import {
   RotateCcw,
   Power,
   Clock,
+  History,
 } from 'lucide-react';
 
 interface NavItem {
@@ -33,6 +35,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', labelKey: 'nav.items.dashboard', icon: LayoutDashboard },
   { id: 'audio_manager', labelKey: 'nav.items.audio_manager', icon: Volume2 },
+  { id: 'governor', labelKey: 'nav.items.governor', icon: Cpu },
   { id: 'optimization', labelKey: 'nav.items.optimization', icon: Sliders },
   { id: 'package_manager', labelKey: 'nav.items.package_manager', icon: Package },
   { id: 'app_uninstaller', labelKey: 'nav.items.app_uninstaller', icon: Trash2 },
@@ -41,12 +44,14 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'storage_utilities', labelKey: 'nav.items.storage_utilities', icon: FolderSearch },
   { id: 'startup', labelKey: 'nav.items.startup', icon: Power },
   { id: 'scheduler', labelKey: 'nav.items.scheduler', icon: Clock },
+  { id: 'autoruns', labelKey: 'nav.items.autoruns', icon: ShieldAlert },
   { id: 'dns_context', labelKey: 'nav.items.dns_context', icon: Globe },
   { id: 'driver_backup', labelKey: 'nav.items.driver_backup', icon: HardDrive },
   { id: 'diagnostics', labelKey: 'nav.items.diagnostics', icon: Activity },
   { id: 'odt', labelKey: 'nav.items.odt', icon: FileCode },
   { id: 'activation', labelKey: 'nav.items.activation', icon: KeyRound },
   { id: 'restore_points', labelKey: 'nav.items.restore_points', icon: RotateCcw },
+  { id: 'state_engine', labelKey: 'nav.items.state_engine', icon: History },
   { id: 'settings', labelKey: 'nav.items.settings', icon: Settings },
 ];
 
@@ -69,7 +74,7 @@ export function Navigation() {
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              {t('nav.app_version', { version: appVersion || '0.3.0' })}
+              {t('nav.app_version', { version: appVersion || '0.9.0' })}
             </span>
           </div>
         </div>

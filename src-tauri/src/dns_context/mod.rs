@@ -21,17 +21,22 @@ pub fn set_dns_server(
         dry_run || runner.is_dry_run()
     );
 
+    let safe_interface_alias = interface_alias
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(crate::odt::escape_powershell_literal);
+
     let (name, command) = match clean_provider.as_str() {
         "adguard" => {
             let primary = "94.140.14.14";
             let secondary = "94.140.15.15";
             let title = "Set DNS: AdGuard (Family/AdBlock)";
-            let cmd = match interface_alias {
-                Some(alias) if !alias.trim().is_empty() => format!(
-                    "Set-DnsClientServerAddress -InterfaceAlias \"{}\" -ServerAddresses ('{}', '{}')",
-                    alias.trim(), primary, secondary
+            let cmd = match safe_interface_alias.as_deref() {
+                Some(alias) => format!(
+                    "Set-DnsClientServerAddress -InterfaceAlias {} -ServerAddresses ('{}', '{}')",
+                    alias, primary, secondary
                 ),
-                _ => format!(
+                None => format!(
                     "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {{ Set-DnsClientServerAddress -InterfaceAlias $_.Name -ServerAddresses ('{}', '{}') }}",
                     primary, secondary
                 ),
@@ -42,12 +47,12 @@ pub fn set_dns_server(
             let primary = "1.1.1.1";
             let secondary = "1.0.0.1";
             let title = "Set DNS: Cloudflare (1.1.1.1)";
-            let cmd = match interface_alias {
-                Some(alias) if !alias.trim().is_empty() => format!(
-                    "Set-DnsClientServerAddress -InterfaceAlias \"{}\" -ServerAddresses ('{}', '{}')",
-                    alias.trim(), primary, secondary
+            let cmd = match safe_interface_alias.as_deref() {
+                Some(alias) => format!(
+                    "Set-DnsClientServerAddress -InterfaceAlias {} -ServerAddresses ('{}', '{}')",
+                    alias, primary, secondary
                 ),
-                _ => format!(
+                None => format!(
                     "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {{ Set-DnsClientServerAddress -InterfaceAlias $_.Name -ServerAddresses ('{}', '{}') }}",
                     primary, secondary
                 ),
@@ -58,12 +63,12 @@ pub fn set_dns_server(
             let primary = "8.8.8.8";
             let secondary = "8.8.4.4";
             let title = "Set DNS: Google Public DNS";
-            let cmd = match interface_alias {
-                Some(alias) if !alias.trim().is_empty() => format!(
-                    "Set-DnsClientServerAddress -InterfaceAlias \"{}\" -ServerAddresses ('{}', '{}')",
-                    alias.trim(), primary, secondary
+            let cmd = match safe_interface_alias.as_deref() {
+                Some(alias) => format!(
+                    "Set-DnsClientServerAddress -InterfaceAlias {} -ServerAddresses ('{}', '{}')",
+                    alias, primary, secondary
                 ),
-                _ => format!(
+                None => format!(
                     "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object {{ Set-DnsClientServerAddress -InterfaceAlias $_.Name -ServerAddresses ('{}', '{}') }}",
                     primary, secondary
                 ),
@@ -72,12 +77,12 @@ pub fn set_dns_server(
         }
         "dhcp" | "reset" => {
             let title = "Reset DNS to Automatic (DHCP)";
-            let cmd = match interface_alias {
-                Some(alias) if !alias.trim().is_empty() => format!(
-                    "Set-DnsClientServerAddress -InterfaceAlias \"{}\" -ResetServerAddresses",
-                    alias.trim()
+            let cmd = match safe_interface_alias.as_deref() {
+                Some(alias) => format!(
+                    "Set-DnsClientServerAddress -InterfaceAlias {} -ResetServerAddresses",
+                    alias
                 ),
-                _ => "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object { Set-DnsClientServerAddress -InterfaceAlias $_.Name -ResetServerAddresses }".to_string(),
+                None => "Get-NetAdapter | Where-Object Status -eq 'Up' | ForEach-Object { Set-DnsClientServerAddress -InterfaceAlias $_.Name -ResetServerAddresses }".to_string(),
             };
             (title.to_string(), cmd)
         }
@@ -327,5 +332,14 @@ mod tests {
         assert!(summary.is_dry_run);
         assert!(summary.success);
         assert!(summary.executed_actions[0].command.contains("Remove-Item"));
+    }
+
+    #[test]
+    fn test_set_dns_server_escaping() {
+        let runner = DryRunRunner::new();
+        let summary = set_dns_server(None, &runner, "cloudflare", Some("Wi-Fi's Net; calc.exe"), true).unwrap();
+        assert!(summary.executed_actions[0]
+            .command
+            .contains("-InterfaceAlias 'Wi-Fi''s Net; calc.exe'"));
     }
 }

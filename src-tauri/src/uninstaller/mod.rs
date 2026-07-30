@@ -324,7 +324,11 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                         .encode_wide()
                         .chain(std::iter::once(0))
                         .collect();
-                    let args_joined = args.join(" ");
+                    let args_joined = args
+                        .iter()
+                        .map(|arg| format!("\"{}\"", arg.replace('\"', "\\\"")))
+                        .collect::<Vec<_>>()
+                        .join(" ");
                     let args_u16: Vec<u16> = OsStr::new(&args_joined)
                         .encode_wide()
                         .chain(std::iter::once(0))
@@ -472,5 +476,23 @@ mod tests {
                 key
             );
         }
+    }
+
+    #[test]
+    fn test_format_shellexecute_args() {
+        let args = vec![
+            "/S".to_string(),
+            "/dir=C:\\Program Files\\App".to_string(),
+            "/name=\"My App\"".to_string(),
+        ];
+        let args_joined = args
+            .iter()
+            .map(|arg| format!("\"{}\"", arg.replace('\"', "\\\"")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            args_joined,
+            "\"/S\" \"/dir=C:\\Program Files\\App\" \"/name=\\\"My App\\\"\""
+        );
     }
 }

@@ -29,6 +29,7 @@
     "items": {
       "dashboard": "Панель управления",
       "audio_manager": "Звуковые устройства",
+      "governor": "Диспетчер ресурсов (ProFlow)",
       "optimization": "Оптимизация",
       "package_manager": "Пакетный менеджер",
       "app_uninstaller": "Удаление программ",
@@ -37,12 +38,14 @@
       "storage_utilities": "Управление накопителями",
       "startup": "Автозагрузка",
       "scheduler": "Планировщик задач",
+      "autoruns": "Инспектор автозапуска",
       "dns_context": "DNS и Контекстное меню",
       "driver_backup": "Резервное копирование драйверов",
       "diagnostics": "Диагностика",
       "odt": "Настройка Office ODT",
       "activation": "Активация (MAS)",
       "restore_points": "Точки восстановления",
+      "state_engine": "Движок состояний и откат",
       "settings": "Настройки"
     },
     "app_version": "Утилита Windows v{{version}}",
@@ -110,9 +113,10 @@
     "driver_backup": "Экспорт и резервное копирование драйверов",
     "diagnostics": "Расширенная диагностика и мониторинг системы",
     "odt": "Конфигуратор Office Deployment Tool (ODT)",
-    "activation": "Скрипты активации Microsoft (MAS)",
-    "restore_points": "Точки восстановления системы Windows",
-    "settings": "Глобальные настройки и параметры приложения"
+    "activation": "Активация Microsoft (MAS)",
+    "restore_points": "Точки восстановления Windows",
+    "state_engine": "Движок состояний и хиругический откат",
+    "settings": "Глобальные настройки приложения"
   },
   "cleaner": {
     "title": "Очистка системы и кэша",
@@ -941,5 +945,82 @@
     "unmute": "Включить звук",
     "resetRouting": "Сбросить маршрут",
     "systemDefault": "Системное по умолчанию"
+  },
+  "autoruns": {
+    "title": "Инспектор автозапуска & AutoRuns Security",
+    "subtitle": "Сканирование 25+ локаций автозагрузки с проверкой цифровых подписей Authenticode",
+    "search_placeholder": "Поиск элементов по имени, локации или пути...",
+    "scanning": "Сканирование 25+ локаций автозагрузки...",
+    "no_entries": "Элементы автозапуска не найдены по заданным критериям",
+    "quarantine_btn": "Карантин",
+    "metrics": {
+      "total": "Всего элементов",
+      "high_risk": "Высокий риск",
+      "unsigned": "Без цифровой подписи",
+      "valid": "Подпись действительна"
+    },
+    "tabs": {
+      "all": "Все элементы",
+      "high_risk": "Высокий риск / Без подписи",
+      "registry": "Реестр",
+      "tasks": "Задачи",
+      "services": "Службы"
+    },
+    "col": {
+      "status": "Состояние",
+      "name": "Имя элемента и локация",
+      "path": "Путь к файлу",
+      "publisher": "Издатель",
+      "authenticode": "Подпись",
+      "risk": "Оценка риска"
+    },
+    "sig": {
+      "valid": "Действительна",
+      "unsigned": "Без подписи",
+      "invalid": "Недействительна",
+      "unknown": "Неизвестно"
+    },
+    "quarantine": {
+      "modal_title": "Помещение элемента в карантин",
+      "modal_desc": "Помещение в карантин создаст резервную копию ветки реестра и изолирует исполняемый файл в папку карантина WiScripts. Вы уверены, что хотите продолжить?",
+      "confirm_btn": "Изолировать в Карантин",
+      "processing": "Изоляция...",
+      "success_title": "Элемент успешно помещен в карантин",
+      "success_msg": "Исполняемый файл и запись реестра изолированы в хранилище карантина.",
+      "failed_title": "Ошибка карантина"
+    },
+    "toast": {
+      "scan_failed": "Ошибка сканирования автозапуска",
+      "toggle_success": "Статус автозапуска обновлен",
+      "toggle_failed": "Ошибка изменения статуса",
+      "quarantine_success": "Элемент помещен в карантин",
+      "quarantine_failed": "Ошибка поместить в карантин"
+    }
+  },
+  "governor": {
+    "title": "ProFlow & Динамический Диспетчер Ресурсов",
+    "subtitle": "Подавление всплесков нагрузки ЦП в реальном времени, управление приоритетами процессов, привязка ядер (Affinity) и оптимизация памяти WorkingSet.",
+    "live_monitoring": "Мониторинг ВКЛ",
+    "paused": "Пауза",
+    "create_rule": "Создать правило",
+    "active_rules_count": "Активных правил",
+    "rules_enforced": "Контроль правил активен",
+    "pro_balance_events": "Подавление ProBalance",
+    "cpu_spikes_mitigated": "Всплесков ЦП предотвращено",
+    "total_memory_trimmed": "Освобождено ОЗУ",
+    "working_set_trimmed": "Рабочий набор оптимизирован",
+    "active_rules_title": "Настроенные правила диспетчера",
+    "process_name": "Имя процесса",
+    "target_priority": "Приоритет",
+    "affinity_mask": "Маска ядер",
+    "audio_endpoint": "Маршрут аудио",
+    "auto_trim_threshold": "Автоочистка ОЗУ",
+    "running_processes": "Мониторинг запущенных процессов",
+    "search_process": "Поиск процессов...",
+    "rule_applied": "Правило применено",
+    "rule_deleted": "Правило удалено",
+    "ram_trimmed": "Память очищена",
+    "priority_updated": "Приоритет обновлен",
+    "error": "Ошибка"
   }
 }

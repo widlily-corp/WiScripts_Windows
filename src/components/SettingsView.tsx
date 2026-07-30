@@ -282,15 +282,15 @@ export function SettingsView() {
             </p>
 
             <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
-              <div className="rounded-[6px] border border-border-subtle bg-[#08090A] p-2.5 space-y-1">
+              <div className="rounded-[6px] border border-border-subtle bg-background p-2.5 space-y-1">
                 <div className="text-text-muted">Background</div>
                 <div className="text-text-primary font-semibold">#08090A</div>
               </div>
-              <div className="rounded-[6px] border border-border-subtle bg-[#121417] p-2.5 space-y-1">
+              <div className="rounded-[6px] border border-border-subtle bg-surface p-2.5 space-y-1">
                 <div className="text-text-muted">Surface</div>
                 <div className="text-text-primary font-semibold">#121417</div>
               </div>
-              <div className="rounded-[6px] border border-border-subtle bg-[#22252A] p-2.5 space-y-1">
+              <div className="rounded-[6px] border border-border-subtle bg-border p-2.5 space-y-1">
                 <div className="text-text-muted">1px Hairline</div>
                 <div className="text-text-primary font-semibold">#22252A</div>
               </div>

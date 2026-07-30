@@ -264,7 +264,16 @@ export function SystemCleaner() {
               return (
                 <div
                   key={cat.id}
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  tabIndex={0}
                   onClick={() => toggleCategory(cat.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                      e.preventDefault();
+                      toggleCategory(cat.id);
+                    }
+                  }}
                   className={`p-4 rounded-[6px] border transition-all cursor-pointer select-none space-y-3 ${
                     isSelected
                       ? 'bg-surface border-brand/50 shadow-sm'

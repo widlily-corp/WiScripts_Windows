@@ -129,7 +129,7 @@ async function runM1EmpiricalTests() {
   // ---------------------------------------------------------
   console.log('\n[Test 2] Updater Store Initial State & Settings');
   const store = useAppStore.getState();
-  assert(store.appVersion === '0.3.0', 'Initial appVersion is "0.3.0"');
+  assert(store.appVersion === '0.9.0', 'Initial appVersion is "0.9.0"');
   assert(store.updateStatus === 'idle', 'Initial updateStatus is "idle"');
   assert(store.updateInfo === null, 'Initial updateInfo is null');
   assert(store.updateProgress === 0, 'Initial updateProgress is 0');
@@ -154,7 +154,7 @@ async function runM1EmpiricalTests() {
 
   mockUpdateResponse = {
     rid: 42,
-    currentVersion: '0.3.0',
+    currentVersion: '0.9.0',
     version: '0.4.0',
     body: 'Awesome new features',
     date: '2026-07-27',
@@ -233,7 +233,7 @@ async function runM1EmpiricalTests() {
 
   mockUpdateResponse = {
     rid: 99,
-    currentVersion: '0.3.0',
+    currentVersion: '0.9.0',
     version: '0.5.0',
   };
   mockDownloadError = 'Disk full during extraction';

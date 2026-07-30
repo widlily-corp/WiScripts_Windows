@@ -29,6 +29,7 @@
     "items": {
       "dashboard": "Dashboard",
       "audio_manager": "Audio Devices & Volume",
+      "governor": "Resource Governor",
       "optimization": "Optimizations",
       "package_manager": "Package Manager",
       "app_uninstaller": "App Uninstaller",
@@ -37,12 +38,14 @@
       "storage_utilities": "Storage Utilities",
       "startup": "Startup Apps",
       "scheduler": "Task Scheduler",
+      "autoruns": "AutoRuns Inspector",
       "dns_context": "DNS & Context Menu",
       "driver_backup": "Driver Backup",
       "diagnostics": "Diagnostics & Health",
       "odt": "Office ODT",
       "activation": "Activation MAS",
       "restore_points": "Restore Points",
+      "state_engine": "State Engine & Undo",
       "settings": "Settings"
     },
     "app_version": "Windows Utility v{{version}}",
@@ -86,6 +89,7 @@
       "odt": "Office Deployment Tool (ODT) Configurator",
       "activation": "Microsoft Activation Scripts (MAS)",
       "restore_points": "Windows System Restore Checkpoints",
+      "state_engine": "WiScripts State Engine & Surgical Undo",
       "settings": "Global Configuration & Preferences"
     },
     "logs": {
@@ -941,5 +945,82 @@
     "unmute": "Unmute",
     "resetRouting": "Reset Route",
     "systemDefault": "Default System Device"
+  },
+  "autoruns": {
+    "title": "AutoRuns & Security Inspector",
+    "subtitle": "Deep scanner inspecting 25+ persistence autostart locations with Authenticode digital signature auditing",
+    "search_placeholder": "Search autostart items by name, location, or image path...",
+    "scanning": "Scanning 25+ autostart persistence locations...",
+    "no_entries": "No autostart entries match your query or category filter",
+    "quarantine_btn": "Quarantine",
+    "metrics": {
+      "total": "Total Autoruns",
+      "high_risk": "High Risk Entries",
+      "unsigned": "Unsigned / Untrusted",
+      "valid": "Valid Authenticode"
+    },
+    "tabs": {
+      "all": "All Entries",
+      "high_risk": "High Risk / Unsigned",
+      "registry": "Registry",
+      "tasks": "Tasks",
+      "services": "Services"
+    },
+    "col": {
+      "status": "State",
+      "name": "Entry Name & Location",
+      "path": "Image Path",
+      "publisher": "Publisher",
+      "authenticode": "Authenticode",
+      "risk": "Risk Score"
+    },
+    "sig": {
+      "valid": "Valid",
+      "unsigned": "Unsigned",
+      "invalid": "Invalid Cert",
+      "unknown": "Unknown"
+    },
+    "quarantine": {
+      "modal_title": "Quarantine Persistence Entry",
+      "modal_desc": "Quarantining will create a safe registry backup and isolate the binary file in WiScripts Quarantine folder. Are you sure you want to proceed?",
+      "confirm_btn": "Isolate & Quarantine",
+      "processing": "Quarantining...",
+      "success_title": "Entry Quarantined Successfully",
+      "success_msg": "Binary payload and registry entry isolated to quarantine storage.",
+      "failed_title": "Quarantine Operation Error"
+    },
+    "toast": {
+      "scan_failed": "AutoRuns Scan Failed",
+      "toggle_success": "AutoRun Entry Updated",
+      "toggle_failed": "Toggle Failed",
+      "quarantine_success": "Entry Quarantined",
+      "quarantine_failed": "Quarantine Failed"
+    }
+  },
+  "governor": {
+    "title": "ProFlow & Dynamic Resource Governor",
+    "subtitle": "Real-time CPU spike suppression, process priority allocation, core affinity tuning, and working set RAM optimizer.",
+    "live_monitoring": "Live Polling ON",
+    "paused": "Paused",
+    "create_rule": "Create Governor Rule",
+    "active_rules_count": "Active Rules",
+    "rules_enforced": "Rule Enforcement Active",
+    "pro_balance_events": "ProBalance Suppressions",
+    "cpu_spikes_mitigated": "CPU Spikes Prevented",
+    "total_memory_trimmed": "Total RAM Reclaimed",
+    "working_set_trimmed": "WorkingSet Optimized",
+    "active_rules_title": "Configured Governor Rules",
+    "process_name": "Process Name",
+    "target_priority": "Target Priority",
+    "affinity_mask": "Core Mask",
+    "audio_endpoint": "Audio Route",
+    "auto_trim_threshold": "Auto Trim RAM",
+    "running_processes": "Active Process Governor Monitor",
+    "search_process": "Filter processes...",
+    "rule_applied": "Rule Applied",
+    "rule_deleted": "Rule Deleted",
+    "ram_trimmed": "RAM Trimmed",
+    "priority_updated": "Priority Updated",
+    "error": "Error"
   }
 }

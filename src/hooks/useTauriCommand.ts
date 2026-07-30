@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 
@@ -17,6 +17,9 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const addLog = useAppStore((s) => s.addLog);
+
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const execute = useCallback(
     async (args?: TArgs): Promise<TResult | null> => {
@@ -42,7 +45,7 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
           level: 'info',
           message: `IPC command ${commandName} completed successfully.`,
         });
-        options.onSuccess?.(result);
+        optionsRef.current.onSuccess?.(result);
         return result;
       } catch (err) {
         const errMessage = typeof err === 'string' ? err : String(err);
@@ -51,13 +54,13 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
           level: 'error',
           message: `IPC command ${commandName} failed: ${errMessage}`,
         });
-        options.onError?.(errMessage);
+        optionsRef.current.onError?.(errMessage);
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [commandName, dryRunMode, addLog, options]
+    [commandName, dryRunMode, addLog]
   );
 
   return { data, isLoading, error, execute };

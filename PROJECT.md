@@ -1,40 +1,40 @@
-# Project: WiScripts Windows — Diagnostics, Safe Logging, Rich Updater & Error Reporting
+# Project: WiScripts Windows Application Refactoring
 
 ## Architecture
-- **Framework**: Tauri 2 (Rust backend + React 18 / TypeScript frontend + Tailwind CSS + Zustand store).
-- **Backend Logging**: Safe logging to `%LOCALAPPDATA%\WiScripts\logs\debug.log` via `logger.rs` and `dirs::data_local_dir()`.
-- **System Information**: Extended `SystemInfo` struct in `src-tauri/src/commands/mod.rs`.
-- **Diagnostic ZIP Export**: `export_diagnostic_dump` IPC command using `zip` crate to package `debug.log` and `system_info.json` onto `dirs::desktop_dir()`.
-- **Updater & Release Notes**: Tauri updater (`tauri-plugin-updater`) endpoint fix, fallback/mock handling, and React `ReleaseNotesModal` component with Markdown rendering.
-- **GitHub Issues API Reporting**: `create_github_issue` IPC command for submitting issues directly via PAT or opening pre-filled browser URL.
+- React 18 + Vite + TypeScript (strict mode)
+- Zustand v4 state store refactored into domain slices
+- i18next + react-i18next localization system
+- Tauri desktop integration framework
+
+## Feature Inventory
+| # | Feature | Description | Milestone | Source |
+|---|---------|-------------|-----------|--------|
+| 1 | Zustand Store Refactoring & Data Extraction | Extract constants to src/constants/, mocks to src/mocks/, break useAppStore.ts into 7 slices, re-export backward-compatible hook | M1 | ORIGINAL_REQUEST R1 |
+| 2 | Code Quality & AI-Slop Removal | Remove 30+ redundant AI-slop comments (// Category 1, // Feature, etc.) across store and views | M2 | ORIGINAL_REQUEST R2 |
+| 3 | Strict Typing & Error Handling | Remove all `as any` casting, add `src/utils/errors.ts`, add early returns in checkForUpdates & store actions | M3 | ORIGINAL_REQUEST R3 |
+| 4 | Localization (i18n) | Extract hardcoded Russian text from SettingsView.tsx, GitHubIssueModal.tsx, UninstallerView.tsx into en/ru locale JSON files | M4 | ORIGINAL_REQUEST R4 |
+| 5 | E2E Verification, Conventional Commits & Git Push | Verify build/tests, create atomic conventional commits, and push to remote origin/main | M5 | ORIGINAL_REQUEST R5 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | Safe Logging & Extended System Info | R3: Update logger path to `%LOCALAPPDATA%\WiScripts\logs\debug.log`; extend system info struct & unit tests. | none | DONE |
-| 2 | Diagnostic Dump Export | R2: Backend ZIP packaging of logs/system_info to Desktop; IPC command & Settings UI button. | M1 | DONE |
-| 3 | Rich UI Updater & Release Notes | R1: Fix updater release JSON check/error handling; add Markdown Release Notes dialog component. | none | DONE |
-| 4 | GitHub Issues Error Reporting | R4: Backend command for GitHub Issues API & browser fallback URL; UI trigger in Settings & ErrorBoundary. | M1 | DONE |
-| 5 | Final E2E Integration & Audit | E2E test verification, adversarial test hardening, and Forensic Auditor verification. | M1, M2, M3, M4 | DONE |
+| 1 | M1: State Store Slices & Constants | Extract constants & mocks, split store into 7 Zustand slices, re-export useAppStore | None | DONE |
+| 2 | M2: Code Quality & AI-Slop Cleanup | Remove redundant comments, category headers, section dividers across src/ | M1 | DONE |
+| 3 | M3: Strict Typing & Error Handling | Create src/utils/errors.ts, replace `as any`, non-null assertions, apply early returns | M1 | DONE |
+| 4 | M4: Localization i18n | Update en.json & ru.json, refactor UI components to use useTranslation & t() | M1 | IN_PROGRESS |
+| 5 | M5: Verification, Commits & Push | Run full build, tsc check, node test suite, atomic Conventional Commits, push to remote | M1, M2, M3, M4 | PLANNED |
 
 ## Interface Contracts
-### Rust Backend ↔ React Frontend (Tauri IPC)
-1. `get_system_info() -> SystemInfo`:
-   Returns extended hardware, OS, elevation, and telemetry state.
-2. `export_diagnostic_dump() -> Result<String, AppError>`:
-   Creates timestamped `WiScripts_Diagnostic_Dump_*.zip` on Desktop containing `debug.log` and `system_info.json`. Returns absolute path string.
-3. `create_github_issue(payload: GitHubIssuePayload) -> Result<GitHubIssueResult, AppError>`:
-   Submits issue to GitHub API or returns pre-filled browser submission URL.
-4. `check_for_updates() / tauri-plugin-updater`:
-   Returns update metadata including Markdown release notes in `update.body`.
+### Store ↔ Components
+- Unified `useAppStore` hook export from `src/store/useAppStore.ts` combining all 7 slices
+- Backward-compatible `useAppStore.getState()` access for non-hook callers
 
 ## Code Layout
-- `src-tauri/src/logger.rs`: Log directory resolution and initialization.
-- `src-tauri/src/commands/mod.rs`: IPC command handlers (`get_system_info`, `export_diagnostic_dump`, `create_github_issue`).
-- `src-tauri/src/lib.rs`: Tauri builder, plugin initialization, IPC handler registration.
-- `src-tauri/Cargo.toml`: Cargo dependencies (`zip = "2.2"`).
-- `src/store/useAppStore.ts`: Frontend Zustand store state and IPC wrappers.
-- `src/components/SettingsView.tsx`: Settings UI with Diagnostics card and buttons.
-- `src/components/ReleaseNotesModal.tsx`: Rich UI Markdown modal for updates.
-- `src/components/GitHubIssueModal.tsx`: Modal dialog for submitting error reports.
-- `src/components/ErrorBoundary.tsx`: React error boundary with issue reporting trigger.
+- `src/constants/`: `optimizations.ts`
+- `src/mocks/`: `audioMocks.ts`
+- `src/utils/`: `errors.ts`
+- `src/store/slices/`: `systemSlice.ts`, `updaterSlice.ts`, `uiSlice.ts`, `optimizationSlice.ts`, `audioSlice.ts`, `packageManagerSlice.ts`, `systemToolsSlice.ts`
+- `src/store/useAppStore.ts`: Composition and re-export of Zustand store
+- `src/i18n/locales/`: `en.json`, `ru.json`
+- `src/components/`: `SettingsView.tsx`, `GitHubIssueModal.tsx`, etc.
+- `src/views/`: `UninstallerView.tsx`, `ReleaseNotesModal.tsx`, etc.

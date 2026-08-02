@@ -140,7 +140,6 @@ export function AutorunsView() {
 
   const filteredEntries = useMemo(() => {
     return entries.filter((item) => {
-      // Category filter
       let matchesCategory = true;
       if (activeCategory === 'high_risk') {
         matchesCategory =

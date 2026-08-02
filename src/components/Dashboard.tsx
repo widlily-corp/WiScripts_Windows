@@ -30,7 +30,6 @@ function formatBytesPerSec(bytes: number): string {
 
 export function Dashboard() {
   const { t } = useTranslation();
-  // Activate real-time polling hook
   useMetricsPoller();
 
   const systemInfo = useAppStore((s) => s.systemInfo);
@@ -50,7 +49,6 @@ export function Dashboard() {
 
   const selectedCount = optimizations.filter((o) => o.isSelected).length;
 
-  // Extract history series for Sparkline area graphs
   const cpuSeries = metricsHistory.map((m) => m.cpuUsagePercent);
   const ramSeries = metricsHistory.map((m) => m.memoryUsagePercent);
   const diskReadSeries = metricsHistory.map((m) => m.diskReadBytesPerSec / (1024 * 1024)); // MB/s

@@ -39,7 +39,6 @@ export function GovernorView() {
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [trimmingPid, setTrimmingPid] = useState<number | null>(null);
 
-  // Modal State for Rule Editing / Creation
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingProcessName, setEditingProcessName] = useState<string>('');
   const [selectedPriority, setSelectedPriority] = useState<string>('HIGH');

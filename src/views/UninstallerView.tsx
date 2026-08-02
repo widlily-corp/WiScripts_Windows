@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n/config';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from '../components/AdminElevationBanner';
 import { InstalledApp } from '../types';
@@ -17,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export function formatAppSize(sizeKb?: number | null): string {
-  if (!sizeKb || sizeKb <= 0) return 'Unknown';
+  if (!sizeKb || sizeKb <= 0) return i18n.t ? i18n.t('uninstaller.unknownSize', 'Unknown') : 'Unknown';
   if (sizeKb < 1024) {
     return `${sizeKb} KB`;
   } else if (sizeKb < 1024 * 1024) {
@@ -43,6 +45,7 @@ export type SortField = 'name' | 'size' | 'publisher' | 'date';
 export type SortOrder = 'asc' | 'desc';
 
 export function UninstallerView() {
+  const { t } = useTranslation();
   const installedApps = useAppStore((s) => s.installedApps);
   const isAppsLoading = useAppStore((s) => s.isAppsLoading);
   const fetchInstalledApps = useAppStore((s) => s.fetchInstalledApps);
@@ -100,16 +103,21 @@ export function UninstallerView() {
 
   const handleUninstallClick = (app: InstalledApp) => {
     const isSystem = app.isSystemComponent;
-    const commandToRun = app.uninstallString || app.quietUninstallString || '# No uninstall command specified';
+    const commandToRun = app.uninstallString || app.quietUninstallString || t('uninstaller.noCommand', '# No uninstall command specified');
 
     openSafetyModal({
-      title: `Uninstall Application: ${app.name}`,
-      description: `You are about to launch the uninstaller for "${app.name}" (Publisher: ${app.publisher || 'Unknown'}, Version: ${app.version || 'N/A'}). Estimated size to free: ${formatAppSize(app.estimatedSizeKb)}.`,
+      title: t('uninstaller.uninstallTitle', { name: app.name }),
+      description: t('uninstaller.uninstallDesc', {
+        name: app.name,
+        publisher: app.publisher || t('uninstaller.unknownPublisher'),
+        version: app.version || 'N/A',
+        size: formatAppSize(app.estimatedSizeKb),
+      }),
       riskLevel: isSystem ? 'critical' : 'medium',
       commandsToRun: [
-        `Target Application: ${app.name}`,
-        `Registry Path: ${app.registryPath}`,
-        `Uninstaller Executable Command: ${commandToRun}`,
+        `${t('uninstaller.targetAppLabel', 'Target Application:')} ${app.name}`,
+        `${t('uninstaller.regPathLabel', 'Registry Path:')} ${app.registryPath}`,
+        `${t('uninstaller.cmdLabel', 'Uninstaller Executable Command:')} ${commandToRun}`,
       ],
       onConfirmAction: async () => {
         await uninstallApp(app);
@@ -123,7 +131,7 @@ export function UninstallerView() {
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
-      <AdminElevationBanner featureName="Application Uninstaller" />
+      <AdminElevationBanner featureName={t('uninstaller.title')} />
 
       {/* Header Bar */}
       <div className="rounded-[6px] border border-border bg-surface p-5 flex items-center justify-between">
@@ -131,16 +139,16 @@ export function UninstallerView() {
           <div className="flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-brand" />
             <h2 className="text-base font-semibold text-text-primary">
-              Application Uninstaller
+              {t('uninstaller.title')}
             </h2>
             {dryRunMode && (
               <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-[4px] font-bold">
-                Dry-Run Preview
+                {t('common.dryRunBadge', 'Dry-Run Preview')}
               </span>
             )}
           </div>
           <p className="text-xs text-text-secondary">
-            Enumerate registered Windows software packages, inspect uninstall commands, and trigger process uninstallation.
+            {t('uninstaller.description')}
           </p>
         </div>
 
@@ -150,7 +158,7 @@ export function UninstallerView() {
           className="flex items-center gap-2 rounded-[6px] border border-border-subtle bg-surface-subtle px-3 py-1.5 text-xs font-mono text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 text-brand ${isAppsLoading ? 'animate-spin' : ''}`} />
-          <span>Refresh Scan</span>
+          <span>{t('uninstaller.refreshScan')}</span>
         </button>
       </div>
 
@@ -158,7 +166,7 @@ export function UninstallerView() {
       <div className="grid grid-cols-3 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Total Installed Apps</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('uninstaller.totalApps')}</div>
             <div className="text-xl font-bold font-mono text-text-primary mt-1">
               {installedApps.length}
             </div>
@@ -168,7 +176,7 @@ export function UninstallerView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Filtered Applications</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('uninstaller.filteredApps')}</div>
             <div className="text-xl font-bold font-mono text-brand mt-1">
               {filteredAndSortedApps.length}
             </div>
@@ -178,7 +186,7 @@ export function UninstallerView() {
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-text-muted">Estimated Storage</div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">{t('uninstaller.estimatedStorage')}</div>
             <div className="text-xl font-bold font-mono text-text-primary mt-1">
               {formatAppSize(totalStorageKb)}
             </div>
@@ -194,7 +202,7 @@ export function UninstallerView() {
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-text-muted" />
             <input
               type="text"
-              placeholder="Search by app name, publisher, version or path..."
+              placeholder={t('uninstaller.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-[6px] border border-border-subtle bg-surface-subtle pl-9 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none font-sans"
@@ -210,26 +218,26 @@ export function UninstallerView() {
               onChange={(e) => setHideSystemApps(e.target.checked)}
               className="rounded border-border bg-surface-subtle text-brand focus:ring-0"
             />
-            <span>Hide System Components</span>
+            <span>{t('uninstaller.hideSystemApps')}</span>
           </label>
 
           <div className="flex items-center gap-2 border-l border-border pl-4">
-            <span className="text-xs text-text-muted font-mono">Sort:</span>
+            <span className="text-xs text-text-muted font-mono">{t('uninstaller.sortLabel')}</span>
             <select
               value={sortField}
               onChange={(e) => setSortField(e.target.value as SortField)}
               className="rounded-[6px] border border-border-subtle bg-surface-subtle px-2.5 py-1.5 text-xs font-mono text-text-primary focus:border-brand focus:outline-none"
             >
-              <option value="name">Name</option>
-              <option value="size">Estimated Size</option>
-              <option value="publisher">Publisher</option>
-              <option value="date">Install Date</option>
+              <option value="name">{t('uninstaller.sortName')}</option>
+              <option value="size">{t('uninstaller.sortSize')}</option>
+              <option value="publisher">{t('uninstaller.sortPublisher')}</option>
+              <option value="date">{t('uninstaller.sortDate')}</option>
             </select>
 
             <button
               onClick={toggleSortOrder}
-              title={`Sort Order: ${sortOrder.toUpperCase()}`}
-              aria-label={`Sort Order: ${sortOrder.toUpperCase()}`}
+              title={t('uninstaller.sortOrderTooltip', { order: sortOrder.toUpperCase() })}
+              aria-label={t('uninstaller.sortOrderTooltip', { order: sortOrder.toUpperCase() })}
               className="p-1.5 rounded-[6px] border border-border-subtle bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             >
               <ArrowUpDown className="h-3.5 w-3.5" />
@@ -244,27 +252,27 @@ export function UninstallerView() {
           <div className="p-12 text-center space-y-3">
             <RefreshCw className="h-8 w-8 text-brand animate-spin mx-auto" />
             <div className="text-xs font-mono text-text-secondary">
-              Scanning Windows Registry hives (HKLM 64-bit, HKLM 32-bit, HKCU)...
+              {t('uninstaller.scanningRegistry')}
             </div>
           </div>
         ) : filteredAndSortedApps.length === 0 ? (
           <div className="p-12 text-center space-y-2">
             <Info className="h-8 w-8 text-text-muted mx-auto" />
-            <div className="text-sm font-medium text-text-primary">No Installed Applications Found</div>
+            <div className="text-sm font-medium text-text-primary">{t('uninstaller.noAppsFound')}</div>
             <div className="text-xs text-text-muted max-w-sm mx-auto">
               {searchQuery
-                ? `No applications matching "${searchQuery}" were found.`
-                : 'No desktop applications were found in the registry.'}
+                ? t('uninstaller.noAppsMatching', { query: searchQuery })
+                : t('uninstaller.noAppsInRegistry')}
             </div>
           </div>
         ) : (
           <div className="divide-y divide-border">
             {/* Table Header */}
             <div className="grid grid-cols-12 gap-4 px-4 py-2.5 bg-surface-subtle text-[11px] font-mono uppercase text-text-muted tracking-wider">
-              <div className="col-span-5">Application Name</div>
-              <div className="col-span-3">Publisher</div>
-              <div className="col-span-2 text-right">Estimated Size</div>
-              <div className="col-span-2 text-right">Action</div>
+              <div className="col-span-5">{t('uninstaller.colAppName')}</div>
+              <div className="col-span-3">{t('uninstaller.colPublisher')}</div>
+              <div className="col-span-2 text-right">{t('uninstaller.colEstimatedSize')}</div>
+              <div className="col-span-2 text-right">{t('uninstaller.colAction')}</div>
             </div>
 
             {/* Application Rows */}
@@ -284,18 +292,18 @@ export function UninstallerView() {
                       </span>
                       {app.isSystemComponent && (
                         <span className="text-[9px] font-mono bg-status-dangerSubtle text-status-danger px-1.5 py-0.5 rounded border border-status-danger/20">
-                          System
+                          {t('uninstaller.systemBadge')}
                         </span>
                       )}
                     </div>
                     <div className="text-[10px] font-mono text-text-muted truncate mt-0.5">
-                      {app.version ? `v${app.version}` : 'Version N/A'}
+                      {app.version ? `v${app.version}` : t('uninstaller.versionNa')}
                     </div>
                   </div>
                 </div>
 
                 <div className="col-span-3 text-xs text-text-secondary truncate font-sans">
-                  {app.publisher || 'Unknown Publisher'}
+                  {app.publisher || t('uninstaller.unknownPublisher')}
                 </div>
 
                 <div className="col-span-2 text-xs font-mono text-text-secondary text-right tabular-nums">
@@ -308,7 +316,7 @@ export function UninstallerView() {
                     className="flex items-center gap-1.5 rounded-[6px] border border-status-danger/30 bg-status-dangerSubtle px-2.5 py-1 text-xs font-mono text-status-danger hover:bg-status-danger hover:text-white transition-all shadow-sm"
                   >
                     <Trash2 className="h-3 w-3" />
-                    <span>Uninstall</span>
+                    <span>{t('uninstaller.uninstall')}</span>
                   </button>
                 </div>
               </div>

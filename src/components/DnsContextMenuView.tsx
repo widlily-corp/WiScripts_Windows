@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import {
@@ -24,7 +25,7 @@ interface DnsCard {
   recommendedFor: string;
 }
 
-const getDnsProviders = (t: any): DnsCard[] => [
+const getDnsProviders = (t: TFunction): DnsCard[] => [
   {
     id: 'adguard',
     name: t('dnsContextMenuView.providers.adguard.name'),

@@ -69,14 +69,14 @@ export function GitHubIssueModal({
         const isApi = res.method === 'api';
         addToast({
           type: 'success',
-          title: isApi ? 'Обращение отправлено через API' : 'Форма открыта в браузере',
+          title: isApi ? t('github_modal.toast_api_title') : t('github_modal.toast_browser_title'),
           message: isApi
-            ? 'GitHub Issue успешно создано в репозитории.'
-            : 'Подготовленный черновик открыт на странице GitHub Issues.',
+            ? t('github_modal.toast_api_msg')
+            : t('github_modal.toast_browser_msg'),
         });
         onClose();
       } else {
-        setErrorMessage(res.error || 'Не удалось отправить обращение на GitHub.');
+        setErrorMessage(res.error || t('github_modal.toast_error_msg'));
       }
     } catch (err) {
       const msg = typeof err === 'string' ? err : (err as Error)?.message || String(err);
@@ -102,17 +102,17 @@ export function GitHubIssueModal({
             </div>
             <div>
               <h3 id="github-issue-modal-title" className="text-base font-semibold text-text-primary">
-                {t('github_modal.title', 'Отправить обращение на GitHub')}
+                {t('github_modal.title', 'Submit GitHub Issue')}
               </h3>
               <p className="text-xs text-text-muted">
-                {t('github_modal.subtitle', 'Сообщить об ошибке или предложить новую функцию')}
+                {t('github_modal.subtitle', 'Report a bug or suggest a new feature')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             className="rounded-[6px] p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary transition-colors"
-            aria-label="Закрыть"
+            aria-label={t('github_modal.close_aria', 'Close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -129,7 +129,7 @@ export function GitHubIssueModal({
           {/* Category selection */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-text-secondary">
-              {t('github_modal.category_label', 'Категория обращения')}
+              {t('github_modal.category_label', 'Issue Category')}
             </label>
             <div className="grid grid-cols-3 gap-2">
               <button
@@ -142,7 +142,7 @@ export function GitHubIssueModal({
                 }`}
               >
                 <Bug className="h-4 w-4" />
-                <span>{t('github_modal.category_bug', 'Ошибка')}</span>
+                <span>{t('github_modal.category_bug', 'Bug')}</span>
               </button>
 
               <button
@@ -155,7 +155,7 @@ export function GitHubIssueModal({
                 }`}
               >
                 <Sparkles className="h-4 w-4" />
-                <span>{t('github_modal.category_feature', 'Идея')}</span>
+                <span>{t('github_modal.category_feature', 'Feature')}</span>
               </button>
 
               <button
@@ -168,7 +168,7 @@ export function GitHubIssueModal({
                 }`}
               >
                 <HelpCircle className="h-4 w-4" />
-                <span>{t('github_modal.category_question', 'Вопрос')}</span>
+                <span>{t('github_modal.category_question', 'Question')}</span>
               </button>
             </div>
           </div>
@@ -176,7 +176,7 @@ export function GitHubIssueModal({
           {/* Issue Title */}
           <div>
             <label htmlFor="issue-title" className="mb-1.5 block text-xs font-medium text-text-secondary">
-              {t('github_modal.title_label', 'Заголовок')} <span className="text-status-danger">*</span>
+              {t('github_modal.title_label', 'Title')} <span className="text-status-danger">*</span>
             </label>
             <input
               id="issue-title"
@@ -184,7 +184,7 @@ export function GitHubIssueModal({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={t('github_modal.title_placeholder', 'Краткое описание проблемы или идеи...')}
+              placeholder={t('github_modal.title_placeholder', 'Brief description of the issue or feature...')}
               className="w-full rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
             />
           </div>
@@ -192,7 +192,7 @@ export function GitHubIssueModal({
           {/* Issue Description */}
           <div>
             <label htmlFor="issue-description" className="mb-1.5 block text-xs font-medium text-text-secondary">
-              {t('github_modal.description_label', 'Подробное описание')} <span className="text-status-danger">*</span>
+              {t('github_modal.description_label', 'Detailed Description')} <span className="text-status-danger">*</span>
             </label>
             <textarea
               id="issue-description"
@@ -202,7 +202,7 @@ export function GitHubIssueModal({
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t(
                 'github_modal.description_placeholder',
-                'Опишите шаги для воспроизведения, ожидания и результат...'
+                'Describe steps to reproduce, expected vs actual result...'
               )}
               className="w-full rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none font-mono"
             />
@@ -219,7 +219,7 @@ export function GitHubIssueModal({
               />
               <Cpu className="h-3.5 w-3.5 text-text-muted" />
               <span className="text-xs text-text-primary">
-                {t('github_modal.include_sysinfo', 'Прикрепить информацию о системе (ОС, версия, права)')}
+                {t('github_modal.include_sysinfo', 'Attach system info (OS, version, privileges)')}
               </span>
             </label>
 
@@ -232,7 +232,7 @@ export function GitHubIssueModal({
               />
               <FileText className="h-3.5 w-3.5 text-text-muted" />
               <span className="text-xs text-text-primary">
-                {t('github_modal.include_logs', 'Прикрепить последние 50 строк журнала debug.log (обезличенно)')}
+                {t('github_modal.include_logs', 'Attach last 50 lines of debug.log (anonymized)')}
               </span>
             </label>
           </div>
@@ -241,7 +241,7 @@ export function GitHubIssueModal({
           <div className="space-y-1">
             <label htmlFor="github-token" className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
               <Key className="h-3.5 w-3.5 text-text-muted" />
-              <span>{t('github_modal.token_label', 'GitHub Personal Access Token (необязательно)')}</span>
+              <span>{t('github_modal.token_label', 'GitHub Personal Access Token (Optional)')}</span>
             </label>
             <input
               id="github-token"
@@ -254,7 +254,7 @@ export function GitHubIssueModal({
             <p className="text-[11px] text-text-muted">
               {t(
                 'github_modal.token_hint',
-                'При наличии токена создастся прямая задача в GitHub. Без токена откроется подготовленный браузер.'
+                'With token, issue is created directly via API. Without token, web form opens in browser.'
               )}
             </p>
           </div>
@@ -266,7 +266,7 @@ export function GitHubIssueModal({
               onClick={onClose}
               className="rounded-[6px] border border-border px-4 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
             >
-              {t('github_modal.cancel', 'Отмена')}
+              {t('github_modal.cancel', 'Cancel')}
             </button>
             <button
               type="submit"
@@ -276,15 +276,15 @@ export function GitHubIssueModal({
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>{t('github_modal.submitting', 'Отправка...')}</span>
+                  <span>{t('github_modal.submitting', 'Submitting...')}</span>
                 </>
               ) : (
                 <>
                   {githubToken.trim() ? <Send className="h-3.5 w-3.5" /> : <ExternalLink className="h-3.5 w-3.5" />}
                   <span>
                     {githubToken.trim()
-                      ? t('github_modal.submit_api', 'Создать Issue (API)')
-                      : t('github_modal.submit_browser', 'Открыть в браузере')}
+                      ? t('github_modal.submit_api', 'Create Issue (API)')
+                      : t('github_modal.submit_browser', 'Open in Browser')}
                   </span>
                 </>
               )}

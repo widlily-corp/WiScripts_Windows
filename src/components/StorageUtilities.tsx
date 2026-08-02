@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { useAppStore } from '../store/useAppStore';
 import {
   DuplicateGroup,
@@ -22,6 +23,7 @@ import {
   Square,
   ShieldAlert,
 } from 'lucide-react';
+import { getErrorMessage } from '../utils';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -31,7 +33,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-function formatDate(tsSec: number, t: any): string {
+function formatDate(tsSec: number, t: TFunction): string {
   if (!tsSec) return t('storageUtilities.unknown');
   const date = new Date(tsSec * 1000);
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -45,26 +47,22 @@ export function StorageUtilities() {
 
   const [activeTab, setActiveTab] = useState<'duplicates' | 'large'>('duplicates');
 
-  // State for Duplicates
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
 
-  // State for Large Files
   const [largeFiles, setLargeFiles] = useState<LargeFileItem[] | null>(null);
 
   const [isScanning, setIsScanning] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // Scan Duplicates
   const handleScanDuplicates = async () => {
     setIsScanning(true);
     addLog({ level: 'info', message: t('storageUtilities.startingDuplicateScan') });
     try {
       const res = await invoke<DuplicateGroup[]>('scan_duplicate_files', {});
       setDuplicateGroups(res);
-      // Auto expand top groups
       const topHashes = new Set(res.slice(0, 5).map((g) => g.hash));
       setExpandedGroups(topHashes);
       setSelectedPaths(new Set());
@@ -74,21 +72,21 @@ export function StorageUtilities() {
         message: t('storageUtilities.duplicateScanFinished', { count: res.length }),
       });
     } catch (err) {
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: t('storageUtilities.duplicateScanFailed', { error: String(err) }),
+        message: t('storageUtilities.duplicateScanFailed', { error: msg }),
       });
       addToast({
         type: 'error',
         title: t('storageUtilities.scanError'),
-        message: String(err),
+        message: msg,
       });
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Scan Large Files
   const handleScanLargeFiles = async () => {
     setIsScanning(true);
     addLog({ level: 'info', message: t('storageUtilities.startingLargeFilesScan') });
@@ -102,14 +100,15 @@ export function StorageUtilities() {
         message: t('storageUtilities.largeFilesScanFinished', { count: res.length }),
       });
     } catch (err) {
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: t('storageUtilities.largeFilesScanFailed', { error: String(err) }),
+        message: t('storageUtilities.largeFilesScanFailed', { error: msg }),
       });
       addToast({
         type: 'error',
         title: t('storageUtilities.scanError'),
-        message: String(err),
+        message: msg,
       });
     } finally {
       setIsScanning(false);
@@ -143,7 +142,6 @@ export function StorageUtilities() {
   const selectDuplicatesExceptFirst = (group: DuplicateGroup) => {
     setSelectedPaths((prev) => {
       const next = new Set(prev);
-      // Skip the first file in group, select all others
       group.files.slice(1).forEach((f) => next.add(f.path));
       return next;
     });
@@ -205,7 +203,6 @@ export function StorageUtilities() {
           message: t('storageUtilities.successfullyDeleted', { filesDeleted: res.filesDeleted, bytesFreed: formatBytes(res.bytesFreed) }),
         });
 
-        // Re-scan current active view
         if (activeTab === 'duplicates') {
           await handleScanDuplicates();
         } else {
@@ -213,14 +210,15 @@ export function StorageUtilities() {
         }
       }
     } catch (err) {
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: t('storageUtilities.deletionFailed', { error: String(err) }),
+        message: t('storageUtilities.deletionFailed', { error: msg }),
       });
       addToast({
         type: 'error',
         title: t('storageUtilities.deleteFailed'),
-        message: String(err),
+        message: msg,
       });
     } finally {
       setIsDeleting(false);

@@ -43,7 +43,6 @@ export function App() {
   const autoCheckUpdates = useAppStore((s) => s.autoCheckUpdates);
   const checkForUpdates = useAppStore((s) => s.checkForUpdates);
 
-  // Fetch real system information, version & check elevation on mount
   useEffect(() => {
     async function fetchSystemInfoOnMount() {
       try {
@@ -56,7 +55,6 @@ export function App() {
           message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${info.isElevated}, App v${ver})`,
         });
 
-        // Trigger non-intrusive update check if enabled
         if (autoCheckUpdates) {
           setTimeout(() => {
             checkForUpdates(true);
@@ -72,15 +70,12 @@ export function App() {
     fetchSystemInfoOnMount();
   }, [setSystemInfo, checkElevation, addLog, fetchAppVersion, autoCheckUpdates, checkForUpdates]);
 
-  // Generate ODT XML preview when odtConfig changes
   useEffect(() => {
     async function generateXmlPreview() {
       try {
         const xml = await invoke<string>('generate_odt_xml', { config: odtConfig });
         setGeneratedXml(xml);
-      } catch (err) {
-        // Silently capture XML generation error in dev mode
-      }
+      } catch (err) {}
     }
     generateXmlPreview();
   }, [odtConfig, setGeneratedXml]);

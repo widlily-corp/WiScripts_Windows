@@ -38,13 +38,11 @@ export function AudioView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [autoPoll, setAutoPoll] = useState(true);
 
-  // Initial load
   useEffect(() => {
     fetchAudioDevices();
     fetchAppAudioSessions();
   }, [fetchAudioDevices, fetchAppAudioSessions]);
 
-  // Auto-polling interval for dynamic session changes
   useEffect(() => {
     if (!autoPoll) return;
     const interval = setInterval(() => {

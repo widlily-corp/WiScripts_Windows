@@ -47,14 +47,14 @@ export function SettingsView() {
       const path = await exportDiagnosticDump();
       addToast({
         type: 'success',
-        title: 'Диагностический отчет создан',
-        message: `Архив сохранен на Рабочий стол: ${path}`,
+        title: t('settings.toastDumpCreatedTitle'),
+        message: t('settings.toastDumpCreatedMsg', { path }),
       });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       addToast({
         type: 'error',
-        title: 'Ошибка экспорта отчета',
+        title: t('settings.toastDumpErrorTitle'),
         message: errMsg,
       });
     } finally {
@@ -99,6 +99,7 @@ export function SettingsView() {
                   type="checkbox"
                   checked={dryRunMode}
                   onChange={(e) => setDryRunMode(e.target.checked)}
+                  aria-label={t('settings.globalDryRunLabel')}
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-surface-active peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"></div>
@@ -124,9 +125,9 @@ export function SettingsView() {
               <button
                 onClick={() => triggerMockUpdate()}
                 className="text-[10px] font-mono px-2 py-0.5 border border-brand/30 bg-brand/10 hover:bg-brand/20 text-brand rounded transition-colors"
-                title="Simulate release notes modal & update payload"
+                title={t('settings.mockUpdateTitle')}
               >
-                Mock Update (Dev)
+                {t('settings.mockUpdate')}
               </button>
             </div>
 
@@ -142,6 +143,7 @@ export function SettingsView() {
                   type="checkbox"
                   checked={autoCheckUpdates}
                   onChange={(e) => setAutoCheckUpdates(e.target.checked)}
+                  aria-label={t('settings.autoCheckLabel')}
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-surface-active peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"></div>
@@ -175,7 +177,7 @@ export function SettingsView() {
                     onClick={() => openReleaseNotesModal()}
                     className="px-2.5 py-1 bg-surface border border-brand/40 text-brand font-medium rounded-[4px] hover:bg-surface-hover transition-colors"
                   >
-                    Release Notes
+                    {t('settings.releaseNotes')}
                   </button>
                   <button
                     onClick={() => downloadAndInstallUpdate()}
@@ -189,7 +191,7 @@ export function SettingsView() {
 
             {updateStatus === 'error' && updateError && (
               <div className="rounded-[6px] border border-status-danger/40 bg-status-dangerSubtle p-3 text-xs text-status-danger space-y-1">
-                <div className="font-semibold">Update Error</div>
+                <div className="font-semibold">{t('settings.updateError')}</div>
                 <div className="font-mono text-[11px] text-status-danger/90">{updateError}</div>
               </div>
             )}
@@ -312,9 +314,9 @@ export function SettingsView() {
               <div className="flex items-start gap-3">
                 <Code2 className="h-4 w-4 text-brand shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-semibold text-text-primary">Microsoft Activation Scripts (MAS)</div>
+                  <div className="font-semibold text-text-primary">{t('settings.creditMasTitle')}</div>
                   <div className="text-text-muted text-[11px]">
-                    Open-source activation scripts created by Massgrave project (HWID, Ohook, KMS38).
+                    {t('settings.creditMasDesc')}
                   </div>
                 </div>
               </div>
@@ -322,9 +324,9 @@ export function SettingsView() {
               <div className="flex items-start gap-3">
                 <Layers className="h-4 w-4 text-brand shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-semibold text-text-primary">Office Deployment Tool (ODT)</div>
+                  <div className="font-semibold text-text-primary">{t('settings.creditOdtTitle')}</div>
                   <div className="text-text-muted text-[11px]">
-                    Microsoft official Office Deployment Tool XML configuration engine integration.
+                    {t('settings.creditOdtDesc')}
                   </div>
                 </div>
               </div>
@@ -332,9 +334,9 @@ export function SettingsView() {
               <div className="flex items-start gap-3">
                 <Terminal className="h-4 w-4 text-brand shrink-0 mt-0.5" />
                 <div>
-                  <div className="font-semibold text-text-primary">WiScripts Windows Utility</div>
+                  <div className="font-semibold text-text-primary">{t('settings.creditWiScriptsTitle')}</div>
                   <div className="text-text-muted text-[11px]">
-                    High-performance native Windows administration & debloating toolkit built with Rust & Tauri.
+                    {t('settings.creditWiScriptsDesc')}
                   </div>
                 </div>
               </div>
@@ -345,14 +347,14 @@ export function SettingsView() {
           <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
             <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
               <FileArchive className="h-4 w-4 text-brand" />
-              <h3 className="text-sm font-semibold text-text-primary">Диагностика и поддержка</h3>
+              <h3 className="text-sm font-semibold text-text-primary">{t('settings.diagnosticsTitle')}</h3>
             </div>
             <div className="space-y-3">
               <p className="text-xs text-text-secondary leading-relaxed">
-                Сформируйте диагностический архив (ZIP) со сведениями о системе и журналом debug.log для отладки и решения проблем.
+                {t('settings.diagnosticsDesc')}
               </p>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs text-text-muted">Архив на Рабочем столе</span>
+                <span className="text-xs text-text-muted">{t('settings.archiveLocation')}</span>
                 <button
                   onClick={handleExportDump}
                   disabled={isExporting}
@@ -363,21 +365,21 @@ export function SettingsView() {
                   ) : (
                     <Download className="h-3.5 w-3.5" />
                   )}
-                  <span>Сгенерировать отчет</span>
+                  <span>{t('settings.generateReport')}</span>
                 </button>
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
                 <div className="space-y-0.5">
-                  <div className="text-xs font-medium text-text-primary">Обратная связь и ошибки</div>
-                  <div className="text-[11px] text-text-muted">Создать обращение в репозиторий GitHub</div>
+                  <div className="text-xs font-medium text-text-primary">{t('settings.feedbackTitle')}</div>
+                  <div className="text-[11px] text-text-muted">{t('settings.feedbackDesc')}</div>
                 </div>
                 <button
                   onClick={() => setIsGitHubModalOpen(true)}
                   className="flex items-center gap-2 px-3.5 py-1.5 bg-surface-subtle hover:bg-surface-hover border border-border text-text-primary rounded-[6px] text-xs font-medium transition-colors"
                 >
                   <Bug className="h-3.5 w-3.5 text-brand" />
-                  <span>Сообщить на GitHub</span>
+                  <span>{t('settings.reportGitHub')}</span>
                 </button>
               </div>
             </div>

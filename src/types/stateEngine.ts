@@ -1,3 +1,12 @@
+export type StateSnapshotSource = 'user_manual' | 'pre_optimization' | 'scheduled' | 'api_trigger' | 'system_event';
+
+export function isStateSnapshotSource(value: unknown): value is StateSnapshotSource {
+  return (
+    typeof value === 'string' &&
+    ['user_manual', 'pre_optimization', 'scheduled', 'api_trigger', 'system_event'].includes(value)
+  );
+}
+
 export interface RegistryValueBackup {
   keyPath: string;
   valueName: string;
@@ -15,7 +24,7 @@ export interface SystemStateSnapshot {
   id: string;
   timestamp: number;
   label: string;
-  triggerSource: 'user_manual' | 'pre_optimization' | 'scheduled' | string;
+  triggerSource: StateSnapshotSource | string;
   registryDeltas: RegistryValueBackup[];
   serviceDeltas: ServiceBackup[];
 }

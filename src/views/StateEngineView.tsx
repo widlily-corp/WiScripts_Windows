@@ -19,8 +19,11 @@ import {
 import {
   SystemStateSnapshot,
   RollbackResult,
+  StateSnapshotSource,
+  isStateSnapshotSource,
 } from '../types/stateEngine';
 import { useAppStore } from '../store/useAppStore';
+import { getErrorMessage } from '../utils';
 
 export function StateEngineView() {
   const { t } = useTranslation();
@@ -31,7 +34,7 @@ export function StateEngineView() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newLabel, setNewLabel] = useState('');
-  const [newSource, setNewSource] = useState<'user_manual' | 'pre_optimization' | 'scheduled'>('user_manual');
+  const [newSource, setNewSource] = useState<StateSnapshotSource>('user_manual');
   const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
 
   const [rollbackResult, setRollbackResult] = useState<RollbackResult | null>(null);
@@ -48,7 +51,7 @@ export function StateEngineView() {
         message: `Loaded ${data.length} system state snapshots via IPC.`,
       });
     } catch (err) {
-      const msg = String(err);
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to list state snapshots: ${msg}`,
@@ -87,7 +90,7 @@ export function StateEngineView() {
       setNewLabel('');
       await fetchSnapshots();
     } catch (err) {
-      const msg = String(err);
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to create state snapshot: ${msg}`,
@@ -125,7 +128,7 @@ export function StateEngineView() {
         }),
       });
     } catch (err) {
-      const msg = String(err);
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to execute rollback for snapshot ${snapshotId}: ${msg}`,
@@ -155,7 +158,7 @@ export function StateEngineView() {
       });
       await fetchSnapshots();
     } catch (err) {
-      const msg = String(err);
+      const msg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to delete snapshot ${snapshotId}: ${msg}`,
@@ -227,7 +230,12 @@ export function StateEngineView() {
 
           <select
             value={newSource}
-            onChange={(e) => setNewSource(e.target.value as any)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (isStateSnapshotSource(val)) {
+                setNewSource(val);
+              }
+            }}
             aria-label={t('stateEngine.sourceAria', 'Select Trigger Source')}
             className="px-3 py-2 text-xs rounded-[6px] border border-border bg-surface-subtle text-text-primary focus:outline-none focus:border-border-focus"
           >

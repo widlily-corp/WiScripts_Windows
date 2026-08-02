@@ -14,31 +14,17 @@ function assert(condition: boolean, message: string) {
  * AAA Unit Tests for MarkdownRenderer
  */
 export function runMarkdownRendererUnitTests(): void {
-  // ---------------------------------------------------------
-  // Test 1: Header parsing (#, ##, ###)
-  // ---------------------------------------------------------
-  // Arrange
   const markdownHeadersInput = `# Main Release Title\n## Features & Enhancements\n### Internal Fixes`;
-
-  // Act
   const headerBlocks = parseMarkdownBlocks(markdownHeadersInput);
 
-  // Assert
   assert(headerBlocks.length === 3, 'Expected 3 heading blocks');
   assert(headerBlocks[0].type === 'heading' && headerBlocks[0].level === 1 && headerBlocks[0].text === 'Main Release Title', 'Header level 1 correctly parsed');
   assert(headerBlocks[1].type === 'heading' && headerBlocks[1].level === 2 && headerBlocks[1].text === 'Features & Enhancements', 'Header level 2 correctly parsed');
   assert(headerBlocks[2].type === 'heading' && headerBlocks[2].level === 3 && headerBlocks[2].text === 'Internal Fixes', 'Header level 3 correctly parsed');
 
-  // ---------------------------------------------------------
-  // Test 2: Bullet list parsing (- / *)
-  // ---------------------------------------------------------
-  // Arrange
   const listInput = `- Feature A: Dark mode\n- Feature B: Performance\n* Feature C: Security`;
-
-  // Act
   const listBlocks = parseMarkdownBlocks(listInput);
 
-  // Assert
   assert(listBlocks.length === 1, 'Expected 1 bullet list block');
   assert(listBlocks[0].type === 'list', 'Block type is list');
   if (listBlocks[0].type === 'list') {
@@ -48,16 +34,9 @@ export function runMarkdownRendererUnitTests(): void {
     assert(listBlocks[0].items[2] === 'Feature C: Security', 'List item 3 matches');
   }
 
-  // ---------------------------------------------------------
-  // Test 3: Block code parsing (```lang)
-  // ---------------------------------------------------------
-  // Arrange
   const codeBlockInput = `\`\`\`bash\nnpm run build\n\`\`\``;
-
-  // Act
   const codeBlocks = parseMarkdownBlocks(codeBlockInput);
 
-  // Assert
   assert(codeBlocks.length === 1, 'Expected 1 code block');
   assert(codeBlocks[0].type === 'code', 'Block type is code');
   if (codeBlocks[0].type === 'code') {
@@ -65,32 +44,18 @@ export function runMarkdownRendererUnitTests(): void {
     assert(codeBlocks[0].code === 'npm run build', 'Code content matches');
   }
 
-  // ---------------------------------------------------------
-  // Test 4: Blockquote parsing (>)
-  // ---------------------------------------------------------
-  // Arrange
   const blockquoteInput = `> Note: Restart system\n> To complete update installation`;
-
-  // Act
   const quoteBlocks = parseMarkdownBlocks(blockquoteInput);
 
-  // Assert
   assert(quoteBlocks.length === 1, 'Expected 1 blockquote block');
   assert(quoteBlocks[0].type === 'blockquote', 'Block type is blockquote');
   if (quoteBlocks[0].type === 'blockquote') {
     assert(quoteBlocks[0].text === 'Note: Restart system\nTo complete update installation', 'Quote text matches');
   }
 
-  // ---------------------------------------------------------
-  // Test 5: Inline formatting (bold, inline code, links)
-  // ---------------------------------------------------------
-  // Arrange
   const inlineInput = `**v0.4.0** contains \`bug fixes\` and [release notes](https://github.com/widlily/wiscripts)`;
-
-  // Act
   const inlineNodes = parseInline(inlineInput);
 
-  // Assert
   assert(inlineNodes.length === 5, 'Inline parser returned 5 nodes');
   assert(React.isValidElement(inlineNodes[0]), 'Node 0 (bold) is a valid React element');
   assert(typeof inlineNodes[1] === 'string' && inlineNodes[1] === ' contains ', 'Node 1 is plain text connector');

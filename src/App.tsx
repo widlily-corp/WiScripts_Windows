@@ -19,7 +19,7 @@ import { MasView } from './components/MasView';
 import { DiagnosticsView } from './components/DiagnosticsView';
 import { SettingsView } from './components/SettingsView';
 import { RestorePointsView } from './components/RestorePointsView';
-import { StateEngineView } from './components/StateEngineView';
+import { StateEngineView } from './views/StateEngineView';
 import { StartupView } from './components/StartupView';
 import { SchedulerView } from './components/SchedulerView';
 import { AutorunsView } from './views/AutorunsView';

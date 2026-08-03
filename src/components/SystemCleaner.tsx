@@ -245,7 +245,7 @@ export function SystemCleaner() {
                 onClick={selectAll}
                 className="text-brand hover:underline"
               >
-                Select All
+                {t('systemCleaner.selectAll')}
               </button>
               <span className="text-border">|</span>
               <button
@@ -253,7 +253,7 @@ export function SystemCleaner() {
                 onClick={deselectAll}
                 className="text-text-muted hover:text-text-primary"
               >
-                Deselect All
+                {t('systemCleaner.deselectAll')}
               </button>
             </div>
           </div>

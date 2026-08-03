@@ -84,7 +84,7 @@ export function OptimizationView() {
       : 'low';
 
     openSafetyModal({
-      title: `Execute ${selectedCount} {t('optimization.selected')} Optimization Rules`,
+      title: t('optimization.safetyModalTitle', { count: selectedCount }),
       description: t('optimization.safetyModalDesc', { mode: dryRunMode ? t('optimization.active') : t('optimization.disabled') }),
       riskLevel: highestRisk,
       commandsToRun: selectedRules.map((r) => r.powershellCommand),
@@ -142,7 +142,7 @@ export function OptimizationView() {
           });
           useAppStore.getState().addToast({
             type: 'error',
-            title: 'Optimization Error',
+            title: t('optimization.toastFailedTitle'),
             message: t('optimization.toastFailedMsg', { msg: errMsg }),
           });
         } finally {
@@ -178,7 +178,7 @@ export function OptimizationView() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="System Optimization & Debloat Rule Execution" />
+      <AdminElevationBanner featureName={t('optimization.title')} />
       {/* Header & Stats Banner */}
       <div className="rounded-[6px] border border-border bg-surface-subtle p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -216,7 +216,7 @@ export function OptimizationView() {
             ) : (
               <Play className="h-3.5 w-3.5 fill-current" />
             )}
-            <span>{isExecuting ? 'Executing Optimizations...' : `Execute ${t('optimization.selected')} (${selectedCount})`}</span>
+            <span>{isExecuting ? t('optimization.executing') : t('optimization.executeSelected', { count: selectedCount })}</span>
           </button>
         </div>
       </div>
@@ -341,7 +341,7 @@ export function OptimizationView() {
                         <h3 className="text-sm font-semibold text-text-primary truncate">{item.title}</h3>
                         {item.isRecommended && (
                           <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase text-brand border border-brand/20">
-                            Recommended
+                            {t('optimization.recommended')}
                           </span>
                         )}
                       </div>

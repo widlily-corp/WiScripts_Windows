@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandOutput {
+    #[serde(alias = "exit_code")]
     pub exit_code: i32,
     pub stdout: String,
     pub stderr: String,

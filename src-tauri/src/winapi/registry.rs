@@ -9,9 +9,20 @@ use windows::{
     },
 };
 
+pub fn sanitize_registry_input(input: &str) -> Result<String, String> {
+    if input.contains('\0') {
+        return Err("Registry input contains forbidden null byte".to_string());
+    }
+    if input.contains('\r') || input.contains('\n') {
+        return Err("Registry input contains forbidden newline characters".to_string());
+    }
+    Ok(input.trim().to_string())
+}
+
 #[cfg(windows)]
 pub fn parse_hive_and_subpath(key_path: &str) -> Result<(HKEY, String), String> {
-    let normalized = key_path.replace('/', "\\");
+    let clean_path = sanitize_registry_input(key_path)?;
+    let normalized = clean_path.replace('/', "\\");
     let trimmed = normalized.trim_end_matches('\\');
 
     let (hive_str, subpath) = if let Some(pos) = trimmed.find('\\') {
@@ -45,8 +56,9 @@ fn to_u16_vec(s: &str) -> Vec<u16> {
 #[cfg(windows)]
 pub fn set_dword(key_path: &str, value_name: &str, data: u32) -> Result<(), String> {
     let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
     let subpath_u16 = to_u16_vec(&subpath);
-    let val_u16 = to_u16_vec(value_name);
+    let val_u16 = to_u16_vec(&clean_val_name);
 
     unsafe {
         let mut key_handle = HKEY::default();
@@ -125,9 +137,11 @@ pub fn set_dword(key_path: &str, value_name: &str, data: u32) -> Result<(), Stri
 #[cfg(windows)]
 pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), String> {
     let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
+    let clean_data = sanitize_registry_input(data)?;
     let subpath_u16 = to_u16_vec(&subpath);
-    let val_u16 = to_u16_vec(value_name);
-    let data_u16 = to_u16_vec(data);
+    let val_u16 = to_u16_vec(&clean_val_name);
+    let data_u16 = to_u16_vec(&clean_data);
 
     unsafe {
         let mut key_handle = HKEY::default();

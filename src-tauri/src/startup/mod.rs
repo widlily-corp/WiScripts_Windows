@@ -20,6 +20,29 @@ fn escape_ps_param(s: &str) -> String {
     s.replace('\'', "''")
 }
 
+const VALID_STARTUP_LOCATIONS: &[&str] = &[
+    "HKCU Run",
+    "HKLM Run",
+    "HKCU RunOnce",
+    "HKLM RunOnce",
+    "User Startup Folder",
+    "Common Startup Folder",
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+    "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+    "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "StartupFolder",
+    "CommonStartupFolder",
+];
+
+fn is_valid_location(location: &str) -> bool {
+    let normalized = location.trim();
+    VALID_STARTUP_LOCATIONS
+        .iter()
+        .any(|valid| normalized.eq_ignore_ascii_case(valid))
+}
+
 pub fn get_startup_items(runner: &dyn CommandRunner) -> Result<Vec<StartupItem>, AppError> {
     if runner.is_dry_run() {
         return Ok(get_mock_startup_items());
@@ -208,6 +231,13 @@ pub fn toggle_startup_item(
             "Startup item value_name cannot be empty".to_string(),
         ));
     }
+
+    if !is_valid_location(location) {
+        return Err(AppError::Execution(format!(
+            "Invalid or unwhitelisted startup location: '{}'",
+            location
+        )));
+    }
     let action_name = format!(
         "Toggle startup item '{}' (enable={})",
         target_value_name, enable
@@ -323,6 +353,13 @@ pub fn remove_startup_item(
         return Err(AppError::Execution(
             "Startup item value_name cannot be empty".to_string(),
         ));
+    }
+
+    if !is_valid_location(location) {
+        return Err(AppError::Execution(format!(
+            "Invalid or unwhitelisted startup location: '{}'",
+            location
+        )));
     }
     let action_name = format!("Remove startup item '{}'", target_value_name);
 

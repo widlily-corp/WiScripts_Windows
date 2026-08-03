@@ -21,6 +21,34 @@ pub struct InstalledApp {
     pub install_location: Option<String>,
 }
 
+/// Escapes an argument string according to Windows CommandLineToArgvW rules.
+pub fn escape_cmd_arg(arg: &str) -> String {
+    if arg.is_empty() {
+        return "\"\"".to_string();
+    }
+    if !arg.contains(&[' ', '\t', '\n', '\x0b', '"'][..]) {
+        return arg.to_string();
+    }
+    let mut escaped = String::from("\"");
+    let mut backslashes = 0;
+    for ch in arg.chars() {
+        if ch == '\\' {
+            backslashes += 1;
+        } else if ch == '"' {
+            escaped.push_str(&"\\".repeat(backslashes * 2 + 1));
+            escaped.push('"');
+            backslashes = 0;
+        } else {
+            escaped.push_str(&"\\".repeat(backslashes));
+            escaped.push(ch);
+            backslashes = 0;
+        }
+    }
+    escaped.push_str(&"\\".repeat(backslashes * 2));
+    escaped.push('"');
+    escaped
+}
+
 /// Parses an uninstaller command line string into an executable program path and argument list.
 pub fn parse_uninstall_string(raw_cmd: &str) -> (String, Vec<String>) {
     let trimmed = raw_cmd.trim();
@@ -326,7 +354,7 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                         .collect();
                     let args_joined = args
                         .iter()
-                        .map(|arg| format!("\"{}\"", arg.replace('\"', "\\\"")))
+                        .map(|arg| escape_cmd_arg(arg))
                         .collect::<Vec<_>>()
                         .join(" ");
                     let args_u16: Vec<u16> = OsStr::new(&args_joined)
@@ -487,12 +515,20 @@ mod tests {
         ];
         let args_joined = args
             .iter()
-            .map(|arg| format!("\"{}\"", arg.replace('\"', "\\\"")))
+            .map(|arg| escape_cmd_arg(arg))
             .collect::<Vec<_>>()
             .join(" ");
         assert_eq!(
             args_joined,
-            "\"/S\" \"/dir=C:\\Program Files\\App\" \"/name=\\\"My App\\\"\""
+            "/S \"/dir=C:\\Program Files\\App\" \"/name=\\\"My App\\\"\""
         );
+    }
+
+    #[test]
+    fn test_escape_cmd_arg_cases() {
+        assert_eq!(escape_cmd_arg("C:\\Program Files\\"), "\"C:\\Program Files\\\\\"");
+        assert_eq!(escape_cmd_arg("arg with \"quotes\""), "\"arg with \\\"quotes\\\"\"");
+        assert_eq!(escape_cmd_arg("simple"), "simple");
+        assert_eq!(escape_cmd_arg(""), "\"\"");
     }
 }

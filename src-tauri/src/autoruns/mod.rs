@@ -633,15 +633,33 @@ struct RawAutorunEntry {
     enabled: bool,
 }
 
+/// Sanitizes an entry ID allowing only alphanumeric, underscore, and hyphen characters.
+pub fn sanitize_entry_id(id: &str) -> String {
+    let clean: String = id
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    let trimmed = clean.trim_matches('_');
+    if trimmed.is_empty() {
+        "invalid_id".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 /// Toggles autorun entry state (enable / disable).
 pub fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, String> {
     if entry_id.trim().is_empty() {
         return Err("Entry ID cannot be empty".to_string());
     }
 
+    let sanitized_id = sanitize_entry_id(&entry_id);
+    if sanitized_id == "invalid_id" {
+        return Err("Entry ID contains invalid characters".to_string());
+    }
+
     #[cfg(target_os = "windows")]
     {
-        let safe_id = entry_id.replace('\'', "''");
         let script = format!(
             r#"
 $id = '{safe_id}'
@@ -649,7 +667,7 @@ $enable = ${enable}
 # Registry / StartupApproved safe toggle fallback
 Write-Output "Toggled entry $id to enable=$enable"
 "#,
-            safe_id = safe_id,
+            safe_id = sanitized_id,
             enable = enable
         );
 
@@ -676,8 +694,12 @@ Write-Output "Toggled entry $id to enable=$enable"
 
 /// Quarantines an autorun entry by backing up its metadata/registry key and isolating binary file.
 pub fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, String> {
-    let clean_id = entry_id.trim();
-    if clean_id.is_empty() {
+    if entry_id.contains("..") || entry_id.contains('/') || entry_id.contains('\\') {
+        return Err("Entry ID contains path traversal sequence".to_string());
+    }
+
+    let clean_id = sanitize_entry_id(&entry_id);
+    if clean_id.is_empty() || clean_id == "invalid_id" {
         return Err("Entry ID cannot be empty for quarantine operation".to_string());
     }
 
@@ -692,6 +714,12 @@ pub fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, St
 
     let backup_key_file = registry_backup_dir.join(format!("{}.json", clean_id));
     let isolated_file = file_quarantine_dir.join(format!("{}.quarantine", clean_id));
+
+    if !backup_key_file.starts_with(&registry_backup_dir)
+        || !isolated_file.starts_with(&file_quarantine_dir)
+    {
+        return Err("Quarantine target path resolves outside designated quarantine directory".to_string());
+    }
 
     let backup_content = format!(
         r#"{{

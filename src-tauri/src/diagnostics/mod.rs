@@ -3,10 +3,58 @@ use crate::optimization::TaskProgressPayload;
 use crate::runner::{CommandRunner, ExecutedAction, ExecutionSummary};
 use tauri::Emitter;
 
+use std::path::{Path, PathBuf};
+
 struct DiagnosticStep {
     id: String,
     title: String,
     command: String,
+}
+
+/// Validates target export/dump file path against path traversal (.., slashes, out-of-bounds).
+pub fn validate_dump_path(target_path: &Path, allowed_base_dir: &Path) -> Result<PathBuf, AppError> {
+    let path_str = target_path.to_string_lossy();
+    if path_str.contains("..") {
+        return Err(AppError::InvalidConfig(
+            "Diagnostic dump path contains forbidden path traversal (..) sequence".to_string(),
+        ));
+    }
+
+    for component in target_path.components() {
+        if component == std::path::Component::ParentDir {
+            return Err(AppError::InvalidConfig(
+                "Diagnostic dump path component attempts parent directory traversal".to_string(),
+            ));
+        }
+    }
+
+    let absolute_target = if target_path.is_absolute() {
+        target_path.to_path_buf()
+    } else {
+        allowed_base_dir.join(target_path)
+    };
+
+    let canonical_base = allowed_base_dir
+        .canonicalize()
+        .unwrap_or_else(|_| allowed_base_dir.to_path_buf());
+
+    if let Ok(canonical_target) = absolute_target.canonicalize() {
+        if !canonical_target.starts_with(&canonical_base) {
+            return Err(AppError::InvalidConfig(
+                "Diagnostic dump path resolves outside designated directory".to_string(),
+            ));
+        }
+    } else if let Some(parent) = absolute_target.parent() {
+        if let Ok(canonical_parent) = parent.canonicalize() {
+            if !canonical_parent.starts_with(&canonical_base) {
+                return Err(AppError::InvalidConfig(
+                    "Diagnostic dump path parent resolves outside designated directory".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(absolute_target)
 }
 
 /// Executes Windows system diagnostics and repair tools (SFC, DISM, TCP/IP Reset).
@@ -261,5 +309,18 @@ mod tests {
             let summary = run_diagnostics(None, &runner, net_alias, true).unwrap();
             assert_eq!(summary.executed_actions[0].id, "reset_tcpip");
         }
+    }
+
+    #[test]
+    fn test_validate_dump_path_security() {
+        let temp_dir = std::env::temp_dir();
+        let valid_target = temp_dir.join("dump_test.zip");
+        assert!(validate_dump_path(&valid_target, &temp_dir).is_ok());
+
+        let invalid_traversal = temp_dir.join("../../../windows/system32/evil.dll");
+        assert!(validate_dump_path(&invalid_traversal, &temp_dir).is_err());
+
+        let relative_traversal = std::path::Path::new("..\\evil.zip");
+        assert!(validate_dump_path(relative_traversal, &temp_dir).is_err());
     }
 }

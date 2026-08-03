@@ -116,7 +116,25 @@ fn get_default_categories() -> Vec<(String, String, String, Vec<PathBuf>)> {
     ]
 }
 
+use std::sync::Mutex;
+
+static CLEANER_LOCK: Mutex<()> = Mutex::new(());
+
+fn force_remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let p = path.as_ref();
+    if let Ok(metadata) = p.metadata() {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            #[allow(clippy::permissions_set_readonly_false)]
+            permissions.set_readonly(false);
+            let _ = std::fs::set_permissions(p, permissions);
+        }
+    }
+    std::fs::remove_file(p)
+}
+
 pub fn scan_system() -> Result<CleanerScanResult, AppError> {
+    let _guard = CLEANER_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     log::info!("[Cleaner] Starting system scan...");
     let cat_defs = get_default_categories();
     let mut categories = Vec::new();
@@ -165,6 +183,7 @@ pub fn scan_system() -> Result<CleanerScanResult, AppError> {
 }
 
 pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppError> {
+    let _guard = CLEANER_LOCK.lock().unwrap_or_else(|p| p.into_inner());
     log::info!(
         "[Cleaner] Starting cleanup for categories: {:?}",
         category_ids
@@ -188,7 +207,7 @@ pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppE
 
             if path.is_file() {
                 let sz = path.metadata().map(|m| m.len()).unwrap_or(0);
-                match std::fs::remove_file(&path) {
+                match force_remove_file(&path) {
                     Ok(_) => {
                         bytes_freed += sz;
                         files_removed += 1;
@@ -224,7 +243,7 @@ pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppE
 
                 for file_path in files_to_delete {
                     let sz = file_path.metadata().map(|m| m.len()).unwrap_or(0);
-                    match std::fs::remove_file(&file_path) {
+                    match force_remove_file(&file_path) {
                         Ok(_) => {
                             bytes_freed += sz;
                             files_removed += 1;
@@ -329,5 +348,27 @@ mod tests {
 
         assert_eq!(skipped_files_count, 1);
         assert_eq!(errors.len(), 1);
+    }
+
+    #[test]
+    fn test_force_remove_readonly_file() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let readonly_file_path = dir.path().join("readonly.txt");
+        {
+            let mut f = std::fs::File::create(&readonly_file_path).unwrap();
+            f.write_all(b"readonly content").unwrap();
+            f.sync_all().unwrap();
+        }
+
+        let mut perms = std::fs::metadata(&readonly_file_path).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(true);
+        std::fs::set_permissions(&readonly_file_path, perms).unwrap();
+
+        assert!(std::fs::metadata(&readonly_file_path).unwrap().permissions().readonly());
+
+        let res = force_remove_file(&readonly_file_path);
+        assert!(res.is_ok(), "force_remove_file should remove read-only file after resetting permissions");
+        assert!(!readonly_file_path.exists());
     }
 }

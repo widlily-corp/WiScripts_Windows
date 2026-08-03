@@ -1093,7 +1093,7 @@ pub async fn run_scheduled_task(
 #[tauri::command]
 pub async fn get_installed_apps() -> Result<Vec<uninstaller::InstalledApp>, AppError> {
     log::info!("[IPC] get_installed_apps request received");
-    tauri::async_runtime::spawn_blocking(move || uninstaller::get_installed_apps())
+    tauri::async_runtime::spawn_blocking(uninstaller::get_installed_apps)
         .await
         .map_err(|e| AppError::Execution(format!("Join error in get_installed_apps: {}", e)))?
 }
@@ -1351,7 +1351,7 @@ pub fn build_github_issue_body(
     } else {
         body.push_str("- **System Info**: Excluded by user\n");
     }
-    body.push_str("\n");
+    body.push('\n');
 
     if payload.include_logs {
         body.push_str("### Debug Logs (Last 50 lines)\n");
@@ -1503,7 +1503,7 @@ pub async fn create_github_issue(
 #[tauri::command]
 pub async fn get_audio_devices() -> Result<audio::types::AudioDevicesPayload, AppError> {
     log::info!("[IPC] get_audio_devices request received");
-    tauri::async_runtime::spawn_blocking(move || audio::get_audio_devices())
+    tauri::async_runtime::spawn_blocking(audio::get_audio_devices)
         .await
         .map_err(|e| AppError::Execution(format!("Join error in get_audio_devices: {}", e)))?
 }
@@ -1526,7 +1526,7 @@ pub async fn set_global_audio_device(
 #[tauri::command]
 pub async fn get_app_audio_sessions() -> Result<Vec<audio::types::AppAudioSession>, AppError> {
     log::info!("[IPC] get_app_audio_sessions request received");
-    tauri::async_runtime::spawn_blocking(move || audio::get_app_audio_sessions())
+    tauri::async_runtime::spawn_blocking(audio::get_app_audio_sessions)
         .await
         .map_err(|e| AppError::Execution(format!("Join error in get_app_audio_sessions: {}", e)))?
 }
@@ -1646,7 +1646,7 @@ pub async fn trim_process_working_set(pid: u32) -> Result<u64, String> {
 #[tauri::command]
 pub async fn get_governor_status() -> Result<crate::governor::GovernorStatus, String> {
     log::debug!("[IPC] get_governor_status request received");
-    tauri::async_runtime::spawn_blocking(move || crate::governor::get_governor_status())
+    tauri::async_runtime::spawn_blocking(crate::governor::get_governor_status)
         .await
         .map_err(|e| format!("Join error in get_governor_status: {}", e))?
 }
@@ -1654,7 +1654,7 @@ pub async fn get_governor_status() -> Result<crate::governor::GovernorStatus, St
 #[tauri::command]
 pub async fn list_active_rules() -> Result<Vec<crate::governor::ResourceGovernorRule>, String> {
     log::debug!("[IPC] list_active_rules request received");
-    tauri::async_runtime::spawn_blocking(move || crate::governor::list_active_rules())
+    tauri::async_runtime::spawn_blocking(crate::governor::list_active_rules)
         .await
         .map_err(|e| format!("Join error in list_active_rules: {}", e))?
 }

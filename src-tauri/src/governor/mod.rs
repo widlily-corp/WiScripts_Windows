@@ -307,14 +307,18 @@ pub fn trim_process_working_set_internal(pid: u32) -> Result<u64, String> {
                 return Err(format!("Invalid handle for PID {}", pid));
             }
 
-            let mut counters_before = PROCESS_MEMORY_COUNTERS::default();
-            counters_before.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+            let mut counters_before = PROCESS_MEMORY_COUNTERS {
+                cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+                ..Default::default()
+            };
             let _ = K32GetProcessMemoryInfo(handle, &mut counters_before, counters_before.cb);
 
             let trim_res = SetProcessWorkingSetSize(handle, usize::MAX, usize::MAX);
 
-            let mut counters_after = PROCESS_MEMORY_COUNTERS::default();
-            counters_after.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+            let mut counters_after = PROCESS_MEMORY_COUNTERS {
+                cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+                ..Default::default()
+            };
             let _ = K32GetProcessMemoryInfo(handle, &mut counters_after, counters_after.cb);
 
             let _ = CloseHandle(handle);
@@ -496,10 +500,10 @@ pub fn get_governor_status() -> Result<GovernorStatus, String> {
         if matching_rule.is_none() && cpu_usage > 25.0 {
             // High CPU spike detected on an unruled process!
             // ProBalance dynamically suppresses spike by lowering priority to BELOW_NORMAL
-            if current_priority == "NORMAL" || current_priority == "HIGH" || current_priority == "ABOVE_NORMAL" {
-                if set_process_priority(pid_u32, "BELOW_NORMAL").is_ok() {
-                    state.pro_balance_events_triggered += 1;
-                }
+            if (current_priority == "NORMAL" || current_priority == "HIGH" || current_priority == "ABOVE_NORMAL")
+                && set_process_priority(pid_u32, "BELOW_NORMAL").is_ok()
+            {
+                state.pro_balance_events_triggered += 1;
             }
         }
 

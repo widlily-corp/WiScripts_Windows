@@ -311,7 +311,7 @@ $status | ConvertTo-Json -Compress
 
     let output = runner
         .run_powershell(script)
-        .map_err(|e| AppError::Execution(e))?;
+        .map_err(AppError::Execution)?;
     if output.exit_code == 0 {
         serde_json::from_str(&output.stdout)
             .map_err(|e| AppError::Execution(format!("Failed to parse status JSON: {}", e)))
@@ -556,18 +556,44 @@ pub fn execute(
                     return Err(AppError::Execution(e));
                 }
             }
-        } else if let Some(native_res) = execute_native_rule(&rule.id) {
-            match native_res {
-                Ok(stdout_msg) => crate::runner::CommandOutput {
-                    exit_code: 0,
-                    stdout: stdout_msg,
-                    stderr: String::new(),
-                },
-                Err(err_msg) => crate::runner::CommandOutput {
-                    exit_code: 1,
-                    stdout: String::new(),
-                    stderr: err_msg,
-                },
+        } else if runner.is_native_enabled() {
+            if let Some(native_res) = execute_native_rule(&rule.id) {
+                match native_res {
+                    Ok(stdout_msg) => crate::runner::CommandOutput {
+                        exit_code: 0,
+                        stdout: stdout_msg,
+                        stderr: String::new(),
+                    },
+                    Err(err_msg) => crate::runner::CommandOutput {
+                        exit_code: 1,
+                        stdout: String::new(),
+                        stderr: err_msg,
+                    },
+                }
+            } else {
+                match runner.run_powershell(&rule.powershell_command) {
+                    Ok(out) => out,
+                    Err(e) => {
+                        log::error!(
+                            "[OptimizationEngine] Rule '{}' failed to run: {}",
+                            rule.id,
+                            e
+                        );
+                        if let Some(app_handle) = app {
+                            let payload = TaskProgressPayload {
+                                current_step,
+                                total_steps,
+                                message: format!(
+                                    "Failed step {}/{}: {}: {}",
+                                    current_step, total_steps, rule.title, e
+                                ),
+                                is_error: true,
+                            };
+                            let _ = app_handle.emit("task-progress", &payload);
+                        }
+                        return Err(AppError::Execution(e));
+                    }
+                }
             }
         } else {
             match runner.run_powershell(&rule.powershell_command) {
@@ -801,7 +827,7 @@ mod tests {
     #[test]
     fn test_execute_optimizations_non_zero_exit_code() {
         let runner = FailingRunner { exit_code: 1 };
-        let selected = vec!["telemetry_diagtrack".to_string()];
+        let selected = vec!["telemetry_ceip_tasks".to_string()];
         let summary = execute(None, &runner, &selected, false).unwrap();
 
         assert!(

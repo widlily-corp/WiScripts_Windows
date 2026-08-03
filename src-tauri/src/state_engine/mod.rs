@@ -170,7 +170,7 @@ pub fn list_snapshots() -> Result<Vec<SystemSnapshot>, String> {
     let mut snapshots = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
             if let Ok(content) = fs::read_to_string(&path) {
                 if let Ok(snap) = serde_json::from_str::<SystemSnapshot>(&content) {
                     snapshots.push(snap);
@@ -179,7 +179,7 @@ pub fn list_snapshots() -> Result<Vec<SystemSnapshot>, String> {
         }
     }
 
-    snapshots.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    snapshots.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
     Ok(snapshots)
 }
 
@@ -437,7 +437,7 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
             let _ = QueryServiceConfigW(svc_handle, None, 0, &mut config_bytes);
 
             let startup_type_str = if config_bytes > 0 {
-                let mut config_buf = vec![0u64; (config_bytes as usize + 7) / 8];
+                let mut config_buf = vec![0u64; (config_bytes as usize).div_ceil(8)];
                 let config_ptr = config_buf.as_mut_ptr() as *mut QUERY_SERVICE_CONFIGW;
 
                 if QueryServiceConfigW(svc_handle, Some(config_ptr), config_bytes, &mut config_bytes)
@@ -513,7 +513,7 @@ fn restore_registry_entry(backup: &RegistryValueBackup) -> Result<(), String> {
 }
 
 fn hex_to_bytes(s: &str) -> Result<Vec<u8>, String> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("Hex string must have even length".to_string());
     }
     (0..s.len())

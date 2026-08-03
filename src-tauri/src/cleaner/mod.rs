@@ -69,57 +69,51 @@ fn get_default_categories() -> Vec<(String, String, String, Vec<PathBuf>)> {
         .or_else(dirs::data_local_dir)
         .unwrap_or_else(|| PathBuf::from(r"C:\Users\Default\AppData\Local"));
 
-    let mut categories = Vec::new();
-
-    // 1. User Temp
-    categories.push((
-        "user_temp".to_string(),
-        "User Temp Directory".to_string(),
-        "Temporary files created by user applications and sessions (%TEMP%)".to_string(),
-        vec![temp_dir],
-    ));
-
-    // 2. Windows System Temp
-    categories.push((
-        "system_temp".to_string(),
-        "Windows System Temp".to_string(),
-        "System-level temporary files and working buffers (C:\\Windows\\Temp)".to_string(),
-        vec![win_dir.join("Temp")],
-    ));
-
-    // 3. Software Distribution Download
-    categories.push((
-        "software_distribution".to_string(),
-        "Windows Update Cache".to_string(),
-        "Downloaded Windows Update installation files and cache".to_string(),
-        vec![win_dir.join("SoftwareDistribution").join("Download")],
-    ));
-
-    // 4. System Logs
-    categories.push((
-        "system_logs".to_string(),
-        "System Logs & Crash Dumps".to_string(),
-        "Windows system log files, WER error reports, and crash dumps".to_string(),
-        vec![
-            win_dir.join("Logs"),
-            win_dir.join("System32").join("winevt").join("Logs"),
-            local_appdata.join("CrashDumps"),
-        ],
-    ));
-
-    // 5. Browser Cache
-    categories.push((
-        "browser_cache".to_string(),
-        "Browser Caches".to_string(),
-        "Temporary web cache files for Chrome, Edge, and Firefox".to_string(),
-        vec![
-            local_appdata.join(r"Google\Chrome\User Data\Default\Cache"),
-            local_appdata.join(r"Microsoft\Edge\User Data\Default\Cache"),
-            local_appdata.join(r"Mozilla\Firefox\Profiles"),
-        ],
-    ));
-
-    categories
+    vec![
+        // 1. User Temp
+        (
+            "user_temp".to_string(),
+            "User Temp Directory".to_string(),
+            "Temporary files created by user applications and sessions (%TEMP%)".to_string(),
+            vec![temp_dir],
+        ),
+        // 2. Windows System Temp
+        (
+            "system_temp".to_string(),
+            "Windows System Temp".to_string(),
+            "System-level temporary files and working buffers (C:\\Windows\\Temp)".to_string(),
+            vec![win_dir.join("Temp")],
+        ),
+        // 3. Software Distribution Download
+        (
+            "software_distribution".to_string(),
+            "Windows Update Cache".to_string(),
+            "Downloaded Windows Update installation files and cache".to_string(),
+            vec![win_dir.join("SoftwareDistribution").join("Download")],
+        ),
+        // 4. System Logs
+        (
+            "system_logs".to_string(),
+            "System Logs & Crash Dumps".to_string(),
+            "Windows system log files, WER error reports, and crash dumps".to_string(),
+            vec![
+                win_dir.join("Logs"),
+                win_dir.join("System32").join("winevt").join("Logs"),
+                local_appdata.join("CrashDumps"),
+            ],
+        ),
+        // 5. Browser Cache
+        (
+            "browser_cache".to_string(),
+            "Browser Caches".to_string(),
+            "Temporary web cache files for Chrome, Edge, and Firefox".to_string(),
+            vec![
+                local_appdata.join(r"Google\Chrome\User Data\Default\Cache"),
+                local_appdata.join(r"Microsoft\Edge\User Data\Default\Cache"),
+                local_appdata.join(r"Mozilla\Firefox\Profiles"),
+            ],
+        ),
+    ]
 }
 
 pub fn scan_system() -> Result<CleanerScanResult, AppError> {

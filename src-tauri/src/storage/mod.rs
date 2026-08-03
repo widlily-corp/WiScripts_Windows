@@ -311,7 +311,7 @@ pub fn scan_large_files(
         }
     }
 
-    large_files.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+    large_files.sort_by_key(|b| std::cmp::Reverse(b.size_bytes));
     large_files.truncate(max_items);
 
     log::info!(
@@ -467,7 +467,7 @@ mod tests {
             f2.sync_all().unwrap();
         }
 
-        let groups = scan_duplicate_files(Some(dir.path().to_string_lossy().to_string()));
+        let _groups = scan_duplicate_files(Some(dir.path().to_string_lossy().to_string()));
         // Note: target_dir in tempdir is outside USERPROFILE unless tempdir is in USERPROFILE.
         // Let's check compute_file_hash and hashing logic directly:
         let hash1 = compute_file_hash(&file1_path).unwrap();

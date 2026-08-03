@@ -47,10 +47,10 @@ pub fn parse_uninstall_string(raw_cmd: &str) -> (String, Vec<String>) {
     }
 
     // 2. Quoted Executable Path
-    if trimmed.starts_with('"') {
-        if let Some(close_quote) = trimmed[1..].find('"') {
-            let exe_path = &trimmed[1..close_quote + 1];
-            let remainder = trimmed[close_quote + 2..].trim();
+    if let Some(stripped) = trimmed.strip_prefix('"') {
+        if let Some(close_quote) = stripped.find('"') {
+            let exe_path = &stripped[..close_quote];
+            let remainder = stripped[close_quote + 1..].trim();
             let args = split_arguments(remainder);
             return (exe_path.to_string(), args);
         }
@@ -346,7 +346,7 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                     };
 
                     if (res.0 as usize) > 32 {
-                        return Ok(ExecutionSummary {
+                        Ok(ExecutionSummary {
                             success: true,
                             executed_actions: vec![ExecutedAction {
                                 id: format!("uninstall_{}", app.id),
@@ -364,12 +364,12 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                             }],
                             total_duration_ms: start_time.elapsed().as_millis() as u64,
                             is_dry_run: false,
-                        });
+                        })
                     } else {
-                        return Err(AppError::Execution(format!(
+                        Err(AppError::Execution(format!(
                             "Elevated launch via ShellExecuteW failed with OS error code {}",
                             res.0 as usize
-                        )));
+                        )))
                     }
                 }
                 #[cfg(not(target_os = "windows"))]

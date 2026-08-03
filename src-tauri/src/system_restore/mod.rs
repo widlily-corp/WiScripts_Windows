@@ -198,26 +198,28 @@ pub fn create_restore_point(
 
     #[cfg(target_os = "windows")]
     {
-        match native_winapi::create_restore_point_native(description) {
-            Ok(seq) => {
-                log::info!(
-                    "[SystemRestore] Native SRSetRestorePointW created restore point (seq #{})",
-                    seq
-                );
-                return Ok(ExecutedAction {
-                    id: "create_restore_point".to_string(),
-                    name: format!("Create System Restore Point ({})", description),
-                    command: format!("WinAPI::SRSetRestorePointW({})", description),
-                    output: crate::runner::CommandOutput {
-                        exit_code: 0,
-                        stdout: format!("Native System Restore Point created (Sequence #{})", seq),
-                        stderr: String::new(),
-                    },
-                    skipped: false,
-                });
-            }
-            Err(e) => {
-                log::warn!("[SystemRestore] Native SRSetRestorePointW failed: {}. Falling back to PowerShell Checkpoint-Computer...", e);
+        if runner.is_native_enabled() {
+            match native_winapi::create_restore_point_native(description) {
+                Ok(seq) => {
+                    log::info!(
+                        "[SystemRestore] Native SRSetRestorePointW created restore point (seq #{})",
+                        seq
+                    );
+                    return Ok(ExecutedAction {
+                        id: "create_restore_point".to_string(),
+                        name: format!("Create System Restore Point ({})", description),
+                        command: format!("WinAPI::SRSetRestorePointW({})", description),
+                        output: crate::runner::CommandOutput {
+                            exit_code: 0,
+                            stdout: format!("Native System Restore Point created (Sequence #{})", seq),
+                            stderr: String::new(),
+                        },
+                        skipped: false,
+                    });
+                }
+                Err(e) => {
+                    log::warn!("[SystemRestore] Native SRSetRestorePointW failed: {}. Falling back to PowerShell Checkpoint-Computer...", e);
+                }
             }
         }
     }

@@ -178,7 +178,7 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
             Some(&mut buf_size),
         );
 
-        let mut read_buf = vec![0u16; (buf_size as usize + 1) / 2];
+        let mut read_buf = vec![0u16; (buf_size as usize).div_ceil(2)];
         let query_res = RegQueryValueExW(
             key_handle,
             PCWSTR(val_u16.as_ptr()),

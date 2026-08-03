@@ -22,7 +22,7 @@ fn get_process_name_by_pid(pid: u32) -> String {
             let _ = CloseHandle(h);
             if len > 0 {
                 let full_path = String::from_utf16_lossy(&buf[..len as usize]);
-                if let Some(filename) = full_path.split('\\').last() {
+                if let Some(filename) = full_path.split('\\').next_back() {
                     let clean = filename.trim_end_matches(".exe");
                     if !clean.is_empty() {
                         let mut chars = clean.chars();

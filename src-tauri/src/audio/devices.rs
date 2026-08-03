@@ -114,8 +114,8 @@ fn enumerate_flow_devices(
                 .unwrap_or_else(|| format!("Audio Device {}", i + 1));
             let (volume, is_muted) = get_device_volume_and_mute(&dev);
 
-            let is_default_multi = def_multi.as_ref().map_or(false, |d| d == &id);
-            let is_default_comm = def_comm.as_ref().map_or(false, |d| d == &id);
+            let is_default_multi = def_multi.as_ref() == Some(&id);
+            let is_default_comm = def_comm.as_ref() == Some(&id);
             let is_default = is_default_multi || is_default_comm;
             let icon = determine_device_icon(&name, flow_enum);
 

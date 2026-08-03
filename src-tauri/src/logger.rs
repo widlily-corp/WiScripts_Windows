@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// Returns the absolute path to `debug.log` in the local application data directory.
 pub fn get_log_path() -> PathBuf {
     dirs::data_local_dir()
-        .unwrap_or_else(|| std::env::temp_dir())
+        .unwrap_or_else(std::env::temp_dir)
         .join("WiScripts")
         .join("logs")
         .join("debug.log")

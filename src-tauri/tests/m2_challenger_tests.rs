@@ -195,9 +195,10 @@ fn test_r4_dns_context_dry_run_command_recordings() {
     assert_eq!(history.len(), 1);
     assert!(history[0].command.contains("1.1.1.1"));
     assert!(history[0].command.contains("1.0.0.1"));
-    assert!(history[0]
-        .command
-        .contains("-InterfaceAlias \"Ethernet 1\""));
+    assert!(
+        history[0].command.contains("-InterfaceAlias \"Ethernet 1\"")
+            || history[0].command.contains("-InterfaceAlias 'Ethernet 1'")
+    );
 
     // 3. set_dns_server - google
     runner.clear_history();

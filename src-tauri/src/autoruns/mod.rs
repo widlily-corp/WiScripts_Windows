@@ -35,7 +35,7 @@ pub struct QuarantineResult {
 
 #[cfg(target_os = "windows")]
 #[repr(C)]
-struct GUID {
+struct Guid {
     data1: u32,
     data2: u16,
     data3: u16,
@@ -43,7 +43,7 @@ struct GUID {
 }
 
 #[cfg(target_os = "windows")]
-const WINTRUST_ACTION_GENERIC_VERIFY_V2: GUID = GUID {
+const WINTRUST_ACTION_GENERIC_VERIFY_V2: Guid = Guid {
     data1: 0x00aac56b,
     data2: 0xcd44,
     data3: 0x11d0,
@@ -65,7 +65,7 @@ struct WINTRUST_FILE_INFO {
     cb_struct: u32,
     pcwsz_file_path: *const u16,
     h_file: *mut std::ffi::c_void,
-    pg_known_subject: *const GUID,
+    pg_known_subject: *const Guid,
 }
 
 #[cfg(target_os = "windows")]
@@ -91,7 +91,7 @@ struct WINTRUST_DATA {
 extern "system" {
     fn WinVerifyTrust(
         hwnd: *mut std::ffi::c_void,
-        pgActionID: *const GUID,
+        pgActionID: *const Guid,
         pWTD: *mut WINTRUST_DATA,
     ) -> i32;
 }
@@ -151,7 +151,7 @@ pub fn verify_file_authenticode(file_path: String) -> Result<String, String> {
             Ok("Valid".to_string())
         } else if status_code == 0x800B0100 || status == -2146762496 {
             Ok("Unsigned".to_string())
-        } else if (status_code >= 0x800B0000 && status_code <= 0x800B01FF) || status < 0 {
+        } else if (0x800B0000..=0x800B01FF).contains(&status_code) || status < 0 {
             Ok("InvalidCertificate".to_string())
         } else {
             Ok("Unknown".to_string())
@@ -252,14 +252,13 @@ pub fn calculate_risk_score(
     }
 
     // 5. Unknown or missing publisher
-    if pub_lower.is_empty()
+    if (pub_lower.is_empty()
         || pub_lower == "unsigned"
         || pub_lower == "unknown vendor"
-        || pub_lower == "third party"
+        || pub_lower == "third party")
+        && signature_status != "Valid"
     {
-        if signature_status != "Valid" {
-            score += 10;
-        }
+        score += 10;
     }
 
     score.min(100) as u8
@@ -615,7 +614,7 @@ if ($entries.Count -eq 0) { "[]" } else { $entries | ConvertTo-Json -Compress }
             })
             .collect();
 
-        processed.sort_by(|a, b| b.risk_score.cmp(&a.risk_score));
+        processed.sort_by_key(|b| std::cmp::Reverse(b.risk_score));
         Ok(processed)
     } else {
         Ok(get_mock_autorun_entries())

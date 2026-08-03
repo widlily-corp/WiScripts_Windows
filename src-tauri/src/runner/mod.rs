@@ -48,6 +48,11 @@ pub trait CommandRunner: Send + Sync {
 
     /// Returns whether this runner operates in safe dry-run mode.
     fn is_dry_run(&self) -> bool;
+
+    /// Returns whether this runner supports native WinAPI execution (only RealRunner for live production).
+    fn is_native_enabled(&self) -> bool {
+        false
+    }
 }
 
 /// Decodes raw process output bytes attempting UTF-8 first, falling back to CP866 for Cyrillic console output.
@@ -233,6 +238,10 @@ impl CommandRunner for RealRunner {
 
     fn is_dry_run(&self) -> bool {
         false
+    }
+
+    fn is_native_enabled(&self) -> bool {
+        true
     }
 }
 

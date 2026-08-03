@@ -34,6 +34,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', labelKey: 'nav.items.dashboard', icon: LayoutDashboard },
+  { id: 'script_runner', labelKey: 'nav.items.script_runner', icon: Terminal },
   { id: 'audio_manager', labelKey: 'nav.items.audio_manager', icon: Volume2 },
   { id: 'governor', labelKey: 'nav.items.governor', icon: Cpu },
   { id: 'optimization', labelKey: 'nav.items.optimization', icon: Sliders },
@@ -74,7 +75,7 @@ export function Navigation() {
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              {t('nav.app_version', { version: appVersion || '0.9.7' })}
+              {t('nav.app_version', { version: appVersion || '0.9.9' })}
             </span>
           </div>
         </div>

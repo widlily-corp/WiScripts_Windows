@@ -18,9 +18,9 @@ use crate::state_engine::{self, RollbackResult, SystemSnapshot};
 use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
+pub use crate::script_runner::execute_custom_script;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,17 +39,31 @@ pub struct SystemInfo {
 fn check_is_elevated() -> bool {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = std::process::Command::new("net");
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::Security::{
+            GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+        };
+        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+        unsafe {
+            let mut token = HANDLE::default();
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_ok() {
+                let mut elevation = TOKEN_ELEVATION::default();
+                let mut size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
+                let res = GetTokenInformation(
+                    token,
+                    TokenElevation,
+                    Some((&mut elevation as *mut TOKEN_ELEVATION) as *mut _),
+                    size,
+                    &mut size,
+                );
+                let _ = windows::Win32::Foundation::CloseHandle(token);
+                if res.is_ok() {
+                    return elevation.TokenIsElevated != 0;
+                }
+            }
+            false
         }
-        cmd.stdin(Stdio::null())
-            .arg("session")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -915,6 +929,12 @@ pub async fn get_system_temperatures() -> Result<metrics::SystemTemperaturesPayl
 }
 
 #[tauri::command]
+pub async fn get_temperatures() -> Result<metrics::SystemTemperaturesPayload, AppError> {
+    log::debug!("[IPC] get_temperatures request received");
+    get_system_temperatures().await
+}
+
+#[tauri::command]
 pub async fn get_startup_items(
     dry_run: Option<bool>,
 ) -> Result<Vec<startup::StartupItem>, AppError> {
@@ -1189,7 +1209,8 @@ pub async fn export_diagnostic_dump() -> Result<String, AppError> {
         .as_secs();
 
     let filename = format!("WiScripts_Diagnostic_Dump_{}.zip", timestamp);
-    let zip_path = desktop_dir.join(&filename);
+    let raw_zip_path = desktop_dir.join(&filename);
+    let zip_path = diagnostics::validate_dump_path(&raw_zip_path, &desktop_dir)?;
 
     let sys_info = get_system_info().await?;
     let sys_info_json = serde_json::to_string_pretty(&sys_info)

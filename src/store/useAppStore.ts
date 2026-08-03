@@ -7,6 +7,7 @@ import { createOptimizationSlice, OptimizationSlice } from './slices/optimizatio
 import { createAudioSlice, AudioSlice } from './slices/audioSlice';
 import { createPackageManagerSlice, PackageManagerSlice } from './slices/packageManagerSlice';
 import { createSystemToolsSlice, SystemToolsSlice } from './slices/systemToolsSlice';
+import { createScriptRunnerSlice, ScriptRunnerSlice } from './slices/scriptRunnerSlice';
 
 export type { PendingSafetyModal };
 
@@ -16,7 +17,8 @@ export type AppState = SystemSlice &
   OptimizationSlice &
   AudioSlice &
   PackageManagerSlice &
-  SystemToolsSlice;
+  SystemToolsSlice &
+  ScriptRunnerSlice;
 
 export const useAppStore = create<AppState>()(
   devtools(
@@ -29,6 +31,7 @@ export const useAppStore = create<AppState>()(
         ...createAudioSlice(...a),
         ...createPackageManagerSlice(...a),
         ...createSystemToolsSlice(...a),
+        ...createScriptRunnerSlice(...a),
       }),
       {
         name: 'wiscripts-app-store',
@@ -39,6 +42,8 @@ export const useAppStore = create<AppState>()(
           selectedMasMethod: state.selectedMasMethod,
           driverBackupPath: state.driverBackupPath,
           selectedDnsProvider: state.selectedDnsProvider,
+          selectedCpuSensorId: state.selectedCpuSensorId,
+          selectedGpuSensorId: state.selectedGpuSensorId,
         }),
       }
     )

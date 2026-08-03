@@ -4,6 +4,7 @@ import { useAppStore } from './store/useAppStore';
 import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
+import { ScriptRunnerView } from './components/ScriptRunnerView';
 import { AudioView } from './components/AudioView';
 import { GovernorView } from './views/GovernorView';
 import { OptimizationView } from './components/OptimizationView';
@@ -91,6 +92,7 @@ export function App() {
         <main className="flex-1 overflow-auto">
           <ErrorBoundary>
             {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'script_runner' && <ScriptRunnerView />}
             {activeTab === 'audio_manager' && <AudioView />}
             {activeTab === 'governor' && <GovernorView />}
             {activeTab === 'optimization' && <OptimizationView />}

@@ -16,6 +16,7 @@ pub mod packages;
 pub mod profiles;
 pub mod runner;
 pub mod scheduler;
+pub mod script_runner;
 pub mod startup;
 pub mod state_engine;
 pub mod storage;
@@ -43,6 +44,7 @@ pub fn run() {
             commands::get_system_info,
             commands::get_system_metrics,
             commands::get_system_temperatures,
+            commands::get_temperatures,
             commands::get_startup_items,
             commands::toggle_startup_item,
             commands::remove_startup_item,
@@ -100,6 +102,7 @@ pub fn run() {
             commands::get_governor_status,
             commands::list_active_rules,
             commands::delete_governor_rule,
+            script_runner::execute_custom_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

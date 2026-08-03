@@ -50,6 +50,7 @@ export type MasMethod = 'HWID' | 'Ohook' | 'KMS38' | 'TSforge';
 
 export interface CommandOutput {
   exitCode: number;
+  exit_code?: number;
   stdout: string;
   stderr: string;
 }
@@ -90,6 +91,7 @@ export * from './governor';
 
 export type TabType =
   | 'dashboard'
+  | 'script_runner'
   | 'audio_manager'
   | 'governor'
   | 'optimization'
@@ -196,10 +198,12 @@ export interface SystemMetricsPayload {
 export type ThermalStatus = 'normal' | 'warm' | 'hot' | 'unknown';
 
 export interface TemperatureSensorInfo {
+  id: string;
   name: string;
   label: string;
   temperatureCelsius: number;
   sensorType: 'cpu' | 'gpu' | 'other' | string;
+  provider: string;
 }
 
 export interface SystemTemperaturesPayload {
@@ -209,6 +213,8 @@ export interface SystemTemperaturesPayload {
   isGpuTempAvailable: boolean;
   sensorSource: string;
   sensorItems: TemperatureSensorInfo[];
+  selectedCpuSensorId?: string | null;
+  selectedGpuSensorId?: string | null;
 }
 
 export interface MetricSnapshot {

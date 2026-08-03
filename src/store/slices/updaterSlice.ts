@@ -36,7 +36,7 @@ export interface UpdaterSlice {
 }
 
 export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = (set, get) => ({
-  appVersion: '0.9.0',
+  appVersion: '0.9.7',
   setAppVersion: (ver) => set({ appVersion: ver }),
   fetchAppVersion: async () => {
     try {
@@ -48,7 +48,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     } catch (err) {
       // Dev mode fallback
     }
-    const current = get().appVersion || '0.9.0';
+    const current = get().appVersion || '0.9.7';
     return current;
   },
 
@@ -67,10 +67,10 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
   triggerMockUpdate: (mockInfo) => {
     const info: UpdateInfo = {
       version: mockInfo?.version || '0.9.5',
-      currentVersion: get().appVersion || '0.9.0',
+      currentVersion: get().appVersion || '0.9.7',
       body:
         mockInfo?.body ||
-        `# What's New in v0.9.0\n\n### Features & Enhancements\n- **Rich Markdown Release Notes Modal**: Interactive update dialog displaying formatted changelog before installation.\n- **Enhanced Error Handling**: Gracefully catches missing release manifest (\`latest.json\`) on remote repository.\n- **Refined Minimal Design System**: Deep dark aesthetics (\`#08090A\`), hairlines (\`#22252A\`), accent blue (\`#3B82F6\`), and Geist/JetBrains Mono typography.\n\n### Bug Fixes\n- Fixed window position persistence across multi-monitor displays.\n- Resolved potential unhandled promise rejections during offline background update checks.\n\n> Note: Please restart your system after updating for all low-level service adjustments to take effect. For full repository source code, visit [GitHub Repository](https://github.com/widlily/wiscripts).`,
+        `# What's New in v0.9.7\n\n### Architecture\n- **Zustand Slice Architecture**: Monolithic store decomposed into 7 independent slices.\n- **Strict TypeScript**: All \`as any\` assertions replaced with proper Type Guards.\n\n### Performance\n- **Optimized Bundle**: Manual chunk splitting eliminates 500kB+ warnings.\n\n### Quality\n- **226 Rust tests passing**: All backend modules verified.\n- **Full i18n coverage**: No hardcoded strings remain.\n\n> Restart your system after updating for service adjustments to take effect.`,
       date: mockInfo?.date || new Date().toISOString().split('T')[0],
     };
     set({

@@ -48,7 +48,7 @@ export function UpdateBanner() {
               ? t('update_banner.restart_desc')
               : updateStatus === 'downloading'
               ? t('update_banner.keep_open_desc')
-              : t('update_banner.current_version', { currentVersion: updateInfo?.currentVersion || '0.9.0' })}
+              : t('update_banner.current_version', { currentVersion: updateInfo?.currentVersion || '0.9.7' })}
           </span>
         </div>
       </div>

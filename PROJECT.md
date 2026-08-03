@@ -1,40 +1,34 @@
-# Project: WiScripts Windows Application Refactoring
+# Project: WiScripts Windows v0.9.7 Release & Bugfix
 
 ## Architecture
-- React 18 + Vite + TypeScript (strict mode)
-- Zustand v4 state store refactored into domain slices
-- i18next + react-i18next localization system
-- Tauri desktop integration framework
+- Frontend: React 18, TypeScript, Tailwind CSS, Lucide icons, Zustand (7 slices), Vite bundler.
+- Backend: Rust 2021, Tauri v1, Windows WinAPI, MMDeviceAPI, PolicyConfig.
+- Target OS: Windows 10/11.
 
 ## Feature Inventory
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | Zustand Store Refactoring & Data Extraction | Extract constants to src/constants/, mocks to src/mocks/, break useAppStore.ts into 7 slices, re-export backward-compatible hook | M1 | ORIGINAL_REQUEST R1 |
-| 2 | Code Quality & AI-Slop Removal | Remove 30+ redundant AI-slop comments (// Category 1, // Feature, etc.) across store and views | M2 | ORIGINAL_REQUEST R2 |
-| 3 | Strict Typing & Error Handling | Remove all `as any` casting, add `src/utils/errors.ts`, add early returns in checkForUpdates & store actions | M3 | ORIGINAL_REQUEST R3 |
-| 4 | Localization (i18n) | Extract hardcoded Russian text from SettingsView.tsx, GitHubIssueModal.tsx, UninstallerView.tsx into en/ru locale JSON files | M4 | ORIGINAL_REQUEST R4 |
-| 5 | E2E Verification, Conventional Commits & Git Push | Verify build/tests, create atomic conventional commits, and push to remote origin/main | M5 | ORIGINAL_REQUEST R5 |
+| # | Feature / Requirement | Description | Milestone | Source |
+|---|------------------------|-------------|-----------|--------|
+| 1 | Frontend Bug Fixes | Fix `OptimizationView.tsx` string interpolation, delete `replace.py`, standardize `App.tsx` imports, i18n strings in `SystemCleaner.tsx` and `PresetsView.tsx` | M1 | Survey |
+| 2 | Vite Chunk Optimization | Configure `manualChunks` in `vite.config.ts` to fix >500kB bundle warning | M1 | Survey |
+| 3 | Backend Clippy & Warnings Fix | Fix unused variable in `storage/mod.rs` and 29 clippy warnings across 12 Rust files | M1 | Survey |
+| 4 | Version Bump to 0.9.7 | Update version to 0.9.7 in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `updaterSlice.ts`, `Navigation.tsx`, `UpdateBanner.tsx`, Rust commands unit tests, empirical test assertions | M2 | Requirement R2 |
+| 5 | Release Notes Generation | Create `RELEASE_NOTES_0.9.7.md` summarizing store refactoring, quality improvements, new features, and bug fixes | M3 | Requirement R3 |
+| 6 | Version Control & Release | Commit changes with clean atomic Conventional Commits and push to remote repository | M4 | Requirement R4 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| 1 | M1: State Store Slices & Constants | Extract constants & mocks, split store into 7 Zustand slices, re-export useAppStore | None | DONE |
-| 2 | M2: Code Quality & AI-Slop Cleanup | Remove redundant comments, category headers, section dividers across src/ | M1 | DONE |
-| 3 | M3: Strict Typing & Error Handling | Create src/utils/errors.ts, replace `as any`, non-null assertions, apply early returns | M1 | DONE |
-| 4 | M4: Localization i18n | Update en.json & ru.json, refactor UI components to use useTranslation & t() | M1 | IN_PROGRESS |
-| 5 | M5: Verification, Commits & Push | Run full build, tsc check, node test suite, atomic Conventional Commits, push to remote | M1, M2, M3, M4 | PLANNED |
-
-## Interface Contracts
-### Store ↔ Components
-- Unified `useAppStore` hook export from `src/store/useAppStore.ts` combining all 7 slices
-- Backward-compatible `useAppStore.getState()` access for non-hook callers
+| M1 | Backend & Frontend Fixes | R1: Fix TS/React UI bugs, Vite config, delete `replace.py`, fix Rust clippy & unused var warnings | None | DONE |
+| M2 | Version Bump (0.9.7) | R2: Bump version across 8 config/source/test files | M1 | IN_PROGRESS |
+| M3 | Release Notes Generation | R3: Generate `RELEASE_NOTES_0.9.7.md` based on git history | M2 | PLANNED |
+| M4 | Version Control & Push | R4: Git commit with Conventional Commits and push to remote | M3 | PLANNED |
 
 ## Code Layout
-- `src/constants/`: `optimizations.ts`
-- `src/mocks/`: `audioMocks.ts`
-- `src/utils/`: `errors.ts`
-- `src/store/slices/`: `systemSlice.ts`, `updaterSlice.ts`, `uiSlice.ts`, `optimizationSlice.ts`, `audioSlice.ts`, `packageManagerSlice.ts`, `systemToolsSlice.ts`
-- `src/store/useAppStore.ts`: Composition and re-export of Zustand store
-- `src/i18n/locales/`: `en.json`, `ru.json`
-- `src/components/`: `SettingsView.tsx`, `GitHubIssueModal.tsx`, etc.
-- `src/views/`: `UninstallerView.tsx`, `ReleaseNotesModal.tsx`, etc.
+- `src/` - React frontend application code
+- `src/store/slices/` - Zustand store slices
+- `src/components/` - UI components
+- `src/views/` - Main application views
+- `src/i18n/` - Localization files
+- `src-tauri/` - Rust Tauri backend
+- `src-tauri/src/` - Rust source code
+- `RELEASE_NOTES_0.9.7.md` - Release notes document (to be created)

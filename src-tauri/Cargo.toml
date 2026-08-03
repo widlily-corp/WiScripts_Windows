@@ -1,6 +1,6 @@
 [package]
 name = "wiscripts_windows"
-version = "0.9.7"
+version = "0.9.9"
 description = "WiScripts Windows Desktop Application"
 authors = ["WiScripts Team"]
 edition = "2021"
@@ -23,6 +23,7 @@ regex = "1.10"
 thiserror = "1.0"
 encoding_rs = "0.8"
 sysinfo = "0.30"
+libloading = "0.8"
 log = "0.4"
 simplelog = "0.12"
 sha2 = "0.10"

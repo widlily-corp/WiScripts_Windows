@@ -1,13 +1,15 @@
 {
   "name": "wiscripts-windows",
   "private": true,
-  "version": "0.9.7",
+  "version": "0.9.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "node tests/e2e/runner.js",
+    "test:e2e": "node tests/e2e/runner.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

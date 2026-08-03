@@ -6,6 +6,7 @@ import {
   MetricSnapshot,
   SystemMetricsPayload,
   SystemTemperaturesPayload,
+  TemperatureSensorInfo,
   ThermalStatus,
   StartupItem,
   ScheduledTaskItem,
@@ -43,6 +44,12 @@ export interface SystemToolsSlice {
   togglePollingActive: () => void;
   pushMetricSnapshot: (snapshot: MetricSnapshot) => void;
   fetchLatestMetrics: () => Promise<MetricSnapshot | null>;
+
+  sensorItems: TemperatureSensorInfo[];
+  selectedCpuSensorId: string | null;
+  selectedGpuSensorId: string | null;
+  setSelectedCpuSensorId: (id: string | null) => void;
+  setSelectedGpuSensorId: (id: string | null) => void;
 
   startupItems: StartupItem[];
   isStartupLoading: boolean;
@@ -297,10 +304,37 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
       currentMetrics: snapshot,
       metricsHistory: [...state.metricsHistory, snapshot].slice(-30),
     })),
+  sensorItems: [],
+  selectedCpuSensorId: null,
+  selectedGpuSensorId: null,
+  setSelectedCpuSensorId: (id: string | null) => set({ selectedCpuSensorId: id }),
+  setSelectedGpuSensorId: (id: string | null) => set({ selectedGpuSensorId: id }),
+
   fetchLatestMetrics: async () => {
     try {
       const metricsPayload = await invoke<SystemMetricsPayload>('get_system_metrics');
       const tempsPayload = await invoke<SystemTemperaturesPayload>('get_system_temperatures');
+
+      const items = tempsPayload.sensorItems || [];
+      set({ sensorItems: items });
+
+      const { selectedCpuSensorId, selectedGpuSensorId } = get();
+
+      let effectiveCpuTemp = tempsPayload.cpuTempCelsius;
+      if (selectedCpuSensorId) {
+        const foundCpuSensor = items.find((s) => s.id === selectedCpuSensorId);
+        if (foundCpuSensor) {
+          effectiveCpuTemp = foundCpuSensor.temperatureCelsius;
+        }
+      }
+
+      let effectiveGpuTemp = tempsPayload.gpuTempCelsius;
+      if (selectedGpuSensorId) {
+        const foundGpuSensor = items.find((s) => s.id === selectedGpuSensorId);
+        if (foundGpuSensor) {
+          effectiveGpuTemp = foundGpuSensor.temperatureCelsius;
+        }
+      }
 
       const getThermalStatus = (temp: number | null): ThermalStatus => {
         if (temp === null) return 'unknown';
@@ -319,10 +353,10 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
         diskWriteBytesPerSec: metricsPayload.diskWriteBytesPerSec,
         networkRxBytesPerSec: metricsPayload.networkRxBytesPerSec,
         networkTxBytesPerSec: metricsPayload.networkTxBytesPerSec,
-        cpuTempC: tempsPayload.cpuTempCelsius,
-        gpuTempC: tempsPayload.gpuTempCelsius,
-        cpuThermalStatus: getThermalStatus(tempsPayload.cpuTempCelsius),
-        gpuThermalStatus: getThermalStatus(tempsPayload.gpuTempCelsius),
+        cpuTempC: effectiveCpuTemp,
+        gpuTempC: effectiveGpuTemp,
+        cpuThermalStatus: getThermalStatus(effectiveCpuTemp),
+        gpuThermalStatus: getThermalStatus(effectiveGpuTemp),
       };
 
       get().pushMetricSnapshot(snapshot);

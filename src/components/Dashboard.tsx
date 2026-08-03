@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { useMetricsPoller } from '../hooks/useMetricsPoller';
@@ -38,6 +38,9 @@ export function Dashboard() {
   const selectRecommendedOptimizations = useAppStore(
     (s) => s.selectRecommendedOptimizations
   );
+  const fetchOptimizationsStatus = useAppStore(
+    (s) => s.fetchOptimizationsStatus
+  );
 
   const metricsHistory = useAppStore((s) => s.metricsHistory);
   const currentMetrics = useAppStore((s) => s.currentMetrics);
@@ -46,8 +49,23 @@ export function Dashboard() {
   const togglePollingActive = useAppStore((s) => s.togglePollingActive);
   const setPollingIntervalMs = useAppStore((s) => s.setPollingIntervalMs);
   const fetchLatestMetrics = useAppStore((s) => s.fetchLatestMetrics);
+  const sensorItems = useAppStore((s) => s.sensorItems);
+  const selectedCpuSensorId = useAppStore((s) => s.selectedCpuSensorId);
+  const selectedGpuSensorId = useAppStore((s) => s.selectedGpuSensorId);
+  const setSelectedCpuSensorId = useAppStore((s) => s.setSelectedCpuSensorId);
+  const setSelectedGpuSensorId = useAppStore((s) => s.setSelectedGpuSensorId);
 
-  const selectedCount = optimizations.filter((o) => o.isSelected).length;
+  const cpuSensors = sensorItems.filter((s) => s.sensorType === 'cpu');
+  const gpuSensors = sensorItems.filter((s) => s.sensorType === 'gpu');
+  const availableCpuSensors = cpuSensors.length > 0 ? cpuSensors : sensorItems;
+  const availableGpuSensors = gpuSensors.length > 0 ? gpuSensors : sensorItems;
+
+  useEffect(() => {
+    fetchOptimizationsStatus();
+  }, [fetchOptimizationsStatus]);
+
+  const unappliedCount = optimizations.filter((o) => !o.isApplied).length;
+  const isFullyOptimized = unappliedCount === 0;
 
   const cpuSeries = metricsHistory.map((m) => m.cpuUsagePercent);
   const ramSeries = metricsHistory.map((m) => m.memoryUsagePercent);
@@ -57,29 +75,53 @@ export function Dashboard() {
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
       {/* Top Banner */}
-      <div className="rounded-[6px] border border-border bg-surface-subtle p-5 flex items-center justify-between shadow-sm">
+      <div
+        className={`rounded-[6px] border p-5 flex items-center justify-between shadow-sm ${
+          isFullyOptimized
+            ? 'border-emerald-500/30 bg-emerald-500/10'
+            : 'border-border bg-surface-subtle'
+        }`}
+      >
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand" />
+            {isFullyOptimized ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-brand" />
+            )}
             <h3 className="text-sm font-semibold text-text-primary">
-              {t('dashboard.systemOptimizationReadiness')}
+              {isFullyOptimized
+                ? t('dashboard.systemFullyOptimized')
+                : t('dashboard.readyForOpt', { count: unappliedCount }) || t('dashboard.systemOptimizationReadiness')}
             </h3>
           </div>
           <p className="text-xs text-text-secondary">
-            {t('dashboard.statusDesc', { build: systemInfo?.osBuild || '22631', count: selectedCount })}
+            {isFullyOptimized
+              ? t('dashboard.systemFullyOptimizedDesc', { build: systemInfo?.osBuild || '22631' })
+              : t('dashboard.statusDesc', { build: systemInfo?.osBuild || '22631', count: unappliedCount })}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              selectRecommendedOptimizations();
-              setActiveTab('optimization');
-            }}
-            className="flex items-center gap-2 rounded-[6px] bg-brand px-3.5 py-2 text-xs font-medium text-white hover:bg-brand-hover transition-opacity"
-          >
-            <span>{t('dashboard.applyRecommendedPresets')}</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          {isFullyOptimized ? (
+            <button
+              onClick={() => setActiveTab('optimization')}
+              className="flex items-center gap-2 rounded-[6px] border border-emerald-500/30 bg-emerald-500/20 px-3.5 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+            >
+              <span>{t('dashboard.viewOptimizations')}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                selectRecommendedOptimizations();
+                setActiveTab('optimization');
+              }}
+              className="flex items-center gap-2 rounded-[6px] bg-brand px-3.5 py-2 text-xs font-medium text-white hover:bg-brand-hover transition-opacity"
+            >
+              <span>{t('dashboard.applyRecommendedPresets')}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -234,6 +276,9 @@ export function Dashboard() {
           sensorType="cpu"
           thermalStatus={currentMetrics?.cpuThermalStatus || 'unknown'}
           sensorSource={t('dashboard.cpuSensorSource')}
+          availableSensors={availableCpuSensors}
+          selectedSensorId={selectedCpuSensorId}
+          onSelectSensor={setSelectedCpuSensorId}
         />
         <TemperatureSensorWidget
           title={t('dashboard.gpuSensor')}
@@ -241,6 +286,9 @@ export function Dashboard() {
           sensorType="gpu"
           thermalStatus={currentMetrics?.gpuThermalStatus || 'unknown'}
           sensorSource={t('dashboard.gpuSensorSource')}
+          availableSensors={availableGpuSensors}
+          selectedSensorId={selectedGpuSensorId}
+          onSelectSensor={setSelectedGpuSensorId}
         />
       </div>
 
@@ -259,18 +307,52 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
-          <div className="flex items-center justify-between text-text-muted">
-            <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.telemetryService')}</span>
-            <ShieldCheck className="h-4 w-4 text-status-success" />
-          </div>
-          <div className="text-lg font-semibold text-status-success">
-            {systemInfo?.telemetryStatus || 'Active'}
-          </div>
-          <div className="text-xs text-text-secondary">
-            {t('dashboard.diagTrackActive')}
-          </div>
-        </div>
+        {(() => {
+          const telemetryStatus = systemInfo?.telemetryStatus || 'Active';
+          const statusLower = telemetryStatus.toLowerCase();
+
+          let telemetryColor = 'text-amber-400';
+          let TelemetryIcon = AlertTriangle;
+          let telemetryLabel = t('dashboard.telemetryActive');
+          let telemetryDesc = t('dashboard.diagTrackActive');
+
+          if (statusLower === 'disabled') {
+            telemetryColor = 'text-emerald-400';
+            TelemetryIcon = ShieldCheck;
+            telemetryLabel = t('dashboard.telemetryDisabled');
+            telemetryDesc = t('dashboard.diagTrackDisabled');
+          } else if (statusLower === 'minimized') {
+            telemetryColor = 'text-cyan-400';
+            TelemetryIcon = ShieldCheck;
+            telemetryLabel = t('dashboard.telemetryMinimized');
+            telemetryDesc = t('dashboard.diagTrackMinimized');
+          } else if (statusLower === 'blocked') {
+            telemetryColor = 'text-red-400';
+            TelemetryIcon = AlertTriangle;
+            telemetryLabel = t('dashboard.telemetryStatus.blocked');
+            telemetryDesc = t('dashboard.telemetryStatusDesc.blocked');
+          } else if (statusLower === 'unknown') {
+            telemetryColor = 'text-text-muted';
+            TelemetryIcon = ShieldCheck;
+            telemetryLabel = t('dashboard.telemetryUnknown');
+            telemetryDesc = t('dashboard.diagTrackUnknown');
+          }
+
+          return (
+            <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
+              <div className="flex items-center justify-between text-text-muted">
+                <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.telemetryService')}</span>
+                <TelemetryIcon className={`h-4 w-4 ${telemetryColor}`} />
+              </div>
+              <div className={`text-lg font-semibold ${telemetryColor}`}>
+                {telemetryLabel}
+              </div>
+              <div className="text-xs text-text-secondary">
+                {telemetryDesc}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Optimization Modules List Preview */}

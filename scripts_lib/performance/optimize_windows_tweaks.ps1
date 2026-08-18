@@ -1,7 +1,4 @@
-﻿<#
-.SYNOPSIS
-    Windows Optimization & Telemetry Reduction Script.
-#>
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -18,13 +15,13 @@ try {
         $packages | Remove-AppxPackage -ErrorAction SilentlyContinue
         Write-Host "Successfully removed PC Manager." -ForegroundColor Green
     } else {
-        Write-Host "PC Manager not found."
+        Write-Host "PC Manager not installed."
     }
 } catch {
     Write-Host "Notice: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
 
-Write-Host "=== 2. Cleaning Startup Entries ===" -ForegroundColor Cyan
+Write-Host "=== 2. Cleaning Startup Registry Items ===" -ForegroundColor Cyan
 $runKey = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 $itemsToRemove = @(
     "YandexBrowserAutoLaunch*",
@@ -41,9 +38,9 @@ foreach ($item in $itemsToRemove) {
     try {
         if ($item -like "*`**") {
             $matches = Get-ItemProperty -Path $runKey -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Where-Object Name -like $item
-            foreach ($match in $matches) {
-                Remove-ItemProperty -Path $runKey -Name $match.Name -Force -ErrorAction SilentlyContinue
-                Write-Host "Removed from startup (wildcard): $($match.Name)" -ForegroundColor Green
+            foreach ($m in $matches) {
+                Remove-ItemProperty -Path $runKey -Name $m.Name -Force -ErrorAction SilentlyContinue
+                Write-Host "Removed from startup: $($m.Name)" -ForegroundColor Green
             }
         } else {
             $val = Get-ItemProperty -Path $runKey -Name $item -ErrorAction SilentlyContinue

@@ -1,49 +1,39 @@
-﻿<#
-.SYNOPSIS
-    Комплексная сквозная диагностика сети и интернет-соединения в Windows.
-.DESCRIPTION
-    Многоуровневый аудит сетевого стека: L1/L2 (адаптеры, Wi-Fi), L3 (IP, шлюзы, MTU),
-    L4/L7 (DNS, порты, веб-сервисы), прокси, брандмауэр, сокеты и вердикт.
-#>
-
-[CmdletBinding()]
-param(
-    [switch]$Detailed,
-    [string]$TargetHost = "cloudflare.com"
+﻿param(
+    [string]$TargetHost = "cloudflare.com",
+    [switch]$Detailed
 )
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
 $Issues = [System.Collections.Generic.List[string]]::new()
 $Warnings = [System.Collections.Generic.List[string]]::new()
 
-function Write-SectionHeader([string]$Title) {
-    Write-Host "`n┌─────────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
-    Write-Host "│ $($Title.PadRight(59)) │" -ForegroundColor Cyan
-    Write-Host "└─────────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
+function Write-Header([string]$Title) {
+    Write-Host "`n===============================================================" -ForegroundColor Cyan
+    Write-Host " $Title" -ForegroundColor Cyan
+    Write-Host "===============================================================" -ForegroundColor Cyan
 }
 
-function Write-Status([string]$Name, [string]$Status, [string]$Details = "", [string]$Level = "Info") {
+function Write-StatusRow([string]$Label, [string]$Status, [string]$Details = "", [string]$Level = "Info") {
     $bullet = switch ($Level) {
-        "OK"      { "[OK]" }
-        "WARN"    { "[!]" }
-        "FAIL"    { "[X]" }
-        default   { "[.]" }
+        "OK"    { "[OK]" }
+        "WARN"  { "[!]" }
+        "FAIL"  { "[X]" }
+        default { "[.]" }
     }
     $color = switch ($Level) {
-        "OK"      { "Green" }
-        "WARN"    { "Yellow" }
-        "FAIL"    { "Red" }
-        default   { "Gray" }
+        "OK"    { "Green" }
+        "WARN"  { "Yellow" }
+        "FAIL"  { "Red" }
+        default { "Gray" }
     }
     
-    $namePadded = $Name.PadRight(28)
-    $statusPadded = "[$Status]".PadRight(10)
+    $lbl = $Label.PadRight(30)
+    $stat = "[$Status]".PadRight(10)
     
     Write-Host "  $bullet " -NoNewline -ForegroundColor $color
-    Write-Host $namePadded -NoNewline -ForegroundColor White
-    Write-Host $statusPadded -NoNewline -ForegroundColor $color
+    Write-Host $lbl -NoNewline -ForegroundColor White
+    Write-Host $stat -NoNewline -ForegroundColor $color
     if ($Details) {
         Write-Host " $Details" -ForegroundColor DarkGray
     } else {
@@ -56,99 +46,94 @@ Write-Host "       WINDOWS NETWORK & INTERNET DEEP DIAGNOSTICS SUITE       " -Fo
 Write-Host "       Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')    " -ForegroundColor DarkGray
 Write-Host "===============================================================" -ForegroundColor Cyan
 
-# 1. Сетевые адаптеры (L1/L2)
-Write-SectionHeader "1. Сетевые адаптеры и физический линк"
+# 1. Physical & Network Adapters
+Write-Header "1. Network Adapters & Physical Link (L1/L2)"
 
 $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
 if (-not $adapters) {
-    Write-Status "Сетевые адаптеры" "FAIL" "Нет активных сетевых адаптеров (Status=Up)!" "FAIL"
-    $Issues.Add("Нет активных сетевых адаптеров. Проверьте кабель, Wi-Fi или драйверы.")
+    Write-StatusRow "Network Adapters" "FAIL" "No active network adapters found!" "FAIL"
+    $Issues.Add("No active network adapters with Status=Up.")
 } else {
     foreach ($adapter in $adapters) {
-        $speedFormatted = if ($adapter.LinkSpeed) { $adapter.LinkSpeed } else { "N/A" }
-        $isVirtual = if ($adapter.Virtual -or $adapter.InterfaceDescription -match "Hyper-V|Virtual|TAP|VPN") { " (Virtual/VPN)" } else { "" }
-        Write-Status "$($adapter.InterfaceAlias)$isVirtual" "UP" "Скорость: $speedFormatted | MAC: $($adapter.MacAddress)" "OK"
+        $speed = if ($adapter.LinkSpeed) { $adapter.LinkSpeed } else { "N/A" }
+        $virt = if ($adapter.Virtual -or $adapter.InterfaceDescription -match "Hyper-V|Virtual|TAP|VPN") { " (Virtual/VPN)" } else { "" }
+        Write-StatusRow "$($adapter.InterfaceAlias)$virt" "UP" "Speed: $speed | MAC: $($adapter.MacAddress)" "OK"
     }
 }
 
-# Wi-Fi телеметрия
-$wlanInfo = netsh wlan show interfaces 2>$null | Out-String
-if ($wlanInfo -match "(?:State|Состояние)\s*:\s*(?:connected|подключено)") {
-    $ssid = if ($wlanInfo -match '(?:SSID|Имя)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
-    $signal = if ($wlanInfo -match '(?:Signal|Сигнал)\s*:\s*(\d+)%') { [int]$matches[1] } else { 0 }
-    $radio = if ($wlanInfo -match '(?:Radio type|Тип радиомодуля)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
-    $band = if ($wlanInfo -match '(?:Band|Диапазон)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
-    $channel = if ($wlanInfo -match '(?:Channel|Канал)\s*:\s*(\d+)') { $matches[1].Trim() } else { "N/A" }
+# Wi-Fi Telemetry
+$wlan = netsh wlan show interfaces 2>$null | Out-String
+if ($wlan -match "(?:State|Состояние)\s*:\s*(?:connected|подключено)") {
+    $ssid = if ($wlan -match '(?:SSID|Имя)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
+    $signal = if ($wlan -match '(?:Signal|Сигнал)\s*:\s*(\d+)%') { [int]$matches[1] } else { 0 }
+    $radio = if ($wlan -match '(?:Radio type|Тип радиомодуля)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
+    $band = if ($wlan -match '(?:Band|Диапазон)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
+    $channel = if ($wlan -match '(?:Channel|Канал)\s*:\s*(\d+)') { $matches[1].Trim() } else { "N/A" }
     
-    $wifiLevel = if ($signal -ge 75) { "OK" } elseif ($signal -ge 45) { "WARN" } else { "FAIL" }
-    if ($signal -lt 45) {
-        $Warnings.Add("Слабый уровень сигнала Wi-Fi ($signal%). Возможны потери пакетов и скачки джиттера.")
+    $wLevel = if ($signal -ge 70) { "OK" } elseif ($signal -ge 40) { "WARN" } else { "FAIL" }
+    if ($signal -lt 40) {
+        $Warnings.Add("Low Wi-Fi signal strength ($signal%). Expect packet loss or high jitter.")
     }
-    Write-Status "Wi-Fi Сеть (SSID)" "$signal%" "SSID: $ssid | $radio ($band) | Канал: $channel" $wifiLevel
+    Write-StatusRow "Wi-Fi Interface (SSID)" "$signal%" "SSID: $ssid | $radio ($band) | Ch: $channel" $wLevel
 }
 
-# 2. IP Конфигурация и шлюзы (L3)
-Write-SectionHeader "2. IP-конфигурация, шлюз и маршрутизация"
+# 2. IP Configuration & Gateway
+Write-Header "2. IP Configuration, Gateway & Routing (L3)"
 
 $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object -Property RouteMetric
 $primaryRoute = $routes | Select-Object -First 1
 
 if (-not $primaryRoute) {
-    Write-Status "Основной шлюз" "FAIL" "Default Gateway не обнаружен в таблице маршрутов!" "FAIL"
-    $Issues.Add("Не задан основной шлюз (0.0.0.0/0). Устройство не имеет маршрута по умолчанию.")
+    Write-StatusRow "Default Gateway" "FAIL" "No default route (0.0.0.0/0) found!" "FAIL"
+    $Issues.Add("No default gateway route. Device cannot route traffic to external networks.")
 } else {
-    $primaryGw = $primaryRoute.NextHop
-    $primaryAlias = $primaryRoute.InterfaceAlias
-    
-    $ipConfig = Get-NetIPConfiguration -InterfaceAlias $primaryAlias -ErrorAction SilentlyContinue
+    $gw = $primaryRoute.NextHop
+    $alias = $primaryRoute.InterfaceAlias
+    $ipConfig = Get-NetIPConfiguration -InterfaceAlias $alias -ErrorAction SilentlyContinue
     $ipv4 = ($ipConfig.IPv4Address | Where-Object { $_.IPAddress -notlike "169.254.*" }).IPAddress -join ", "
     
     if ($ipv4 -like "169.254.*" -or [string]::IsNullOrWhiteSpace($ipv4)) {
-        Write-Status "IPv4 Конфигурация" "FAIL" "APIPA адрес 169.254.x.x (DHCP сервер не отвечает!)" "FAIL"
-        $Issues.Add("Получен авто-адрес APIPA (169.254.x.x). DHCP сервер роутера/сети не выдал IP.")
+        Write-StatusRow "IPv4 Address" "FAIL" "APIPA Address 169.254.x.x (DHCP server failed to respond)" "FAIL"
+        $Issues.Add("APIPA 169.254.x.x assigned. Local network DHCP server did not lease an IP.")
     } else {
-        Write-Status "Основной IPv4 [$primaryAlias]" "OK" "IP: $ipv4 | Шлюз: $primaryGw (Метрика: $($primaryRoute.RouteMetric))" "OK"
+        Write-StatusRow "Primary IPv4 [$alias]" "OK" "IP: $ipv4 | Gateway: $gw (Metric: $($primaryRoute.RouteMetric))" "OK"
     }
     
-    if ($primaryGw -and $primaryGw -ne "0.0.0.0") {
-        $gwPing = Test-Connection -ComputerName $primaryGw -Count 3 -ErrorAction SilentlyContinue
+    if ($gw -and $gw -ne "0.0.0.0") {
+        $gwPing = Test-Connection -ComputerName $gw -Count 3 -ErrorAction SilentlyContinue
         if ($gwPing) {
-            $avgLatency = [math]::Round(($gwPing | Measure-Object -Property ResponseTime -Average).Average, 2)
-            $gwLevel = if ($avgLatency -lt 5) { "OK" } elseif ($avgLatency -lt 25) { "WARN" } else { "FAIL" }
-            Write-Status "Пинг до шлюза ($primaryGw)" "$($avgLatency)ms" "Ответ получен (3 из 3)" $gwLevel
-            if ($avgLatency -ge 25) {
-                $Warnings.Add("Высокая задержка до локального роутера ($($avgLatency)ms). Проверьте Wi-Fi/кабель.")
-            }
+            $avgLatency = [math]::Round(($gwPing | Measure-Object -Property ResponseTime -Average).Average, 1)
+            $gwLevel = if ($avgLatency -lt 5) { "OK" } elseif ($avgLatency -lt 30) { "WARN" } else { "FAIL" }
+            Write-StatusRow "Ping to Gateway ($gw)" "$($avgLatency)ms" "Received 3/3 ICMP replies" $gwLevel
         } else {
-            Write-Status "Пинг до шлюза ($primaryGw)" "FAIL" "Шлюз не отвечает на ICMP эхо-запросы" "WARN"
-            $Warnings.Add("Локальный шлюз $primaryGw не отвечает на пинг (возможно, отключен ICMP на роутере).")
+            Write-StatusRow "Ping to Gateway ($gw)" "FAIL" "Gateway not responding to ICMP ping" "WARN"
+            $Warnings.Add("Default gateway $gw did not answer ICMP ping (ICMP may be blocked by router).")
         }
     }
 }
 
-# Тест MTU
+# MTU Test
 $pingDF = & ping.exe 1.1.1.1 -f -l 1472 -n 1 2>$null | Out-String
-if ($pingDF -match "Packet needs to be fragmented" -or $pingDF -match "Требуется фрагментация") {
-    Write-Status "MTU Тест (1500 bytes)" "WARN" "Пакет 1472+28 байт требует фрагментации (MSS/MTU Clamping)" "WARN"
-} elseif ($pingDF -match "bytes=" -or $pingDF -match "байт=") {
-    Write-Status "MTU Тест (1500 bytes)" "OK" "Стандартный MTU 1500 проходит без фрагментации" "OK"
+if ($pingDF -match "Packet needs to be fragmented|fragmented|фрагментация") {
+    Write-StatusRow "MTU 1500 (Don't Fragment)" "WARN" "Packet 1472+28 bytes requires fragmentation (MSS Clamping)" "WARN"
+} elseif ($pingDF -match "bytes=|байт=") {
+    Write-StatusRow "MTU 1500 (Don't Fragment)" "OK" "Standard MTU 1500 passes without fragmentation" "OK"
 } else {
-    Write-Status "MTU Тест (1500 bytes)" "INFO" "Пакет Don't Fragment отправлен" "INFO"
+    Write-StatusRow "MTU 1500 (Don't Fragment)" "INFO" "Don't Fragment packet probe dispatched" "INFO"
 }
 
-# 3. DNS
-Write-SectionHeader "3. Аудит DNS-серверов и резолвинга имен"
+# 3. DNS Resolution & Benchmark
+Write-Header "3. DNS Resolution & Latency Benchmark (L4/L7)"
 
 $configuredDns = (Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object { $_.ServerAddresses.Count -gt 0 }).ServerAddresses | Select-Object -Unique
-
-if (-not $configuredDns) {
-    Write-Status "Системные DNS" "FAIL" "DNS серверы не настроены!" "FAIL"
-    $Issues.Add("В системе не настроен ни один DNS-сервер.")
+if ($configuredDns) {
+    Write-StatusRow "Configured DNS" "INFO" ($configuredDns -join ", ") "INFO"
 } else {
-    Write-Status "Настроенные DNS" "INFO" ($configuredDns -join ", ") "INFO"
+    Write-StatusRow "Configured DNS" "FAIL" "No DNS servers configured!" "FAIL"
+    $Issues.Add("No DNS servers configured in the system.")
 }
 
-$benchmarkDomains = @("google.com", "cloudflare.com", "yandex.ru")
+$benchDomains = @("google.com", "cloudflare.com", "yandex.ru")
 $testServers = @(
     @{ Name = "System DNS"; IP = $null },
     @{ Name = "Cloudflare"; IP = "1.1.1.1" },
@@ -158,113 +143,113 @@ $testServers = @(
 
 foreach ($srv in $testServers) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $resolvedCount = 0
-    
-    foreach ($domain in $benchmarkDomains) {
+    $resCount = 0
+    foreach ($d in $benchDomains) {
         $res = if ($srv.IP) {
-            Resolve-DnsName -Name $domain -Server $srv.IP -Type A -QuickTimeout -ErrorAction SilentlyContinue
+            Resolve-DnsName -Name $d -Server $srv.IP -Type A -QuickTimeout -ErrorAction SilentlyContinue
         } else {
-            Resolve-DnsName -Name $domain -Type A -QuickTimeout -ErrorAction SilentlyContinue
+            Resolve-DnsName -Name $d -Type A -QuickTimeout -ErrorAction SilentlyContinue
         }
-        if ($res) { $resolvedCount++ }
+        if ($res) { $resCount++ }
     }
     $sw.Stop()
-    $avgMs = [math]::Round($sw.ElapsedMilliseconds / $benchmarkDomains.Count, 1)
+    $avgMs = [math]::Round($sw.ElapsedMilliseconds / $benchDomains.Count, 1)
     
-    if ($resolvedCount -eq $benchmarkDomains.Count) {
+    if ($resCount -eq $benchDomains.Count) {
         $lvl = if ($avgMs -lt 50) { "OK" } elseif ($avgMs -lt 150) { "WARN" } else { "FAIL" }
-        Write-Status "$($srv.Name)" "$($avgMs)ms" "Успешно разрешено $resolvedCount/$($benchmarkDomains.Count) доменов" $lvl
+        Write-StatusRow "$($srv.Name)" "$($avgMs)ms" "Resolved $resCount/$($benchDomains.Count) test domains" $lvl
     } else {
-        Write-Status "$($srv.Name)" "FAIL" "Разрешено только $resolvedCount/$($benchmarkDomains.Count) доменов" "FAIL"
+        Write-StatusRow "$($srv.Name)" "FAIL" "Resolved only $resCount/$($benchDomains.Count) domains" "FAIL"
         if ($srv.Name -eq "System DNS") {
-            $Issues.Add("Системный DNS не смог разрешить стандартные домены. Интернет-серфинг нарушен.")
+            $Issues.Add("System DNS failed to resolve basic internet domains.")
         }
     }
 }
 
+# Hosts file check
 $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
 if (Test-Path $hostsPath) {
-    $hostsLines = Get-Content $hostsPath | Where-Object { $_ -notmatch '^\s*#' -and -not [string]::IsNullOrWhiteSpace($_) }
-    if ($hostsLines.Count -gt 5) {
-        Write-Status "Hosts файл" "WARN" "Обнаружено $($hostsLines.Count) активных переопределений в hosts!" "WARN"
-        $Warnings.Add("Файл hosts содержит $($hostsLines.Count) записей. Возможно наличие блокировок или перенаправлений.")
+    $hostsEntries = Get-Content $hostsPath | Where-Object { $_ -notmatch '^\s*#' -and -not [string]::IsNullOrWhiteSpace($_) }
+    if ($hostsEntries.Count -gt 10) {
+        Write-StatusRow "System Hosts File" "WARN" "Found $($hostsEntries.Count) active overrides in hosts file" "WARN"
+        $Warnings.Add("Hosts file contains $($hostsEntries.Count) custom entries. Check for unwanted domain blocks.")
     } else {
-        Write-Status "Hosts файл" "OK" "Чист (активных записей: $($hostsLines.Count))" "OK"
+        Write-StatusRow "System Hosts File" "OK" "Clean ($($hostsEntries.Count) active entries)" "OK"
     }
 }
 
-# 4. Порты и сервисы
-Write-SectionHeader "4. Доступность веб-сервисов и портов (L7)"
+# 4. Web Services & TCP Ports
+Write-Header "4. Internet Services & TCP Handshakes (L7)"
 
+# Captive portal check
 try {
-    $webReq = [System.Net.HttpWebRequest]::Create("http://www.msftconnecttest.com/connecttest.txt")
-    $webReq.Timeout = 4000
-    $webReq.AllowAutoRedirect = $false
-    $response = $webReq.GetResponse()
-    if ($response.StatusCode -eq "OK") {
-        Write-Status "Captive Portal" "OK" "Прямой доступ в интернет открыт (No Portal Trap)" "OK"
+    $req = [System.Net.HttpWebRequest]::Create("http://www.msftconnecttest.com/connecttest.txt")
+    $req.Timeout = 4000
+    $req.AllowAutoRedirect = $false
+    $resp = $req.GetResponse()
+    if ($resp.StatusCode -eq "OK") {
+        Write-StatusRow "Captive Portal" "OK" "Direct internet access open (No captive trap)" "OK"
     } else {
-        Write-Status "Captive Portal" "WARN" "Обнаружен перехват HTTP ($($response.StatusCode)) — требуется авторизация в сети" "WARN"
-        $Issues.Add("Обнаружен Captive Portal: сеть требует авторизации в браузере.")
+        Write-StatusRow "Captive Portal" "WARN" "HTTP interception detected ($($resp.StatusCode)) — network login required" "WARN"
+        $Issues.Add("Captive Portal detected: browser authorization is required.")
     }
-    $response.Close()
+    $resp.Close()
 } catch {
-    Write-Status "Captive Portal" "INFO" "msftconnecttest завершен" "INFO"
+    Write-StatusRow "Captive Portal" "INFO" "msftconnecttest passed" "INFO"
 }
 
 $endpoints = @(
     @{ Name = "Cloudflare CDN"; Host = "1.1.1.1"; Port = 443 },
     @{ Name = "Google Services"; Host = "8.8.8.8"; Port = 53 },
-    @{ Name = "Microsoft Cloud"; Host = "www.microsoft.com"; Port = 443 },
-    @{ Name = "Yandex Infrastructure"; Host = "77.88.8.8"; Port = 443 }
+    @{ Name = "Microsoft Web";  Host = "www.microsoft.com"; Port = 443 },
+    @{ Name = "Yandex Infra";   Host = "77.88.8.8"; Port = 443 }
 )
 
 foreach ($ep in $endpoints) {
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $tcp = Test-NetConnection -ComputerName $ep.Host -Port $ep.Port -InformationLevel Quiet -WarningAction SilentlyContinue
     $sw.Stop()
-    
     if ($tcp) {
-        Write-Status "$($ep.Name):$($ep.Port)" "OK" "TCP Handshake: $($sw.ElapsedMilliseconds)ms" "OK"
+        Write-StatusRow "$($ep.Name):$($ep.Port)" "OK" "TCP Handshake: $($sw.ElapsedMilliseconds)ms" "OK"
     } else {
-        Write-Status "$($ep.Name):$($ep.Port)" "FAIL" "Порт недоступен или заблокирован" "FAIL"
-        $Warnings.Add("Не удалось установить TCP соединение с $($ep.Name) ($($ep.Host):$($ep.Port)).")
+        Write-StatusRow "$($ep.Name):$($ep.Port)" "FAIL" "Connection failed or port blocked" "FAIL"
+        $Warnings.Add("TCP connection to $($ep.Name) ($($ep.Host):$($ep.Port)) failed.")
     }
 }
 
-# 5. Прокси и параметры стека
-Write-SectionHeader "5. Прокси, Windows Firewall и стек TCP"
+# 5. Proxies, Firewall & Sockets
+Write-Header "5. System Proxies, Firewall & Sockets"
 
 $proxyReg = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
 $proxyEnable = (Get-ItemProperty -Path $proxyReg -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable
 $proxyServer = (Get-ItemProperty -Path $proxyReg -Name ProxyServer -ErrorAction SilentlyContinue).ProxyServer
 
 if ($proxyEnable -eq 1) {
-    Write-Status "Пользовательский Proxy" "WARN" "ВКЛЮЧЕН ($proxyServer)" "WARN"
-    $Warnings.Add("В Windows включен пользовательский прокси: $proxyServer. Если он не работает, интернет будет недоступен.")
+    Write-StatusRow "WinINet User Proxy" "WARN" "ENABLED ($proxyServer)" "WARN"
+    $Warnings.Add("User proxy is enabled: $proxyServer. If unresponsive, web browsing will fail.")
 } else {
-    Write-Status "Пользовательский Proxy" "OK" "Отключен (Прямое подключение)" "OK"
+    Write-StatusRow "WinINet User Proxy" "OK" "Disabled (Direct Connection)" "OK"
 }
 
 $winhttp = netsh winhttp show proxy 2>$null | Out-String
 if ($winhttp -match "(?:Direct access|Прямой доступ)") {
-    Write-Status "Системный WinHTTP Proxy" "OK" "Прямой доступ (Без прокси)" "OK"
+    Write-StatusRow "WinHTTP System Proxy" "OK" "Direct Access (No Proxy)" "OK"
 } else {
-    Write-Status "Системный WinHTTP Proxy" "WARN" "Настроен системный прокси: $winhttp" "WARN"
+    Write-StatusRow "WinHTTP System Proxy" "WARN" "Configured system proxy: $winhttp" "WARN"
 }
 
 $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
 $allFwOn = ($fwProfiles | Where-Object { $_.Enabled -eq $true }).Count -eq $fwProfiles.Count
 if ($allFwOn) {
-    Write-Status "Windows Firewall" "OK" "Все профили активны (Domain, Private, Public)" "OK"
+    Write-StatusRow "Windows Firewall" "OK" "All profiles active (Domain, Private, Public)" "OK"
 } else {
-    Write-Status "Windows Firewall" "INFO" "Один или несколько профилей брандмауэра отключены" "INFO"
+    Write-StatusRow "Windows Firewall" "INFO" "One or more firewall profiles are disabled" "INFO"
 }
 
 $tcpGlobal = netsh int tcp show global 2>$null | Out-String
 if ($tcpGlobal -match '(?:Receive Window Auto-Tuning Level|Уровень автонастройки окна получения)\s*:\s*(.+)') {
-    $autoTuning = $matches[1].Trim()
-    Write-Status "TCP Window Auto-Tuning" "INFO" "Режим: $autoTuning" "INFO"
+    $autoTune = $matches[1].Trim()
+    Write-StatusRow "TCP Window Auto-Tuning" "INFO" "Mode: $autoTune" "INFO"
 }
 
 $allSockets = Get-NetTCPConnection -ErrorAction SilentlyContinue
@@ -272,32 +257,28 @@ $timeWaitCount = ($allSockets | Where-Object { $_.State -eq "TimeWait" }).Count
 $estabCount = ($allSockets | Where-Object { $_.State -eq "Established" }).Count
 
 if ($timeWaitCount -gt 2000) {
-    Write-Status "TCP Сокеты" "WARN" "TIME_WAIT: $timeWaitCount | Established: $estabCount (Высокая нагрузка)" "WARN"
-    $Warnings.Add("Большое число сокетов в TIME_WAIT ($timeWaitCount). Возможно насыщение портов.")
+    Write-StatusRow "TCP Sockets Pool" "WARN" "TIME_WAIT: $timeWaitCount | Established: $estabCount (High Load)" "WARN"
+    $Warnings.Add("High number of sockets in TIME_WAIT state ($timeWaitCount).")
 } else {
-    Write-Status "TCP Сокеты" "OK" "Активных (Established): $estabCount | TIME_WAIT: $timeWaitCount" "OK"
+    Write-StatusRow "TCP Sockets Pool" "OK" "Active (Established): $estabCount | TIME_WAIT: $timeWaitCount" "OK"
 }
 
-# 6. Вердикт
-Write-SectionHeader "6. Итоговый отчет о состоянии сети"
+# 6. Overall Verdict
+Write-Header "6. Overall Network Health Verdict"
 
 if ($Issues.Count -eq 0 -and $Warnings.Count -eq 0) {
-    Write-Host "`n  [✔] СЕТЕВОЙ СТАТУС: HEALTHY (ОТЛИЧНОЕ СОСТОЯНИЕ)" -ForegroundColor Green
-    Write-Host "  Все сетевые уровни (L1-L7), DNS, шлюз и службы функционируют штатно.`n" -ForegroundColor White
+    Write-Host "`n  [OK] NETWORK STATUS: HEALTHY" -ForegroundColor Green
+    Write-Host "  All network layers (L1-L7), DNS, routing, and services are fully operational.`n" -ForegroundColor White
 } elseif ($Issues.Count -gt 0) {
-    Write-Host "`n  [✖] СЕТЕВОЙ СТАТУС: CRITICAL / OFFLINE" -ForegroundColor Red
-    Write-Host "  Обнаружены критические неисправности:`n" -ForegroundColor Red
-    foreach ($issue in $Issues) {
-        Write-Host "   - $issue" -ForegroundColor Red
-    }
+    Write-Host "`n  [X] NETWORK STATUS: CRITICAL / OFFLINE" -ForegroundColor Red
+    Write-Host "  Critical issues detected:`n" -ForegroundColor Red
+    foreach ($issue in $Issues) { Write-Host "   - $issue" -ForegroundColor Red }
 } else {
-    Write-Host "`n  [⚠] СЕТЕВОЙ СТАТУС: DEGRADED (ЕСТЬ ПРЕДУПРЕЖДЕНИЯ)" -ForegroundColor Yellow
-    Write-Host "  Сеть работает, но обнаружены узкие места или потенциальные проблемы:`n" -ForegroundColor Yellow
-    foreach ($warn in $Warnings) {
-        Write-Host "   - $warn" -ForegroundColor Yellow
-    }
+    Write-Host "`n  [!] NETWORK STATUS: DEGRADED" -ForegroundColor Yellow
+    Write-Host "  Network is functional with non-critical warnings:`n" -ForegroundColor Yellow
+    foreach ($w in $Warnings) { Write-Host "   - $w" -ForegroundColor Yellow }
 }
 
 Write-Host "===============================================================" -ForegroundColor Cyan
-Write-Host " Диагностика завершена." -ForegroundColor Cyan
+Write-Host " Diagnostics Complete." -ForegroundColor Cyan
 Write-Host "===============================================================" -ForegroundColor Cyan

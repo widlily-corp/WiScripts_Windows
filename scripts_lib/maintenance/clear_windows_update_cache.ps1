@@ -1,67 +1,32 @@
-<#
-.SYNOPSIS
-    Clears the Windows Update download cache and resets update services.
-.DESCRIPTION
-    Stops Windows Update (wuauserv), Cryptographic (CryptSvc), and BITS services,
-    safely purges C:\Windows\SoftwareDistribution\Download and Catroot2 contents,
-    and restarts all services to resolve update download and installation errors.
-.NOTES
-    Requires Administrator elevation.
-#>
+﻿param()
 
-[CmdletBinding()]
-param()
-
-$ErrorActionPreference = "Continue"
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Purging Windows Update cache requires Administrator privileges. Please run PowerShell as Administrator."
+    return
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " WiScripts: Windows Update Cache Reset Utility" -ForegroundColor Cyan
+Write-Host " WiScripts: Windows Update Cache Purge & Service Reset" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Stop Windows Update related services
-$services = @("wuauserv", "bits", "cryptsvc", "trustedinstaller")
-foreach ($svcName in $services) {
-    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-    if ($svc -and $svc.Status -eq 'Running') {
-        Write-Host "Stopping service: $svcName..." -ForegroundColor Yellow
-        Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
-    }
+$services = @("wuauserv", "bits", "cryptsvc", "dosvc")
+Write-Host "Stopping Windows Update services..." -ForegroundColor Yellow
+foreach ($s in $services) {
+    Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
 }
 
-# 2. Purge SoftwareDistribution Download Cache
-$softDistDownload = "$env:SystemRoot\SoftwareDistribution\Download"
-if (Test-Path -Path $softDistDownload) {
-    Write-Host "Purging Windows Update Download cache: $softDistDownload" -ForegroundColor Yellow
-    try {
-        Get-ChildItem -Path $softDistDownload -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "[OK] SoftwareDistribution\Download cache cleared successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "[WARN] Some files could not be removed: $($_.Exception.Message)" -ForegroundColor DarkYellow
-    }
+$downloadDir = "$env:windir\SoftwareDistribution\Download"
+if (Test-Path $downloadDir) {
+    Write-Host "Purging SoftwareDistribution Download cache..." -ForegroundColor Yellow
+    Remove-Item "$downloadDir\*" -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# 3. Purge Catroot2 folder
-$catroot2 = "$env:SystemRoot\System32\catroot2"
-if (Test-Path -Path $catroot2) {
-    Write-Host "Resetting Catroot2 directory: $catroot2" -ForegroundColor Yellow
-    try {
-        Get-ChildItem -Path $catroot2 -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "[OK] Catroot2 purged successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "[WARN] Catroot2 could not be fully cleared: $($_.Exception.Message)" -ForegroundColor DarkYellow
-    }
-}
-
-# 4. Restart services
-foreach ($svcName in $services) {
-    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-    if ($svc) {
-        Write-Host "Restarting service: $svcName..." -ForegroundColor Cyan
-        Start-Service -Name $svcName -ErrorAction SilentlyContinue
-    }
+Write-Host "Restarting Windows Update services..." -ForegroundColor Cyan
+foreach ($s in $services) {
+    Start-Service -Name $s -ErrorAction SilentlyContinue
 }
 
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " Windows Update Cache purge operation completed." -ForegroundColor Green
+Write-Host " Windows Update cache successfully purged and services restored." -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

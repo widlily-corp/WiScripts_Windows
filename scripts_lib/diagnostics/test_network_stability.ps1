@@ -1,22 +1,8 @@
-﻿<#
-.SYNOPSIS
-    Тест стабильности интернет-соединения: Packet Loss, Jitter и Latency Benchmark.
-.DESCRIPTION
-    Отправляет серию ICMP пакетов по 3 ключевым узлам:
-    1. Локальный основной шлюз (Роутер)
-    2. Региональный DNS (Yandex 77.88.8.8)
-    3. Международный CDN (Cloudflare 1.1.1.1)
-.PARAMETER Count
-    Количество пакетов на каждый узел (по умолчанию 4).
-#>
-
-[CmdletBinding()]
-param(
+﻿param(
     [int]$Count = 4,
     [string]$RemoteHost = "1.1.1.1"
 )
 
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "SilentlyContinue"
 
 Write-Host "`n===============================================================" -ForegroundColor Cyan
@@ -28,20 +14,20 @@ $primaryGw = ($routes | Select-Object -First 1).NextHop
 
 $targets = [System.Collections.Generic.List[PSCustomObject]]::new()
 if ($primaryGw -and $primaryGw -ne "0.0.0.0") {
-    $targets.Add([PSCustomObject]@{ Label = "1. Основной шлюз (Router)"; Target = $primaryGw })
+    $targets.Add([PSCustomObject]@{ Label = "1. Local Gateway (Router)"; Target = $primaryGw })
 }
-$targets.Add([PSCustomObject]@{ Label = "2. Региональный узел (Yandex)"; Target = "77.88.8.8" })
-$targets.Add([PSCustomObject]@{ Label = "3. Международный CDN (Cloudflare)"; Target = $RemoteHost })
+$targets.Add([PSCustomObject]@{ Label = "2. Regional DNS (Yandex)"; Target = "77.88.8.8" })
+$targets.Add([PSCustomObject]@{ Label = "3. Global CDN (Cloudflare)"; Target = $RemoteHost })
 
 function Get-JitterStats([string]$HostTarget, [int]$PacketCount) {
-    Write-Host "  Тестирование $HostTarget ($PacketCount пакетов)..." -NoNewline -ForegroundColor DarkGray
+    Write-Host "  Testing $HostTarget ($PacketCount packets)..." -NoNewline -ForegroundColor DarkGray
     
     $pings = Test-Connection -ComputerName $HostTarget -Count $PacketCount -ErrorAction SilentlyContinue
     $received = ($pings | Measure-Object).Count
     $lossPct = [math]::Round((($PacketCount - $received) / $PacketCount) * 100, 1)
     
     if ($received -eq 0) {
-        Write-Host " [НЕТ ОТВЕТА]" -ForegroundColor Red
+        Write-Host " [NO REPLY]" -ForegroundColor Red
         return [PSCustomObject]@{
             MinMs = "N/A"
             MaxMs = "N/A"
@@ -61,7 +47,7 @@ function Get-JitterStats([string]$HostTarget, [int]$PacketCount) {
     }
     $jitter = if ($latencies.Count -gt 1) { [math]::Round($jitterSum / ($latencies.Count - 1), 2) } else { 0 }
     
-    Write-Host " [ГОТОВО]" -ForegroundColor Green
+    Write-Host " [DONE]" -ForegroundColor Green
     
     $status = if ($lossPct -gt 5 -or $jitter -gt 30) { "BAD" } elseif ($lossPct -gt 0 -or $jitter -gt 15) { "WARN" } else { "EXCELLENT" }
     
@@ -78,20 +64,20 @@ function Get-JitterStats([string]$HostTarget, [int]$PacketCount) {
 $results = foreach ($t in $targets) {
     $res = Get-JitterStats -HostTarget $t.Target -PacketCount $Count
     [PSCustomObject]@{
-        "Узел назначения" = "$($t.Label) [$($t.Target)]"
+        "Target Node"     = "$($t.Label) [$($t.Target)]"
         "Min"             = $res.MinMs
         "Avg"             = $res.AvgMs
         "Max"             = $res.MaxMs
-        "Джиттер (Jitter)"= $res.JitterMs
-        "Потери (Loss)"   = $res.Loss
-        "Оценка"          = $res.Status
+        "Jitter"          = $res.JitterMs
+        "Packet Loss"     = $res.Loss
+        "Quality"         = $res.Status
     }
 }
 
 Write-Host "`n"
 $results | Format-Table -AutoSize
 
-Write-Host "Ориентиры качества:" -ForegroundColor DarkGray
-Write-Host "  - Джиттер < 5ms: идеальное качество для игр / WebRTC / звонков" -ForegroundColor DarkGray
-Write-Host "  - Джиттер > 20ms или Loss > 1%: нестабильный Wi-Fi или перегрузка канала" -ForegroundColor DarkGray
+Write-Host "Quality Benchmarks:" -ForegroundColor DarkGray
+Write-Host "  * Jitter < 5ms: Ideal for Gaming / WebRTC / VoIP Calls" -ForegroundColor DarkGray
+Write-Host "  * Jitter > 20ms or Loss > 1%: Unstable Wi-Fi or ISP congestion" -ForegroundColor DarkGray
 Write-Host "===============================================================" -ForegroundColor Cyan

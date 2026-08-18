@@ -1,27 +1,15 @@
-<#
-.SYNOPSIS
-    Dumps active TCP/UDP network connections mapped to running processes.
-.DESCRIPTION
-    Retrieves socket connections, listening ports, remote endpoints, and maps
-    owning PID to process binary names and paths for suspicious connection audits.
-.NOTES
-    Requires Administrator elevation to query all system processes.
-#>
-
-[CmdletBinding()]
-param(
-    [ValidateSet("All", "Established", "Listen", "TimeWait", "CloseWait")]
+﻿param(
     [string]$StateFilter = "All",
-    
     [int]$Top = 50
 )
 
+$ErrorActionPreference = "SilentlyContinue"
+
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " WiScripts: Process-Mapped Network Connection Telemetry" -ForegroundColor Cyan
+Write-Host " WiScripts: Process-Mapped Network Telemetry" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Retrieve TCP Connections
-Write-Host "Gathering TCP endpoint telemetry (Filter: $StateFilter, Top: $Top)..." -ForegroundColor Yellow
+Write-Host "Gathering TCP/UDP endpoint telemetry (Filter: $StateFilter, Top: $Top)..." -ForegroundColor Yellow
 
 $connections = Get-NetTCPConnection -ErrorAction SilentlyContinue
 
@@ -46,14 +34,10 @@ $results = foreach ($conn in $connections | Select-Object -First $Top) {
 
 $results | Format-Table -AutoSize -Property LocalAddress, RemoteAddress, State, Process, PID
 
-# 2. Summary of Listening Ports
-$listenPorts = ($connections | Where-Object { $_.State -eq "Listen" }).Count
-$estabPorts = ($connections | Where-Object { $_.State -eq "Established" }).Count
+$listenCount = ($connections | Where-Object { $_.State -eq "Listen" }).Count
+$estabCount = ($connections | Where-Object { $_.State -eq "Established" }).Count
 
 Write-Host "`nConnection Summary:" -ForegroundColor Cyan
-Write-Host "  - Listening Endpoints: $listenPorts" -ForegroundColor DarkGray
-Write-Host "  - Active Established: $estabPorts" -ForegroundColor DarkGray
-
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " Network telemetry dump completed." -ForegroundColor Green
+Write-Host "  * Listening Endpoints: $listenCount" -ForegroundColor DarkGray
+Write-Host "  * Active Established:  $estabCount" -ForegroundColor DarkGray
 Write-Host "==========================================================" -ForegroundColor Green

@@ -1,7 +1,4 @@
-﻿<#
-.SYNOPSIS
-    Resets Windows hosts file to clean Microsoft default state.
-#>
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -11,9 +8,9 @@ if (-not $isAdmin) {
 
 $hostsPath = "$env:windir\System32\drivers\etc\hosts"
 
-Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "      Full Hosts Reset by Antigravity" -ForegroundColor Cyan
-Write-Host "=============================================" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host " WiScripts: System Hosts File Reset & Restoration" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
 
 $defaultHosts = @"
 # Copyright (c) 1993-2009 Microsoft Corp.
@@ -39,16 +36,12 @@ $defaultHosts = @"
 #	::1             localhost
 "@
 
-Write-Host "Resetting hosts file to Windows defaults..."
+Write-Host "Writing clean default hosts file..."
 $defaultHosts | Set-Content $hostsPath -Force -ErrorAction SilentlyContinue
 
-Write-Host "Flushing DNS Cache..."
+Write-Host "Flushing DNS resolver cache..."
 ipconfig /flushdns 2>$null | Out-Null
 
-Write-Host "=============================================" -ForegroundColor Green
-Write-Host "Hosts file is now completely CLEAN!" -ForegroundColor Green
-Write-Host "=============================================" -ForegroundColor Green
-
-if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-    Read-Host "Press Enter to exit..."
-}
+Write-Host "==========================================================" -ForegroundColor Green
+Write-Host " Hosts file restored to clean Microsoft default state." -ForegroundColor Green
+Write-Host "==========================================================" -ForegroundColor Green

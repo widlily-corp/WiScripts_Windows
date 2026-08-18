@@ -1,42 +1,28 @@
-<#
-.SYNOPSIS
-    Resets the IPv4 and IPv6 TCP/IP network stack to factory default settings.
-.DESCRIPTION
-    Executes netsh int ip reset and netsh int ipv6 reset, restores default MTU,
-    and logs the reset operation to %TEMP%\tcp_reset_log.txt.
-.NOTES
-    Requires Administrator elevation. System reboot required afterwards.
-#>
+﻿param()
 
-[CmdletBinding()]
-param()
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Resetting TCP/IP stack requires Administrator privileges. Please run PowerShell as Administrator."
+    return
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " WiScripts: Full TCP/IP Protocol Stack Reset" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-$logPath = "$env:TEMP\tcp_reset_log.txt"
-
-# 1. Reset IPv4 Stack
 Write-Host "Resetting IPv4 TCP/IP stack configuration..." -ForegroundColor Yellow
-netsh int ip reset $logPath
+netsh int ip reset 2>$null | Out-Null
 
-# 2. Reset IPv6 Stack
-Write-Host "Resetting IPv6 TCP/IP stack configuration..." -ForegroundColor Yellow
-netsh int ipv6 reset
+Write-Host "Resetting IPv6 network configuration..." -ForegroundColor Yellow
+netsh int ipv6 reset 2>$null | Out-Null
 
-# 3. Release and Renew DHCP Leases
-Write-Host "Releasing and renewing active DHCP leases..." -ForegroundColor Cyan
-ipconfig /release
-Start-Sleep -Seconds 1
-ipconfig /renew
+Write-Host "Flushing ARP cache..." -ForegroundColor Yellow
+netsh interface ip delete arpcache 2>$null | Out-Null
 
-# 4. Clear ARP table cache
-Write-Host "Flushing Address Resolution Protocol (ARP) cache..." -ForegroundColor Yellow
-netsh interface ip delete arpcache
+Write-Host "Releasing and renewing DHCP leases..." -ForegroundColor Cyan
+ipconfig /release 2>$null | Out-Null
+ipconfig /renew 2>$null | Out-Null
 
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " TCP/IP protocol stack has been reset to default state." -ForegroundColor Green
-Write-Host " Reset details logged to: $logPath" -ForegroundColor DarkGray
-Write-Host " Please restart your computer to apply stack resets." -ForegroundColor Yellow
+Write-Host " TCP/IP stack reset completed. Please restart your system." -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

@@ -1,39 +1,27 @@
-<#
-.SYNOPSIS
-    Flushes local DNS resolver cache, re-registers DNS, and resets Winsock catalog.
-.DESCRIPTION
-    Executes ipconfig /flushdns, ipconfig /registerdns, netsh winsock reset,
-    and clears NetBIOS cache (nbtstat -R, nbtstat -RR) for network restoration.
-.NOTES
-    Requires Administrator elevation.
-#>
+﻿param()
 
-[CmdletBinding()]
-param()
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Resetting Winsock catalog requires Administrator privileges. Please run PowerShell as Administrator."
+    return
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " WiScripts: DNS Flush & Winsock Catalog Reset" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Flush DNS Cache
 Write-Host "Flushing DNS resolver cache..." -ForegroundColor Yellow
-Clear-DnsClientCache -ErrorAction SilentlyContinue
-ipconfig /flushdns
+ipconfig /flushdns 2>$null | Out-Null
 
-# 2. Re-register DNS names
 Write-Host "Re-registering DNS client names..." -ForegroundColor Yellow
-ipconfig /registerdns
+ipconfig /registerdns 2>$null | Out-Null
 
-# 3. Purge NetBIOS name cache
-Write-Host "Purging and reloading NetBIOS name cache..." -ForegroundColor Yellow
-nbtstat -R
-nbtstat -RR
+Write-Host "Clearing NetBIOS name cache..." -ForegroundColor Yellow
+nbtstat -R 2>$null | Out-Null
 
-# 4. Reset Winsock Catalog
 Write-Host "Resetting Winsock catalog..." -ForegroundColor Cyan
-netsh winsock reset
+netsh winsock reset 2>$null | Out-Null
 
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " DNS Cache flushed and Winsock reset successfully." -ForegroundColor Green
-Write-Host " A system restart is recommended to finalize Winsock changes." -ForegroundColor Yellow
+Write-Host " DNS cache flushed and Winsock catalog reset." -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

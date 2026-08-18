@@ -1,10 +1,4 @@
-﻿<#
-.SYNOPSIS
-    Disables the deprecated and insecure Windows PowerShell 2.0 engine feature.
-#>
-
-[CmdletBinding()]
-param()
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -41,6 +35,4 @@ if (-not (Test-Path $psPolicyKey)) {
 Set-ItemProperty -Path $psPolicyKey -Name "EnableScriptBlockLogging" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
 Write-Host "[OK] PowerShell Script Block Logging policy enforced." -ForegroundColor Green
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " PowerShell environment security hardened." -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

@@ -1,10 +1,4 @@
-﻿<#
-.SYNOPSIS
-    Hardens network security by disabling SMBv1, NetBIOS over TCP/IP, and LLMNR.
-#>
-
-[CmdletBinding()]
-param()
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -48,6 +42,4 @@ Write-Host "Enabling SMB Server/Client signing requirement..." -ForegroundColor 
 Set-SmbServerConfiguration -RequireSecuritySignature $true -Force -ErrorAction SilentlyContinue
 Set-SmbClientConfiguration -RequireSecuritySignature $true -Force -ErrorAction SilentlyContinue
 
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host " Network protocol security hardening completed." -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

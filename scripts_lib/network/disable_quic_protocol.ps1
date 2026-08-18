@@ -1,34 +1,23 @@
-﻿<#
-.SYNOPSIS
-    Disables QUIC (HTTP/3) in Google Chrome and Microsoft Edge.
-#>
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "This script requires Administrator privileges. Please run PowerShell as Administrator."
+    Write-Warning "Modifying browser policy keys requires Administrator privileges. Please run PowerShell as Administrator."
     return
 }
 
-Write-Host "=============================================" -ForegroundColor Cyan
-Write-Host "      Disable QUIC Protocol by Antigravity" -ForegroundColor Cyan
-Write-Host "=============================================" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
+Write-Host " WiScripts: Disable QUIC Protocol (HTTP/3 Workaround)" -ForegroundColor Cyan
+Write-Host "==========================================================" -ForegroundColor Cyan
 
 $ChromePath = "HKLM:\SOFTWARE\Policies\Google\Chrome"
-$EdgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+$EdgePath   = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+$YandexPath = "HKLM:\SOFTWARE\Policies\Yandex\Browser"
 
-if (!(Test-Path $ChromePath)) { New-Item -Path $ChromePath -Force -ErrorAction SilentlyContinue | Out-Null }
-if (!(Test-Path $EdgePath)) { New-Item -Path $EdgePath -Force -ErrorAction SilentlyContinue | Out-Null }
-
-Write-Host "Disabling QUIC in Google Chrome..."
-New-ItemProperty -Path $ChromePath -Name "QuicAllowed" -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
-
-Write-Host "Disabling QUIC in Microsoft Edge..."
-New-ItemProperty -Path $EdgePath -Name "QuicAllowed" -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
-
-Write-Host "=============================================" -ForegroundColor Green
-Write-Host "QUIC Protocol Successfully Disabled!" -ForegroundColor Green
-Write-Host "=============================================" -ForegroundColor Green
-
-if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-    Read-Host "Press Enter to exit..."
+foreach ($p in @($ChromePath, $EdgePath, $YandexPath)) {
+    if (!(Test-Path $p)) { New-Item -Path $p -Force -ErrorAction SilentlyContinue | Out-Null }
+    New-ItemProperty -Path $p -Name "QuicAllowed" -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
 }
+
+Write-Host "QUIC protocol disabled across Chrome, Edge, and Yandex Browser policies." -ForegroundColor Green
+Write-Host "==========================================================" -ForegroundColor Green

@@ -1,7 +1,4 @@
-﻿<#
-.SYNOPSIS
-    Installs scheduled task to automatically switch power profiles on AC/Battery events.
-#>
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {

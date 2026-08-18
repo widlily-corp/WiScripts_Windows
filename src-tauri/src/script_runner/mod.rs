@@ -140,16 +140,16 @@ pub async fn execute_custom_script(
         let file_name = format!("wiscripts_{}_{}_{}.{}", timestamp, pid, counter, norm_type);
         let temp_path = temp_dir.join(file_name);
 
-        let prepared_content = if norm_type == "ps1" {
-            format!(
-                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;\n$OutputEncoding = [System.Text.Encoding]::UTF8;\n{}",
-                script_content
-            )
+        let prepared_bytes = if norm_type == "ps1" {
+            // Prepend UTF-8 BOM so PowerShell 5.1/7 parses encoding correctly without breaking param() AST position
+            let mut bytes = vec![0xEF, 0xBB, 0xBF];
+            bytes.extend_from_slice(script_content.as_bytes());
+            bytes
         } else {
-            script_content
+            script_content.into_bytes()
         };
 
-        std::fs::write(&temp_path, &prepared_content).map_err(|e| {
+        std::fs::write(&temp_path, &prepared_bytes).map_err(|e| {
             AppError::Io(format!("Failed to write script content to temp file: {}", e))
         })?;
 

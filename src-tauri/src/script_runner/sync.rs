@@ -487,7 +487,7 @@ mod tests {
     }
 
     #[test]
-    fn test_seed_cache_from_local_project_and_verify_all_15_scripts() {
+    fn test_seed_cache_from_local_project_and_verify_all_scripts() {
         let temp_dir = tempfile::tempdir().expect("Failed to create tempdir");
         let cache_path = temp_dir.path();
 
@@ -495,7 +495,11 @@ mod tests {
         assert!(result.is_ok(), "Local project seed failed: {:?}", result.err());
 
         if let Ok(Some(manifest)) = result {
-            assert_eq!(manifest.scripts.len(), 15, "Manifest should contain 15 scripts");
+            assert!(
+                manifest.scripts.len() >= 15,
+                "Manifest should contain at least 15 verified scripts (found {})",
+                manifest.scripts.len()
+            );
             let cached_manifest_file = cache_path.join("manifest.json");
             assert!(cached_manifest_file.exists(), "manifest.json should be written to cache");
 

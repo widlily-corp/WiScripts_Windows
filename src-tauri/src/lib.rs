@@ -103,6 +103,9 @@ pub fn run() {
             commands::list_active_rules,
             commands::delete_governor_rule,
             script_runner::execute_custom_script,
+            script_runner::sync::sync_scripts_library,
+            script_runner::sync::get_cached_scripts_library,
+            script_runner::sync::read_library_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

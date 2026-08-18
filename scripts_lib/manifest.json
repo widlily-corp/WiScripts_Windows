@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "1.0.0",
+  "version": "1.0.0",
+  "lastUpdated": "2026-08-18T11:00:00Z",
+  "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
+  "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
+  "scripts": [
+    {
+      "id": "maint-clear-wu-cache",
+      "name": "Clear Windows Update Cache",
+      "category": "maintenance",
+      "path": "maintenance/clear_windows_update_cache.ps1",
+      "description": "Stops update services (wuauserv, bits, cryptsvc), purges SoftwareDistribution/Download and Catroot2, and restarts services.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["windows-update", "cache", "maintenance", "services"],
+      "sha256": "ffbec1863076ff3abd3c16c892b209414d0568e2508a0a94f5e5173995f63dd0",
+      "parameters": []
+    },
+    {
+      "id": "maint-rebuild-icon-cache",
+      "name": "Rebuild Icon & Thumbnail Cache",
+      "category": "maintenance",
+      "path": "maintenance/rebuild_icon_cache.ps1",
+      "description": "Terminates Windows Explorer, deletes corrupted IconCache.db and thumbcache databases, and restarts Explorer.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["explorer", "icon-cache", "thumbnails", "ui"],
+      "sha256": "e959c3cd709e8e8333d0cc7938c0ad97c3367900aa15b77fae28de440a5137ab",
+      "parameters": []
+    },
+    {
+      "id": "maint-clean-winsxs",
+      "name": "Clean WinSxS Component Store",
+      "category": "maintenance",
+      "path": "maintenance/clean_component_store_winsxs.ps1",
+      "description": "Runs DISM StartComponentCleanup and optional ResetBase to reclaim gigabytes of disk space from superseded Windows components.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["dism", "winsxs", "component-store", "disk-cleanup"],
+      "sha256": "1ce8873ac69772472eace291cc805fc1d04ee32304300e3a8469bef6039f8d09",
+      "parameters": [
+        {
+          "name": "ResetBase",
+          "type": "boolean",
+          "default": false,
+          "description": "Remove superseded component versions (irreversible update uninstall)"
+        }
+      ]
+    },
+    {
+      "id": "net-flush-dns-winsock",
+      "name": "Flush DNS & Reset Winsock",
+      "category": "network",
+      "path": "network/flush_dns_reset_winsock.ps1",
+      "description": "Flushes DNS cache, re-registers DNS client names, clears NetBIOS name cache, and resets the Winsock catalog.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["dns", "winsock", "network", "repair"],
+      "sha256": "24e26160d67fcfca1cf94d74239bed97f3bad613d70cbca4696b5777ed7c23e5",
+      "parameters": []
+    },
+    {
+      "id": "net-reset-tcp-ip",
+      "name": "Reset TCP/IP Stack",
+      "category": "network",
+      "path": "network/reset_tcp_ip_stack.ps1",
+      "description": "Resets IPv4 and IPv6 network stack configurations, releases/renews DHCP leases, and flushes ARP cache.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["tcp-ip", "netsh", "dhcp", "arp", "network"],
+      "sha256": "dac511319bf5cadf83ffcf5284fffa3bc67f8710cf0e5741d1e29baa8c72085c",
+      "parameters": []
+    },
+    {
+      "id": "net-optimize-tcp-window",
+      "name": "Optimize TCP Window Scaling & RSS",
+      "category": "network",
+      "path": "network/optimize_tcp_window_scaling.ps1",
+      "description": "Configures TCP Receive Window Auto-Tuning, CUBIC/CTCP congestion provider, and Receive-Side Scaling (RSS) for high throughput.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["tcp", "autotuning", "rss", "performance", "throughput"],
+      "sha256": "6c72d0f02e2d8048afefaee4679f4c84fa743c1f2c79245190d1bf67dd9eb03e",
+      "parameters": [
+        {
+          "name": "AutoTuningLevel",
+          "type": "string",
+          "default": "normal",
+          "description": "TCP Autotuning level (normal, disabled, experimental)"
+        },
+        {
+          "name": "CongestionProvider",
+          "type": "string",
+          "default": "cubic",
+          "description": "TCP Congestion Control provider (cubic, ctcp, default)"
+        }
+      ]
+    },
+    {
+      "id": "sec-harden-smb-netbios",
+      "name": "Harden SMB & Disable NetBIOS/LLMNR",
+      "category": "security",
+      "path": "security/harden_smb_and_netbios.ps1",
+      "description": "Disables SMBv1 protocol, NetBIOS over TCP/IP, and LLMNR multicast resolution, and enforces SMB signing.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["smb", "netbios", "llmnr", "security", "hardening"],
+      "sha256": "2b99cfbe857c48dac26acd9704211203314e8f311f3c705c23577ab519e39c8d",
+      "parameters": []
+    },
+    {
+      "id": "sec-disable-powershell-v2",
+      "name": "Disable Legacy PowerShell 2.0",
+      "category": "security",
+      "path": "security/disable_legacy_powershell_v2.ps1",
+      "description": "Removes PowerShell 2.0 downgrade attack surface and enforces Script Block Logging policy.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["powershell", "security", "logging", "amsi"],
+      "sha256": "e4018d23e661ab0ebbaccee6f887ccde9ccd4b38089661591292baf7acae976e",
+      "parameters": []
+    },
+    {
+      "id": "sec-verify-system-files",
+      "name": "Verify System File & Image Integrity",
+      "category": "security",
+      "path": "security/verify_system_file_integrity.ps1",
+      "description": "Performs full SFC /scannow system file validation and DISM /RestoreHealth image integrity repairs.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["sfc", "dism", "integrity", "system-repair"],
+      "sha256": "3ef80a6c6a52e0d6b3dbd17cba206bdadaa1204292dd99a16a5908bfc48d4b34",
+      "parameters": [
+        {
+          "name": "SkipDism",
+          "type": "boolean",
+          "default": false,
+          "description": "Skip DISM image restore and only run SFC"
+        }
+      ]
+    },
+    {
+      "id": "perf-ultimate-performance",
+      "name": "Enable Ultimate Performance Power Scheme",
+      "category": "performance",
+      "path": "performance/enable_ultimate_performance_plan.ps1",
+      "description": "Duplicates and activates the built-in Windows Ultimate Performance power scheme to minimize hardware latency.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["powercfg", "performance", "energy", "cpu"],
+      "sha256": "a41494e83eed818f72c7eebe9559bdbbe0cd6c91a428b82e623d22582a64471e",
+      "parameters": []
+    },
+    {
+      "id": "perf-disable-core-parking",
+      "name": "Disable CPU Core Parking (AC)",
+      "category": "performance",
+      "path": "performance/disable_core_parking_ac.ps1",
+      "description": "Unparks 100% of CPU cores on AC power to prevent frequency throttling and thread latency spikes.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["cpu", "core-parking", "latency", "gaming"],
+      "sha256": "6b00eb27752e45e10d07714395dd276a3831ae36447c49a68fdf1bcebda93553",
+      "parameters": []
+    },
+    {
+      "id": "perf-optimize-ntfs-memory",
+      "name": "Optimize NTFS Memory & I/O",
+      "category": "performance",
+      "path": "performance/optimize_ntfs_memory_usage.ps1",
+      "description": "Expands NTFS cache memory pool, disables 8.3 short name creation, and disables last access timestamp writes.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["ntfs", "filesystem", "disk-io", "fsutil"],
+      "sha256": "61bfe26dbda079e185dc2cf46e86c2f40faf100e0c149f5851d010b174f88288",
+      "parameters": []
+    },
+    {
+      "id": "diag-export-battery-report",
+      "name": "Export Battery & Energy Health Report",
+      "category": "diagnostics",
+      "path": "diagnostics/export_battery_energy_report.ps1",
+      "description": "Generates HTML battery capacity health and 60-second system energy efficiency audit reports.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["battery", "powercfg", "energy", "diagnostics"],
+      "sha256": "269323c1e22a847b492a199ff374fb4e555bec75512a536fa1e19e707a0d13fe",
+      "parameters": [
+        {
+          "name": "OutputDirectory",
+          "type": "string",
+          "default": "$env:USERPROFILE\\Desktop",
+          "description": "Target folder for generated HTML reports"
+        }
+      ]
+    },
+    {
+      "id": "diag-analyze-bsod-dumps",
+      "name": "Analyze BSOD Crash Dumps & BugChecks",
+      "category": "diagnostics",
+      "path": "diagnostics/analyze_bsod_crash_dumps.ps1",
+      "description": "Inspects Minidump files, MEMORY.DMP headers, and queries System Event Log for BugCheck crash events.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["bsod", "crash", "minidump", "eventlog", "diagnostics"],
+      "sha256": "564cab26868904cd2e83948de3a23883572a073ba9cb17b3139a3a82e6c5d88d",
+      "parameters": [
+        {
+          "name": "MaxEvents",
+          "type": "number",
+          "default": 10,
+          "description": "Maximum number of recent BugCheck events to display"
+        }
+      ]
+    },
+    {
+      "id": "diag-dump-network-connections",
+      "name": "Dump Process-Mapped Network Connections",
+      "category": "diagnostics",
+      "path": "diagnostics/dump_active_network_connections.ps1",
+      "description": "Retrieves active TCP/UDP sockets, remote endpoints, and maps owning PID to process names and binary paths.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": ["network", "sockets", "tcp", "process", "audit"],
+      "sha256": "7bafa6ab2e55d85a1322938d2b1a90791ba7a3fa318aa2fc2eb8775803922dcc",
+      "parameters": [
+        {
+          "name": "StateFilter",
+          "type": "string",
+          "default": "All",
+          "description": "TCP connection state filter (All, Established, Listen, TimeWait)"
+        },
+        {
+          "name": "Top",
+          "type": "number",
+          "default": 50,
+          "description": "Maximum number of socket connections to return"
+        }
+      ]
+    }
+  ]
+}

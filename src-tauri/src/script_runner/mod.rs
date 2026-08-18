@@ -1,5 +1,11 @@
+pub mod sync;
+
 use crate::error::AppError;
 use crate::runner::{decode_bytes, CommandOutput};
+pub use sync::{
+    get_cached_scripts_library, read_library_script, sync_scripts_library, ScriptManifestEntry,
+    ScriptParameter, ScriptsLibraryManifest,
+};
 use serde::{Deserialize, Serialize};
 use std::io::BufRead;
 use std::path::PathBuf;

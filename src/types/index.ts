@@ -88,6 +88,7 @@ export interface TaskProgressPayload {
 export * from './stateEngine';
 export * from './autoruns';
 export * from './governor';
+export * from './scriptLibrary';
 
 export type TabType =
   | 'dashboard'

@@ -18,7 +18,9 @@ use crate::state_engine::{self, RollbackResult, SystemSnapshot};
 use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
-pub use crate::script_runner::execute_custom_script;
+pub use crate::script_runner::{
+    execute_custom_script, get_cached_scripts_library, read_library_script, sync_scripts_library,
+};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::sync::{Arc, Mutex};

@@ -2,7 +2,13 @@ import { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import type { AppState } from '../useAppStore';
-import type { CommandOutput } from '../../types';
+import type {
+  CommandOutput,
+  ScriptsLibraryManifest,
+  ScriptManifestEntry,
+  ScriptCategory,
+  ScriptRiskLevel,
+} from '../../types';
 
 export interface ScriptOutputLine {
   id: string;
@@ -24,15 +30,40 @@ export interface ScriptRunnerSlice {
   isExecutingScript: boolean;
   unlistenScriptOutput: UnlistenFn | null;
 
+  // Online Library State
+  libraryManifest: ScriptsLibraryManifest | null;
+  isLoadingLibrary: boolean;
+  libraryError: string | null;
+  lastSyncTimestamp: string | null;
+  activeRunnerTab: 'editor' | 'library';
+  librarySelectedCategory: ScriptCategory;
+  librarySearchQuery: string;
+  librarySelectedRisk: 'all' | ScriptRiskLevel;
+  previewScript: ScriptManifestEntry | null;
+  previewContent: string | null;
+  isLoadingPreview: boolean;
+
+  // Actions
   setScriptContent: (content: string) => void;
   setScriptType: (type: 'ps1' | 'bat' | 'cmd') => void;
   setUploadedFileName: (name: string | null) => void;
   addOutputLine: (payload: { line: string; stream: 'stdout' | 'stderr' }) => void;
   clearOutputLogs: () => void;
-  executeScript: () => Promise<CommandOutput | null>;
+  executeScript: (customContent?: string, customType?: 'ps1' | 'bat' | 'cmd') => Promise<CommandOutput | null>;
   downloadOutputLog: () => void;
   setupScriptOutputListener: () => Promise<UnlistenFn>;
   cleanupScriptOutputListener: () => void;
+
+  // Library Actions
+  setActiveRunnerTab: (tab: 'editor' | 'library') => void;
+  setLibrarySelectedCategory: (category: ScriptCategory) => void;
+  setLibrarySearchQuery: (query: string) => void;
+  setLibrarySelectedRisk: (risk: 'all' | ScriptRiskLevel) => void;
+  fetchLibrary: (force?: boolean) => Promise<void>;
+  openScriptPreview: (script: ScriptManifestEntry) => Promise<void>;
+  closeScriptPreview: () => void;
+  loadScriptToEditor: (script: ScriptManifestEntry) => Promise<void>;
+  runLibraryScriptDirectly: (script: ScriptManifestEntry) => Promise<void>;
 }
 
 const DEFAULT_SCRIPT_CONTENT = `# WiScripts Windows Custom PowerShell Script
@@ -50,6 +81,19 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   outputLogs: [],
   isExecutingScript: false,
   unlistenScriptOutput: null,
+
+  // Online Library initial state
+  libraryManifest: null,
+  isLoadingLibrary: false,
+  libraryError: null,
+  lastSyncTimestamp: null,
+  activeRunnerTab: 'editor',
+  librarySelectedCategory: 'all',
+  librarySearchQuery: '',
+  librarySelectedRisk: 'all',
+  previewScript: null,
+  previewContent: null,
+  isLoadingPreview: false,
 
   setScriptContent: (content) => set({ scriptContent: content }),
   setScriptType: (type) => set({ scriptType: type }),
@@ -99,10 +143,12 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     }
   },
 
-  executeScript: async () => {
-    const { scriptContent, scriptType, dryRunMode, addLog, addToast } = get();
+  executeScript: async (customContent, customType) => {
+    const { dryRunMode, addLog, addToast } = get();
+    const content = customContent ?? get().scriptContent;
+    const type = customType ?? get().scriptType;
 
-    if (!scriptContent || !scriptContent.trim()) {
+    if (!content || !content.trim()) {
       addToast({
         type: 'warning',
         title: 'Empty Script',
@@ -118,13 +164,13 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     addLog({
       level: 'cmd',
-      message: `Executing custom script (${scriptType}, dryRun: ${dryRunMode})`,
+      message: `Executing script (${type}, dryRun: ${dryRunMode})`,
     });
 
     try {
       const output = await invoke<CommandOutput>('execute_custom_script', {
-        scriptContent,
-        scriptType,
+        scriptContent: content,
+        scriptType: type,
         dryRun: dryRunMode,
       });
 
@@ -149,7 +195,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       const errorMsg = err instanceof Error ? err.message : String(err);
       addLog({
         level: 'error',
-        message: `Custom script execution failed: ${errorMsg}`,
+        message: `Script execution failed: ${errorMsg}`,
       });
       addToast({
         type: 'error',
@@ -203,5 +249,146 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  },
+
+  // Online Library Implementation
+  setActiveRunnerTab: (tab) => set({ activeRunnerTab: tab }),
+  setLibrarySelectedCategory: (category) => set({ librarySelectedCategory: category }),
+  setLibrarySearchQuery: (query) => set({ librarySearchQuery: query }),
+  setLibrarySelectedRisk: (risk) => set({ librarySelectedRisk: risk }),
+
+  fetchLibrary: async (force = false) => {
+    set({ isLoadingLibrary: true, libraryError: null });
+    const { addLog, addToast } = get();
+
+    try {
+      addLog({
+        level: 'info',
+        message: force
+          ? 'Syncing online scripts library from GitHub repository...'
+          : 'Loading cached scripts library manifest...',
+      });
+
+      const manifest = force
+        ? await invoke<ScriptsLibraryManifest>('sync_scripts_library', { force: true })
+        : await invoke<ScriptsLibraryManifest>('get_cached_scripts_library');
+
+      set({
+        libraryManifest: manifest,
+        isLoadingLibrary: false,
+        lastSyncTimestamp: new Date().toLocaleTimeString(),
+        libraryError: null,
+      });
+
+      addToast({
+        type: 'success',
+        title: force ? 'Library Synced' : 'Library Loaded',
+        message: `${manifest.scripts.length} verified scripts ready in library catalog.`,
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      set({
+        isLoadingLibrary: false,
+        libraryError: errorMsg,
+      });
+      addLog({
+        level: 'error',
+        message: `Scripts library sync error: ${errorMsg}`,
+      });
+      addToast({
+        type: 'error',
+        title: 'Library Sync Error',
+        message: errorMsg,
+      });
+    }
+  },
+
+  openScriptPreview: async (script) => {
+    set({ previewScript: script, isLoadingPreview: true, previewContent: null });
+    const { addLog, addToast } = get();
+
+    try {
+      const code = await invoke<string>('read_library_script', { scriptId: script.id });
+      set({ previewContent: code, isLoadingPreview: false });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      set({ isLoadingPreview: false });
+      addLog({
+        level: 'error',
+        message: `Failed to read script "${script.name}": ${errorMsg}`,
+      });
+      addToast({
+        type: 'error',
+        title: 'Script Read Error',
+        message: errorMsg,
+      });
+    }
+  },
+
+  closeScriptPreview: () => {
+    set({ previewScript: null, previewContent: null, isLoadingPreview: false });
+  },
+
+  loadScriptToEditor: async (script) => {
+    const { addLog, addToast } = get();
+    try {
+      const code = await invoke<string>('read_library_script', { scriptId: script.id });
+      set({
+        scriptContent: code,
+        scriptType: 'ps1',
+        uploadedFileName: `${script.name} (${script.path})`,
+        activeRunnerTab: 'editor',
+        previewScript: null,
+        previewContent: null,
+      });
+      addToast({
+        type: 'info',
+        title: 'Loaded to Editor',
+        message: `"${script.name}" loaded into Script Editor.`,
+      });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      addLog({
+        level: 'error',
+        message: `Failed to load script "${script.name}": ${errorMsg}`,
+      });
+      addToast({
+        type: 'error',
+        title: 'Script Load Error',
+        message: errorMsg,
+      });
+    }
+  },
+
+  runLibraryScriptDirectly: async (script) => {
+    const { addLog, addToast, executeScript } = get();
+    try {
+      const code = await invoke<string>('read_library_script', { scriptId: script.id });
+      set({
+        scriptContent: code,
+        scriptType: 'ps1',
+        uploadedFileName: `${script.name} (${script.path})`,
+        activeRunnerTab: 'editor',
+        previewScript: null,
+        previewContent: null,
+      });
+      addToast({
+        type: 'info',
+        title: 'Starting Execution',
+        message: `Executing "${script.name}" with live output stream...`,
+      });
+      await executeScript(code, 'ps1');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      addLog({
+        level: 'error',
+        message: `Failed to execute library script "${script.name}": ${errorMsg}`,
+      });
+      addToast({
+        type: 'error',
+        title: 'Execution Error',
+        message: errorMsg,
+      });
+    }
   },
 });

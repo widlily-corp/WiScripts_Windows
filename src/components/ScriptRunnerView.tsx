@@ -418,7 +418,7 @@ export function ScriptRunnerView() {
                   'Enter PowerShell or CMD script content here...'
                 )}
                 spellCheck={false}
-                className="w-full h-80 font-mono text-xs text-text-code bg-[#0D1117] text-[#E6EDF3] border border-border rounded-[6px] p-3 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none leading-relaxed select-text"
+                className="w-full h-80 font-mono text-xs text-text-code bg-surface-subtle border border-border rounded-[6px] p-3 focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand resize-none leading-relaxed select-text"
               />
             </div>
 
@@ -501,7 +501,7 @@ export function ScriptRunnerView() {
             </div>
 
             {/* Console Window */}
-            <div className="relative flex-1 bg-[#0D1117] border border-border rounded-[6px] p-3 font-mono text-xs text-text-code h-80 overflow-y-auto space-y-1 select-text">
+            <div className="relative flex-1 bg-surface-subtle border border-border rounded-[6px] p-3 font-mono text-xs text-text-code h-80 overflow-y-auto space-y-1 select-text">
               {outputLogs.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-text-secondary text-center p-4 space-y-2 select-none">
                   <Terminal className="h-8 w-8 text-text-secondary/40" />
@@ -822,7 +822,7 @@ export function ScriptRunnerView() {
               </p>
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <span className="text-text-secondary font-medium">SHA-256:</span>
-                <code className="font-mono text-[11px] bg-[#0D1117] text-[#E6EDF3] px-2 py-0.5 rounded border border-border/80">
+                <code className="font-mono text-[11px] bg-surface-subtle text-text-code px-2 py-0.5 rounded border border-border/80">
                   {previewScript.sha256}
                 </code>
                 <button
@@ -870,14 +870,14 @@ export function ScriptRunnerView() {
             </div>
 
             {/* Modal Code Viewer */}
-            <div className="flex-1 overflow-y-auto p-4 bg-[#0D1117] select-text">
+            <div className="flex-1 overflow-y-auto p-4 bg-surface-subtle select-text">
               {isLoadingPreview ? (
                 <div className="flex flex-col items-center justify-center h-64 text-text-secondary space-y-2">
                   <Loader2 className="h-6 w-6 animate-spin text-brand" />
                   <span className="text-xs">Loading verified script code...</span>
                 </div>
               ) : (
-                <pre className="font-mono text-xs text-[#E6EDF3] leading-relaxed whitespace-pre-wrap break-all">
+                <pre className="font-mono text-xs text-text-code leading-relaxed whitespace-pre-wrap break-all">
                   {previewContent ?? '# Error reading script content'}
                 </pre>
               )}

@@ -54,7 +54,7 @@ export function TemperatureSensorWidget({
   const percent = isAvailable ? Math.min(100, Math.max(0, (tempC / 100) * 100)) : 0;
 
   return (
-    <div className="rounded-[6px] border border-border bg-[#08090A] p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
+    <div className="rounded-[6px] border border-border bg-background p-4 space-y-3 shadow-sm hover:border-border-focus transition-colors">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-text-secondary">
           <Icon className="h-4 w-4 text-brand" />
@@ -110,7 +110,7 @@ export function TemperatureSensorWidget({
               aria-label={`Select ${title} temperature sensor`}
               value={selectedSensorId || ''}
               onChange={(e) => onSelectSensor(e.target.value || null)}
-              className="w-full bg-[#0D0E10] text-text-primary border border-border-subtle rounded-[4px] px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-brand appearance-none cursor-pointer pr-7 truncate"
+              className="w-full bg-surface-subtle text-text-primary border border-border-subtle rounded-[4px] px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-brand appearance-none cursor-pointer pr-7 truncate"
             >
               <option value="">Auto-detect (Default)</option>
               {availableSensors.map((sensor) => (

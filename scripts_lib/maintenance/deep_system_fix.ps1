@@ -1,9 +1,8 @@
-﻿param()
+param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Deep system repairs require Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Deep system repairs require Administrator privileges. Please run PowerShell as Administrator."
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

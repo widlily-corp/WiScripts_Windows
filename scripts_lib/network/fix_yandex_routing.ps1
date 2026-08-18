@@ -1,9 +1,8 @@
-﻿param()
+param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Applying browser policy fixes requires Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Applying browser policy fixes requires Administrator privileges. Please run PowerShell as Administrator."
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

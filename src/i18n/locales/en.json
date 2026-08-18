@@ -93,7 +93,10 @@
       "activation": "Microsoft Activation Scripts (MAS)",
       "restore_points": "Windows System Restore Checkpoints",
       "state_engine": "WiScripts State Engine & Surgical Undo",
-      "settings": "Global Configuration & Preferences"
+      "settings": "Global Configuration & Preferences",
+      "script_runner": "PowerShell & Batch Script Runner Library",
+      "governor": "System Resource Governor & CPU Affinity",
+      "autoruns": "Windows AutoRuns & Deep Startup Inspector"
     },
     "logs": {
       "refresh_success": "System metrics refreshed: CPU {{cpu}}%, RAM {{used}}/{{total}} GB",
@@ -206,7 +209,7 @@
     "diagTrackBlocked": "Telemetry service blocked",
     "telemetryDisabled": "Disabled",
     "telemetryMinimized": "Minimized",
-    "telemetryActive": "Active",
+    "telemetryActive": "DiagTrack service active",
     "telemetryBlocked": "Blocked",
     "telemetryUnknown": "Unknown",
     "telemetryStatus": {
@@ -241,7 +244,6 @@
     "telemetryTitle": "Real-Time System Telemetry & Hardware Probe",
     "cpuCoreSensor": "CPU Core Package Sensor",
     "gpuThermalSensor": "GPU Hardware Thermal Sensor",
-    "telemetryActive": "DiagTrack service active",
     "catalogPreview": "Core Optimization Catalog Preview",
     "catalogDesc": "Telemetry removal, bloatware cleanup, privacy hardening, and service optimization"
   },
@@ -988,7 +990,8 @@
     "update_now": "Update Now",
     "downloading_progress": "Downloading... {{progress}}%",
     "restart_apply": "Restart & Apply",
-    "dismiss": "Dismiss banner"
+    "dismiss": "Dismiss banner",
+    "release_notes": "Release Notes"
   },
   "audioView": {
     "title": "Windows Audio Manager",
@@ -1216,7 +1219,8 @@
       "rollbackMsg": "Restored {{keys}} registry keys and {{svcs}} services.",
       "rollbackErrorTitle": "Rollback Execution Failed",
       "deleteSuccessTitle": "Snapshot Deleted",
-      "deleteSuccessMsg": "Snapshot {{id}} removed from disk."
+      "deleteSuccessMsg": "Snapshot {{id}} removed from disk.",
+      "deleteErrorTitle": "Snapshot Deletion Failed"
     }
   },
   "script_runner": {
@@ -1267,7 +1271,19 @@
     "parameters_label": "Configurable Parameters",
     "tags_label": "Tags",
     "hash_label": "Cryptographic Hash (SHA-256)",
-    "close_preview": "Close Preview"
+    "close_preview": "Close Preview",
+    "param_dialog_title": "Configure Script Parameters",
+    "param_dialog_reset": "Reset to Defaults",
+    "param_dialog_run": "Run with Parameters",
+    "cancel_execution": "Cancel Execution",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling...",
+    "cancel_tooltip": "Terminate script process tree immediately",
+    "active_execution_banner": "A script is actively executing",
+    "view_terminal": "View Terminal",
+    "validation_required": "Value cannot be empty",
+    "validation_invalid_number": "Must be a valid finite number",
+    "cancellation_requested": "Cancellation requested..."
   },
   "update_modal": {
     "title": "New Version Available",
@@ -1278,5 +1294,12 @@
     "engine_footer": "WiScripts Utility Release Engine",
     "remind_later": "Remind Me Later",
     "install_now": "Install Update Now"
+  },
+  "error_boundary": {
+    "title": "Application Error",
+    "description": "An unexpected rendering error occurred.",
+    "unknown_error": "Unknown application error",
+    "report_button": "Report Crash on GitHub",
+    "reload_button": "Reload Application"
   }
 }

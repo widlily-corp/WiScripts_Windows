@@ -53,6 +53,132 @@ pub fn compute_sha256(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Strictly validates and normalizes a relative script path from a manifest.
+/// Rejects:
+/// - Empty or whitespace-only paths
+/// - Leading slashes (`/`, `\`)
+/// - Windows drive prefixes / colons (e.g. `C:`, `D:`)
+/// - UNC prefixes (`\\`)
+/// - Parent directory traversal (`..`)
+/// - Non-normal path components (RootDir, Prefix, ParentDir, CurDir)
+/// - Disallowed file extensions (only .ps1, .bat, .cmd are permitted)
+pub fn sanitize_script_relative_path(raw_path: &str) -> Result<PathBuf, AppError> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::InvalidConfig(
+            "Script path in manifest cannot be empty".to_string(),
+        ));
+    }
+
+    // 1. Reject colons, UNC, or leading slashes/backslashes
+    if trimmed.contains(':')
+        || trimmed.starts_with('/')
+        || trimmed.starts_with('\\')
+        || trimmed.contains('\\')
+    {
+        return Err(AppError::InvalidConfig(format!(
+            "Script path '{}' contains forbidden characters, backslashes, colons, or leading slashes",
+            raw_path
+        )));
+    }
+
+    // 2. Explicit traversal token check
+    if trimmed.contains("..") {
+        return Err(AppError::InvalidConfig(format!(
+            "Path traversal sequence '..' detected in script path '{}'",
+            raw_path
+        )));
+    }
+
+    // 3. Structural component verification
+    let path = Path::new(trimmed);
+    let mut normalized_buf = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(comp) => {
+                let comp_str = comp.to_string_lossy();
+                if comp_str.trim().is_empty()
+                    || comp_str == "."
+                    || comp_str == ".."
+                    || comp_str.contains('/')
+                    || comp_str.contains('\\')
+                    || comp_str.contains(':')
+                    || comp_str.contains('\0')
+                {
+                    return Err(AppError::InvalidConfig(format!(
+                        "Invalid path segment '{}' in script path '{}'",
+                        comp_str, raw_path
+                    )));
+                }
+                normalized_buf.push(comp);
+            }
+            std::path::Component::ParentDir => {
+                return Err(AppError::InvalidConfig(format!(
+                    "Path traversal ('..') detected in script path '{}'",
+                    raw_path
+                )));
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err(AppError::InvalidConfig(format!(
+                    "Absolute or rooted path rejected: '{}'",
+                    raw_path
+                )));
+            }
+            std::path::Component::CurDir => {
+                return Err(AppError::InvalidConfig(format!(
+                    "Redundant '.' current-dir component rejected in script path '{}'",
+                    raw_path
+                )));
+            }
+        }
+    }
+
+    if normalized_buf.as_os_str().is_empty() {
+        return Err(AppError::InvalidConfig(format!(
+            "Script path '{}' resolved to an empty path",
+            raw_path
+        )));
+    }
+
+    // 4. Extension whitelist check
+    match normalized_buf.extension().and_then(|ext| ext.to_str()) {
+        Some(ext) => {
+            let lower_ext = ext.to_ascii_lowercase();
+            if lower_ext != "ps1" && lower_ext != "bat" && lower_ext != "cmd" {
+                return Err(AppError::InvalidConfig(format!(
+                    "Script path '{}' has disallowed extension '.{}'. Allowed extensions: ps1, bat, cmd",
+                    raw_path, lower_ext
+                )));
+            }
+        }
+        None => {
+            return Err(AppError::InvalidConfig(format!(
+                "Script path '{}' lacks a file extension",
+                raw_path
+            )));
+        }
+    }
+
+    Ok(normalized_buf)
+}
+
+/// Safely joins a sanitized relative script path to a base directory,
+/// verifying containment within `base_dir`.
+pub fn safe_join_script_path(base_dir: &Path, raw_relative_path: &str) -> Result<PathBuf, AppError> {
+    let sanitized_rel = sanitize_script_relative_path(raw_relative_path)?;
+    let target = base_dir.join(&sanitized_rel);
+
+    if !target.starts_with(base_dir) {
+        return Err(AppError::InvalidConfig(format!(
+            "Script path '{}' resolves outside base directory '{:?}'",
+            raw_relative_path, base_dir
+        )));
+    }
+
+    Ok(target)
+}
+
 /// Resolves the offline scripts library cache directory:
 /// `%LOCALAPPDATA%\WiScripts\ScriptsLibCache\`
 pub fn get_scripts_cache_dir() -> Result<PathBuf, AppError> {
@@ -114,9 +240,19 @@ pub fn seed_cache_from_local_project(cache_dir: &Path) -> Result<Option<ScriptsL
                 .map_err(|e| AppError::Io(format!("Failed to create cached scripts directory: {}", e)))?;
 
             for entry in &manifest.scripts {
-                let src_script = local_dir.join(&entry.path);
+                let rel_path = match sanitize_script_relative_path(&entry.path) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::warn!(
+                            "[SyncEngine] Local seed skipped script '{}' with invalid path '{}': {}",
+                            entry.id, entry.path, e
+                        );
+                        continue;
+                    }
+                };
+                let src_script = local_dir.join(&rel_path);
                 if src_script.exists() {
-                    let dest_script = scripts_dir.join(&entry.path);
+                    let dest_script = scripts_dir.join(&rel_path);
                     if let Some(parent) = dest_script.parent() {
                         fs::create_dir_all(parent).map_err(|e| {
                             AppError::Io(format!("Failed to create script category directory: {}", e))
@@ -138,18 +274,38 @@ pub fn seed_cache_from_local_project(cache_dir: &Path) -> Result<Option<ScriptsL
     Ok(None)
 }
 
-/// Retrieves the cached scripts library manifest. If cache is empty, tries local project seed.
+/// Retrieves the cached scripts library manifest. If cache is empty or corrupt, tries local project seed.
 #[tauri::command]
 pub async fn get_cached_scripts_library() -> Result<ScriptsLibraryManifest, AppError> {
     let cache_dir = get_scripts_cache_dir()?;
     let cached_manifest_path = cache_dir.join("manifest.json");
 
     if cached_manifest_path.exists() {
-        let content = fs::read_to_string(&cached_manifest_path)
-            .map_err(|e| AppError::Io(format!("Failed to read cached manifest: {}", e)))?;
-        let manifest: ScriptsLibraryManifest = serde_json::from_str(&content)
-            .map_err(|e| AppError::InvalidConfig(format!("Failed to parse cached manifest: {}", e)))?;
-        return Ok(manifest);
+        match fs::read_to_string(&cached_manifest_path) {
+            Ok(content) => {
+                match serde_json::from_str::<ScriptsLibraryManifest>(&content) {
+                    Ok(manifest) => return Ok(manifest),
+                    Err(e) => {
+                        log::warn!(
+                            "[SyncEngine] Cached manifest.json is corrupted: {}. Pruning invalid cache and falling back to seed.",
+                            e
+                        );
+                        let _ = fs::remove_file(&cached_manifest_path);
+                        let cached_etag = cache_dir.join("manifest.etag");
+                        if cached_etag.exists() {
+                            let _ = fs::remove_file(&cached_etag);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "[SyncEngine] Failed to read cached manifest: {}. Pruning cache entry.",
+                    e
+                );
+                let _ = fs::remove_file(&cached_manifest_path);
+            }
+        }
     }
 
     // Try seeding from local project folder
@@ -195,11 +351,25 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
             if response.status() == reqwest::StatusCode::NOT_MODIFIED {
                 log::info!("[SyncEngine] Remote manifest unchanged (HTTP 304 Not Modified). Reusing cache.");
                 if cached_manifest_path.exists() {
-                    let content = fs::read_to_string(&cached_manifest_path)
-                        .map_err(|e| AppError::Io(format!("Failed to read cached manifest: {}", e)))?;
-                    Some(serde_json::from_str::<ScriptsLibraryManifest>(&content).map_err(|e| {
-                        AppError::InvalidConfig(format!("Failed to parse cached manifest: {}", e))
-                    })?)
+                    match fs::read_to_string(&cached_manifest_path) {
+                        Ok(content) => match serde_json::from_str::<ScriptsLibraryManifest>(&content) {
+                            Ok(parsed) => Some(parsed),
+                            Err(e) => {
+                                log::warn!(
+                                    "[SyncEngine] Corrupted cached manifest on HTTP 304: {}. Deleting cache and re-syncing.",
+                                    e
+                                );
+                                let _ = fs::remove_file(&cached_manifest_path);
+                                let _ = fs::remove_file(&cached_etag_path);
+                                None
+                            }
+                        },
+                        Err(_) => {
+                            let _ = fs::remove_file(&cached_manifest_path);
+                            let _ = fs::remove_file(&cached_etag_path);
+                            None
+                        }
+                    }
                 } else {
                     None
                 }
@@ -237,16 +407,26 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
     let manifest = match maybe_manifest {
         Some(m) => m,
         None => {
+            let mut loaded_manifest: Option<ScriptsLibraryManifest> = None;
             if cached_manifest_path.exists() {
-                let content = fs::read_to_string(&cached_manifest_path)
-                    .map_err(|e| AppError::Io(format!("Failed to read cached manifest: {}", e)))?;
-                serde_json::from_str::<ScriptsLibraryManifest>(&content)
-                    .map_err(|e| AppError::InvalidConfig(format!("Failed to parse cached manifest: {}", e)))?
+                if let Ok(content) = fs::read_to_string(&cached_manifest_path) {
+                    if let Ok(parsed) = serde_json::from_str::<ScriptsLibraryManifest>(&content) {
+                        loaded_manifest = Some(parsed);
+                    } else {
+                        log::warn!("[SyncEngine] Pruning invalid cached manifest during fallback.");
+                        let _ = fs::remove_file(&cached_manifest_path);
+                        let _ = fs::remove_file(&cached_etag_path);
+                    }
+                }
+            }
+
+            if let Some(m) = loaded_manifest {
+                m
             } else if let Some(local_manifest) = seed_cache_from_local_project(&cache_dir)? {
                 local_manifest
             } else {
                 return Err(AppError::Execution(
-                    "Cannot sync script library: network is unreachable and no offline cache is available."
+                    "Cannot sync script library: network is unreachable and no valid offline cache is available."
                         .to_string(),
                 ));
             }
@@ -257,7 +437,18 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
     let local_project_dir = get_local_project_scripts_dir();
 
     for script in &manifest.scripts {
-        let cached_script_path = scripts_cache_dir.join(&script.path);
+        let rel_path = match sanitize_script_relative_path(&script.path) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!(
+                    "[SyncEngine] Refusing to sync script '{}': invalid/malicious path '{}': {}",
+                    script.id, script.path, e
+                );
+                continue;
+            }
+        };
+
+        let cached_script_path = scripts_cache_dir.join(&rel_path);
         let mut needs_download = true;
 
         if cached_script_path.exists() {
@@ -281,7 +472,7 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
 
             // 1. Try local project directory first (fast & offline)
             if let Some(ref local_dir) = local_project_dir {
-                let local_path = local_dir.join(&script.path);
+                let local_path = local_dir.join(&rel_path);
                 if local_path.exists() {
                     if let Ok(bytes) = fs::read(&local_path) {
                         let hash = compute_sha256(&bytes);
@@ -294,7 +485,16 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
 
             // 2. Download from GitHub raw url if not found locally
             if script_bytes.is_none() {
-                let script_url = format!("{}/{}", manifest.raw_base_url.trim_end_matches('/'), script.path);
+                let forward_slash_path = rel_path
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                let script_url = format!(
+                    "{}/{}",
+                    manifest.raw_base_url.trim_end_matches('/'),
+                    forward_slash_path
+                );
                 match client.get(&script_url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(bytes) = resp.bytes().await {
@@ -312,10 +512,18 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
                         }
                     }
                     Ok(resp) => {
-                        log::warn!("[SyncEngine] Failed to download script '{}': HTTP {}", script.id, resp.status());
+                        log::warn!(
+                            "[SyncEngine] Failed to download script '{}': HTTP {}",
+                            script.id,
+                            resp.status()
+                        );
                     }
                     Err(err) => {
-                        log::warn!("[SyncEngine] Network error downloading script '{}': {}", script.id, err);
+                        log::warn!(
+                            "[SyncEngine] Network error downloading script '{}': {}",
+                            script.id,
+                            err
+                        );
                     }
                 }
             }
@@ -326,7 +534,11 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
                     let _ = fs::create_dir_all(parent);
                 }
                 if let Err(e) = fs::write(&cached_script_path, &bytes) {
-                    log::error!("[SyncEngine] Failed to write cached script '{}': {}", script.id, e);
+                    log::error!(
+                        "[SyncEngine] Failed to write cached script '{}': {}",
+                        script.id,
+                        e
+                    );
                 } else {
                     log::info!("[SyncEngine] Cached verified script: {}", script.id);
                 }
@@ -349,8 +561,9 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
             AppError::InvalidConfig(format!("Script with id '{}' not found in library manifest", script_id))
         })?;
 
+    let rel_path = sanitize_script_relative_path(&entry.path)?;
     let cache_dir = get_scripts_cache_dir()?;
-    let cached_path = cache_dir.join("scripts").join(&entry.path);
+    let cached_path = cache_dir.join("scripts").join(&rel_path);
 
     if cached_path.exists() {
         let bytes = fs::read(&cached_path)
@@ -371,7 +584,7 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
 
     // If not in cache or corrupt, check local project folder
     if let Some(local_dir) = get_local_project_scripts_dir() {
-        let local_script_path = local_dir.join(&entry.path);
+        let local_script_path = local_dir.join(&rel_path);
         if local_script_path.exists() {
             let bytes = fs::read(&local_script_path)
                 .map_err(|e| AppError::Io(format!("Failed to read local script file: {}", e)))?;
@@ -421,6 +634,57 @@ mod tests {
         // Assert lowercase 64 hex characters
         assert_eq!(hash.len(), 64);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_sanitize_script_relative_path_valid() {
+        let p1 = sanitize_script_relative_path("maintenance/clear_windows_update_cache.ps1");
+        assert!(p1.is_ok());
+        assert_eq!(p1.unwrap(), PathBuf::from("maintenance").join("clear_windows_update_cache.ps1"));
+
+        let p2 = sanitize_script_relative_path("network/reset_tcp_ip_stack.ps1");
+        assert!(p2.is_ok());
+
+        let p3 = sanitize_script_relative_path("diagnostics/test.bat");
+        assert!(p3.is_ok());
+        assert_eq!(p3.unwrap(), PathBuf::from("diagnostics").join("test.bat"));
+    }
+
+    #[test]
+    fn test_sanitize_script_relative_path_rejections() {
+        // Empty & Whitespace
+        assert!(sanitize_script_relative_path("").is_err());
+        assert!(sanitize_script_relative_path("   ").is_err());
+
+        // Directory traversal
+        assert!(sanitize_script_relative_path("../evil.ps1").is_err());
+        assert!(sanitize_script_relative_path("maintenance/../../evil.ps1").is_err());
+        assert!(sanitize_script_relative_path("..\\evil.ps1").is_err());
+
+        // Absolute and drive paths
+        assert!(sanitize_script_relative_path("/etc/passwd").is_err());
+        assert!(sanitize_script_relative_path("\\Windows\\System32\\cmd.exe").is_err());
+        assert!(sanitize_script_relative_path("C:\\script.ps1").is_err());
+        assert!(sanitize_script_relative_path("C:script.ps1").is_err());
+
+        // Disallowed extensions
+        assert!(sanitize_script_relative_path("maintenance/script.exe").is_err());
+        assert!(sanitize_script_relative_path("maintenance/script.vbs").is_err());
+        assert!(sanitize_script_relative_path("maintenance/script.sh").is_err());
+        assert!(sanitize_script_relative_path("maintenance/script").is_err());
+    }
+
+    #[test]
+    fn test_safe_join_script_path_containment() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create tempdir");
+        let base = temp_dir.path();
+
+        let safe_path = safe_join_script_path(base, "maintenance/test.ps1");
+        assert!(safe_path.is_ok());
+        assert!(safe_path.unwrap().starts_with(base));
+
+        assert!(safe_join_script_path(base, "../evil.ps1").is_err());
+        assert!(safe_join_script_path(base, "C:\\Windows\\System32\\calc.exe").is_err());
     }
 
     #[test]

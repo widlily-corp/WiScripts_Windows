@@ -1,7 +1,12 @@
-﻿param(
+param(
     [string]$StateFilter = "All",
     [int]$Top = 50
 )
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    throw "Dumping process-mapped network connections requires Administrator privileges. Please run PowerShell as Administrator."
+}
 
 $ErrorActionPreference = "SilentlyContinue"
 

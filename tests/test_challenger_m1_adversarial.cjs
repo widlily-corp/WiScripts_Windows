@@ -56,22 +56,22 @@ async function main() {
   console.log('================================================================\n');
 
   // ============================================================================
-  // SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 15 Scripts
+  // SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 27 Scripts
   // ============================================================================
-  console.log('--- SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 15 Scripts ---');
+  console.log('--- SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 27 Scripts ---');
 
-  await runTest('Manifest defines exactly 15 scripts across 5 categories', () => {
+  await runTest('Manifest defines full 27-script catalog across 5 categories', () => {
     assert.strictEqual(Array.isArray(manifest.scripts), true, 'manifest.scripts must be an array');
-    assert.strictEqual(manifest.scripts.length, 15, 'Must contain exactly 15 scripts');
+    assert.strictEqual(manifest.scripts.length, 27, `Must contain exactly 27 scripts (got ${manifest.scripts.length})`);
 
     const expectedCategories = ['maintenance', 'network', 'security', 'performance', 'diagnostics'];
     const actualCategories = [...new Set(manifest.scripts.map((s) => s.category))].sort();
     assert.deepStrictEqual(actualCategories, expectedCategories.sort(), 'Must cover all 5 required categories');
 
-    // Verify 3 scripts per category
+    // Verify all categories are populated (>= 3 scripts per category)
     for (const cat of expectedCategories) {
       const count = manifest.scripts.filter((s) => s.category === cat).length;
-      assert.strictEqual(count, 3, `Category '${cat}' must have exactly 3 scripts (got ${count})`);
+      assert.strictEqual(count >= 3, true, `Category '${cat}' must have at least 3 scripts (got ${count})`);
     }
   });
 
@@ -119,7 +119,7 @@ async function main() {
     }
   });
 
-  await runTest('PowerShell script payload sanity: UTF-8 encoding and valid syntax blocks', () => {
+  await runTest('PowerShell script payload sanity: UTF-8 encoding, param() header and valid syntax', () => {
     for (const entry of manifest.scripts) {
       const scriptFilePath = path.join(scriptsLibDir, entry.path);
       const content = fs.readFileSync(scriptFilePath, 'utf8');
@@ -127,13 +127,16 @@ async function main() {
       // Check not blank
       assert.strictEqual(content.trim().length > 20, true, `Script ${entry.id} content too short`);
 
-      // Check for PowerShell comment help or script headers
-      const hasHelpBlock = content.includes('<#') || content.includes('#');
-      assert.strictEqual(hasHelpBlock, true, `Script ${entry.id} should have comment headers`);
+      // Verify param() is strictly the first statement (after optional UTF-8 BOM or whitespace)
+      const trimmed = content.replace(/^\uFEFF/, '').trimStart();
+      assert.strictEqual(trimmed.startsWith('param'), true, `Script ${entry.id} should start with param(...)`);
+
+      // Verify absence of CP1251 breaking block comments <# ... #>
+      assert.strictEqual(content.includes('<#') || content.includes('#>'), false, `Script ${entry.id} should avoid block comments`);
     }
   });
 
-  await runTest('SHA-256 Oracle: 1-bit / 1-byte tamper detection on all 15 scripts', () => {
+  await runTest('SHA-256 Oracle: 1-bit / 1-byte tamper detection on all 27 scripts', () => {
     for (const entry of manifest.scripts) {
       const scriptFilePath = path.join(scriptsLibDir, entry.path);
       const originalBytes = fs.readFileSync(scriptFilePath);
@@ -235,7 +238,7 @@ async function main() {
     const parsed = JSON.parse(serialized);
 
     // Essential fields must remain intact
-    assert.strictEqual(parsed.scripts.length, 15);
+    assert.strictEqual(parsed.scripts.length, manifest.scripts.length);
     assert.strictEqual(parsed.scripts[0].id, manifest.scripts[0].id);
     assert.strictEqual(parsed.scripts[0].sha256, manifest.scripts[0].sha256);
     assert.strictEqual(parsed.extraRootProp, 'unexpected-payload');
@@ -406,7 +409,7 @@ async function main() {
     const res = await engine.sync(true);
 
     assert.strictEqual(res.source, 'network_download');
-    assert.strictEqual(res.manifest.scripts.length, 15);
+    assert.strictEqual(res.manifest.scripts.length, manifest.scripts.length);
     assert.strictEqual(engine.cachedEtag, '"v1.0.0-sha256-prod"');
   });
 
@@ -416,7 +419,7 @@ async function main() {
 
     const res2 = await engine.sync(false);
     assert.strictEqual(res2.source, 'etag_304_not_modified');
-    assert.strictEqual(res2.manifest.scripts.length, 15);
+    assert.strictEqual(res2.manifest.scripts.length, manifest.scripts.length);
   });
 
   await runTest('Sync Engine: Force sync bypasses ETag and performs full refresh', async () => {
@@ -435,7 +438,7 @@ async function main() {
     engine.setRemoteFailure(true);
     const res = await engine.sync(false);
     assert.strictEqual(res.source, 'cache_fallback');
-    assert.strictEqual(res.manifest.scripts.length, 15);
+    assert.strictEqual(res.manifest.scripts.length, manifest.scripts.length);
   });
 
   await runTest('Sync Engine: Offline cold start seeds from local project directory', async () => {
@@ -444,10 +447,10 @@ async function main() {
 
     const res = await engine.sync(false);
     assert.strictEqual(res.source, 'local_project_seed');
-    assert.strictEqual(res.manifest.scripts.length, 15);
+    assert.strictEqual(res.manifest.scripts.length, manifest.scripts.length);
   });
 
-  await runTest('Sync Engine: readScript returns verified content for all 15 scripts', async () => {
+  await runTest('Sync Engine: readScript returns verified content for all 27 scripts', async () => {
     const engine = new SyncEngineSimulator();
     await engine.sync(true);
 
@@ -501,28 +504,29 @@ async function main() {
     });
   }
 
-  await runTest('Filter: category = "all", risk = "all", search = "" returns all 15 scripts', () => {
+  await runTest('Filter: category = "all", risk = "all", search = "" returns all scripts in catalog', () => {
     const res = filterScripts(manifest.scripts, 'all', 'all', '');
-    assert.strictEqual(res.length, 15);
+    assert.strictEqual(res.length, manifest.scripts.length);
   });
 
-  await runTest('Filter by each category returns exactly 3 scripts', () => {
+  await runTest('Filter by each category returns expected category count', () => {
     const categories = ['maintenance', 'network', 'security', 'performance', 'diagnostics'];
     for (const cat of categories) {
+      const expectedCount = manifest.scripts.filter((s) => s.category === cat).length;
       const res = filterScripts(manifest.scripts, cat, 'all', '');
-      assert.strictEqual(res.length, 3, `Category ${cat} expected 3, got ${res.length}`);
+      assert.strictEqual(res.length, expectedCount, `Category ${cat} expected ${expectedCount}, got ${res.length}`);
       assert.strictEqual(res.every((s) => s.category === cat), true);
     }
   });
 
-  await runTest('Filter by riskLevel (safe vs elevated)', () => {
+  await runTest('Filter by riskLevel (safe vs elevated vs critical)', () => {
     const safeScripts = filterScripts(manifest.scripts, 'all', 'safe', '');
     const elevatedScripts = filterScripts(manifest.scripts, 'all', 'elevated', '');
     const criticalScripts = filterScripts(manifest.scripts, 'all', 'critical', '');
 
     assert.strictEqual(safeScripts.length > 0, true);
     assert.strictEqual(elevatedScripts.length > 0, true);
-    assert.strictEqual(safeScripts.length + elevatedScripts.length + criticalScripts.length, 15);
+    assert.strictEqual(safeScripts.length + elevatedScripts.length + criticalScripts.length, manifest.scripts.length);
   });
 
   await runTest('Search query matches script name, description, tags, and path', () => {
@@ -594,7 +598,7 @@ async function main() {
   // ============================================================================
   console.log('\n--- SECTION 6: High-Volume Performance & Throughput Benchmarks ---');
 
-  await runTest('Benchmark: SHA-256 calculation speed across all 15 scripts (1,000 iterations each = 15,000 hashes)', () => {
+  await runTest('Benchmark: SHA-256 calculation speed across all 27 scripts (1,000 iterations each = 27,000 hashes)', () => {
     const scriptBuffers = manifest.scripts.map((s) => fs.readFileSync(path.join(scriptsLibDir, s.path)));
 
     const start = process.hrtime.bigint();

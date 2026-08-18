@@ -105,6 +105,7 @@ export function CommandPalette() {
   const toggleOptimizationSelected = useAppStore((s) => s.toggleOptimizationSelected);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const setDryRunMode = useAppStore((s) => s.setDryRunMode);
+  const createRestorePoint = useAppStore((s) => s.createRestorePoint);
   const addToast = useAppStore((s) => s.addToast);
   const addLog = useAppStore((s) => s.addLog);
 
@@ -332,27 +333,7 @@ export function CommandPalette() {
         break;
       }
       case 'create_restore_point': {
-        addToast({
-          type: 'info',
-          title: 'Creating Restore Point',
-          message: 'Initiating System Restore Point checkpoint...',
-        });
-        try {
-          await invoke('create_restore_point', {
-            description: 'WiScripts Command Palette Manual Checkpoint',
-          });
-          addToast({
-            type: 'success',
-            title: 'Restore Point Created',
-            message: 'System Restore Point created successfully.',
-          });
-        } catch (e) {
-          addToast({
-            type: 'warning',
-            title: 'Restore Point Notice',
-            message: String(e),
-          });
-        }
+        await createRestorePoint('WiScripts Command Palette Manual Checkpoint');
         break;
       }
     }

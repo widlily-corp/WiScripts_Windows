@@ -8,6 +8,8 @@ import type {
   ScriptManifestEntry,
   ScriptCategory,
   ScriptRiskLevel,
+  ScriptParameter,
+  ScriptParameterValue,
 } from '../../types';
 
 export interface ScriptOutputLine {
@@ -22,12 +24,52 @@ export interface ScriptOutputLinePayload {
   stream: 'stdout' | 'stderr';
 }
 
+export function formatScriptWithParameters(
+  rawContent: string,
+  parameters: ScriptParameter[],
+  values: Record<string, ScriptParameterValue>
+): string {
+  if (!parameters || parameters.length === 0 || !values) {
+    return rawContent;
+  }
+
+  const args: string[] = [];
+  for (const param of parameters) {
+    const val = values[param.name];
+    if (val === undefined || val === null || val === '') {
+      continue;
+    }
+
+    if (param.type === 'boolean') {
+      args.push(`-${param.name}:${Boolean(val)}`);
+    } else if (param.type === 'number') {
+      const numVal = Number(val);
+      if (!Number.isNaN(numVal) && Number.isFinite(numVal)) {
+        args.push(`-${param.name} ${numVal}`);
+      }
+    } else {
+      const strVal = String(val).replace(/'/g, "''");
+      args.push(`-${param.name} '${strVal}'`);
+    }
+  }
+
+  if (args.length === 0) {
+    return rawContent;
+  }
+
+  const trimmed = rawContent.trim();
+  return `& {\n${trimmed}\n} ${args.join(' ')}\n`;
+}
+
 export interface ScriptRunnerSlice {
   scriptContent: string;
   scriptType: 'ps1' | 'bat' | 'cmd';
   uploadedFileName: string | null;
   outputLogs: ScriptOutputLine[];
   isExecutingScript: boolean;
+  activeExecutionId: string | null;
+  isCancellingScript: boolean;
+  executionStartTime: number | null;
   unlistenScriptOutput: UnlistenFn | null;
 
   // Online Library State
@@ -43,6 +85,11 @@ export interface ScriptRunnerSlice {
   previewContent: string | null;
   isLoadingPreview: boolean;
 
+  // Parameter Configuration Dialog State
+  parameterDialogScript: ScriptManifestEntry | null;
+  parameterValues: Record<string, ScriptParameterValue>;
+  parameterValidationErrors: Record<string, string>;
+
   // Actions
   setScriptContent: (content: string) => void;
   setScriptType: (type: 'ps1' | 'bat' | 'cmd') => void;
@@ -50,6 +97,7 @@ export interface ScriptRunnerSlice {
   addOutputLine: (payload: { line: string; stream: 'stdout' | 'stderr' }) => void;
   clearOutputLogs: () => void;
   executeScript: (customContent?: string, customType?: 'ps1' | 'bat' | 'cmd') => Promise<CommandOutput | null>;
+  cancelRunningScript: () => Promise<void>;
   downloadOutputLog: () => void;
   setupScriptOutputListener: () => Promise<UnlistenFn>;
   cleanupScriptOutputListener: () => void;
@@ -64,6 +112,14 @@ export interface ScriptRunnerSlice {
   closeScriptPreview: () => void;
   loadScriptToEditor: (script: ScriptManifestEntry) => Promise<void>;
   runLibraryScriptDirectly: (script: ScriptManifestEntry) => Promise<void>;
+
+  // Parameter Dialog Actions
+  openParameterDialog: (script: ScriptManifestEntry) => void;
+  closeParameterDialog: () => void;
+  setParameterValue: (paramName: string, value: ScriptParameterValue) => void;
+  resetParameterValues: () => void;
+  validateParameters: () => boolean;
+  executeScriptWithParameters: (script: ScriptManifestEntry, values?: Record<string, ScriptParameterValue>) => Promise<CommandOutput | null>;
 }
 
 const DEFAULT_SCRIPT_CONTENT = `# WiScripts Windows Custom PowerShell Script
@@ -80,6 +136,9 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   uploadedFileName: null,
   outputLogs: [],
   isExecutingScript: false,
+  activeExecutionId: null,
+  isCancellingScript: false,
+  executionStartTime: null,
   unlistenScriptOutput: null,
 
   // Online Library initial state
@@ -94,6 +153,11 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   previewScript: null,
   previewContent: null,
   isLoadingPreview: false,
+
+  // Parameter Configuration Dialog State
+  parameterDialogScript: null,
+  parameterValues: {},
+  parameterValidationErrors: {},
 
   setScriptContent: (content) => set({ scriptContent: content }),
   setScriptType: (type) => set({ scriptType: type }),
@@ -157,14 +221,21 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       return null;
     }
 
-    set({ isExecutingScript: true });
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    set({
+      isExecutingScript: true,
+      activeExecutionId: executionId,
+      executionStartTime: Date.now(),
+      isCancellingScript: false,
+    });
     get().clearOutputLogs();
 
     await get().setupScriptOutputListener();
 
     addLog({
       level: 'cmd',
-      message: `Executing script (${type}, dryRun: ${dryRunMode})`,
+      message: `Executing script (${type}, id: ${executionId}, dryRun: ${dryRunMode})`,
     });
 
     try {
@@ -172,6 +243,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         scriptContent: content,
         scriptType: type,
         dryRun: dryRunMode,
+        executionId,
       });
 
       const exitCode = output.exitCode ?? output.exit_code ?? 0;
@@ -193,24 +265,63 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       return output;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
+      const isCancelled = errorMsg.toLowerCase().includes('cancelled');
+
       addLog({
-        level: 'error',
-        message: `Script execution failed: ${errorMsg}`,
+        level: isCancelled ? 'warn' : 'error',
+        message: isCancelled
+          ? `Script execution was cancelled: ${errorMsg}`
+          : `Script execution failed: ${errorMsg}`,
       });
+
       addToast({
-        type: 'error',
-        title: 'Script Execution Error',
+        type: isCancelled ? 'warning' : 'error',
+        title: isCancelled ? 'Execution Cancelled' : 'Script Execution Error',
         message: errorMsg,
       });
 
-      get().addOutputLine({
-        line: `[ERROR] ${errorMsg}`,
-        stream: 'stderr',
-      });
+      if (!isCancelled) {
+        get().addOutputLine({
+          line: `[ERROR] ${errorMsg}`,
+          stream: 'stderr',
+        });
+      }
 
       return null;
     } finally {
-      set({ isExecutingScript: false });
+      set({
+        isExecutingScript: false,
+        activeExecutionId: null,
+        executionStartTime: null,
+        isCancellingScript: false,
+      });
+    }
+  },
+
+  cancelRunningScript: async () => {
+    const { activeExecutionId, isExecutingScript, isCancellingScript, addLog, addToast } = get();
+    if (!isExecutingScript || !activeExecutionId || isCancellingScript) {
+      return;
+    }
+
+    set({ isCancellingScript: true });
+
+    addLog({
+      level: 'warn',
+      message: `Requesting cancellation for script execution '${activeExecutionId}'...`,
+    });
+
+    addToast({
+      type: 'info',
+      title: 'Cancelling Script',
+      message: 'Sending termination signal to process tree...',
+    });
+
+    try {
+      await invoke('cancel_running_script', { executionId: activeExecutionId });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn('[ScriptRunner] cancel_running_script notice:', errorMsg);
     }
   },
 
@@ -361,6 +472,11 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   },
 
   runLibraryScriptDirectly: async (script) => {
+    if (script.parameters && script.parameters.length > 0) {
+      get().openParameterDialog(script);
+      return;
+    }
+
     const { addLog, addToast, executeScript } = get();
     try {
       const code = await invoke<string>('read_library_script', { scriptId: script.id });
@@ -389,6 +505,147 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         title: 'Execution Error',
         message: errorMsg,
       });
+    }
+  },
+
+  // Parameter Dialog Actions
+  openParameterDialog: (script) => {
+    const initialValues: Record<string, ScriptParameterValue> = {};
+    if (script.parameters) {
+      for (const param of script.parameters) {
+        if (param.default !== undefined && param.default !== null) {
+          initialValues[param.name] = param.default as ScriptParameterValue;
+        } else if (param.type === 'boolean') {
+          initialValues[param.name] = false;
+        } else if (param.type === 'number') {
+          initialValues[param.name] = 0;
+        } else {
+          initialValues[param.name] = '';
+        }
+      }
+    }
+
+    set({
+      parameterDialogScript: script,
+      parameterValues: initialValues,
+      parameterValidationErrors: {},
+    });
+  },
+
+  closeParameterDialog: () => {
+    set({
+      parameterDialogScript: null,
+      parameterValues: {},
+      parameterValidationErrors: {},
+    });
+  },
+
+  setParameterValue: (paramName, value) => {
+    set((state) => {
+      const newErrors = { ...state.parameterValidationErrors };
+      delete newErrors[paramName];
+      return {
+        parameterValues: {
+          ...state.parameterValues,
+          [paramName]: value,
+        },
+        parameterValidationErrors: newErrors,
+      };
+    });
+  },
+
+  resetParameterValues: () => {
+    const script = get().parameterDialogScript;
+    if (!script) return;
+
+    const initialValues: Record<string, ScriptParameterValue> = {};
+    if (script.parameters) {
+      for (const param of script.parameters) {
+        if (param.default !== undefined && param.default !== null) {
+          initialValues[param.name] = param.default as ScriptParameterValue;
+        } else if (param.type === 'boolean') {
+          initialValues[param.name] = false;
+        } else if (param.type === 'number') {
+          initialValues[param.name] = 0;
+        } else {
+          initialValues[param.name] = '';
+        }
+      }
+    }
+
+    set({
+      parameterValues: initialValues,
+      parameterValidationErrors: {},
+    });
+  },
+
+  validateParameters: () => {
+    const script = get().parameterDialogScript;
+    if (!script || !script.parameters) {
+      return true;
+    }
+
+    const values = get().parameterValues;
+    const errors: Record<string, string> = {};
+
+    for (const param of script.parameters) {
+      const val = values[param.name];
+      if (param.type === 'number') {
+        const numVal = Number(val);
+        if (val !== undefined && val !== '' && (Number.isNaN(numVal) || !Number.isFinite(numVal))) {
+          errors[param.name] = 'Must be a valid finite number';
+        }
+      }
+    }
+
+    set({ parameterValidationErrors: errors });
+    return Object.keys(errors).length === 0;
+  },
+
+  executeScriptWithParameters: async (script, customValues) => {
+    const isValid = get().validateParameters();
+    if (!isValid) {
+      return null;
+    }
+
+    const { addLog, addToast, executeScript } = get();
+    const values = customValues ?? get().parameterValues;
+
+    try {
+      const rawCode = await invoke<string>('read_library_script', { scriptId: script.id });
+      const formattedCode = formatScriptWithParameters(rawCode, script.parameters ?? [], values);
+
+      set({
+        scriptContent: formattedCode,
+        scriptType: 'ps1',
+        uploadedFileName: `${script.name} (${script.path})`,
+        activeRunnerTab: 'editor',
+        parameterDialogScript: null,
+        parameterValues: {},
+        parameterValidationErrors: {},
+        previewScript: null,
+        previewContent: null,
+      });
+
+      addToast({
+        type: 'info',
+        title: 'Starting Execution',
+        message: `Executing "${script.name}" with custom parameters...`,
+      });
+
+      return await executeScript(formattedCode, 'ps1');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      addLog({
+        level: 'error',
+        message: `Failed to execute script "${script.name}" with parameters: ${errorMsg}`,
+      });
+      addToast({
+        type: 'error',
+        title: 'Execution Error',
+        message: errorMsg,
+      });
+      return null;
     }
   },
 });

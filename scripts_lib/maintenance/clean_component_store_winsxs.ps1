@@ -1,11 +1,10 @@
-﻿param(
+param(
     [switch]$ResetBase
 )
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Cleaning the Windows Component Store requires Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Cleaning the Windows Component Store requires Administrator privileges. Please run PowerShell as Administrator."
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

@@ -61,7 +61,7 @@ export function UpdateBanner() {
               className="flex items-center gap-1.5 px-3 py-1 bg-surface-hover hover:bg-surface-active border border-border text-text-primary rounded-[6px] font-medium transition-colors text-xs"
             >
               <FileText className="h-3.5 w-3.5 text-brand" />
-              <span>Release Notes</span>
+              <span>{t('update_banner.release_notes')}</span>
             </button>
             <button
               onClick={() => downloadAndInstallUpdate()}

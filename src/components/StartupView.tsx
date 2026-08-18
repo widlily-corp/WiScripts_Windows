@@ -64,7 +64,7 @@ export function StartupView() {
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
-      <AdminElevationBanner featureName="Startup Apps Management" />
+      <AdminElevationBanner featureName={t('startupView.title')} />
 
       {/* View Header */}
       <div className="rounded-[6px] border border-border bg-surface p-5 flex items-center justify-between">

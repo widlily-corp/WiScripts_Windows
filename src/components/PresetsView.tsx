@@ -351,14 +351,14 @@ export function PresetsView() {
         }
       }
 
-      // 2. Select matching rules in app store
+      // 2. Batch update matching rules in app store in a single render pass
+      const validRuleIdSet = new Set(validRuleIds);
       const currentOptimizations = useAppStore.getState().optimizations;
-      currentOptimizations.forEach((item) => {
-        const shouldBeSelected = validRuleIds.includes(item.id);
-        if (item.isSelected !== shouldBeSelected) {
-          useAppStore.getState().toggleOptimizationSelected(item.id);
-        }
-      });
+      const updatedOptimizations = currentOptimizations.map((item) => ({
+        ...item,
+        isSelected: validRuleIdSet.has(item.id),
+      }));
+      useAppStore.getState().setOptimizations(updatedOptimizations);
 
       // 3. Apply optimizations batch
       await invoke('execute_optimizations', {

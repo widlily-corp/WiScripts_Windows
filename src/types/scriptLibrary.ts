@@ -8,9 +8,13 @@ export type ScriptCategory =
   | 'performance'
   | 'diagnostics';
 
+export type ScriptParameterType = 'string' | 'number' | 'boolean' | string;
+export type ScriptParameterValue = string | number | boolean;
+export type ScriptParameterValues = Record<string, ScriptParameterValue>;
+
 export interface ScriptParameter {
   name: string;
-  type: string;
+  type: ScriptParameterType;
   default?: unknown;
   description: string;
 }

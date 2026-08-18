@@ -1,9 +1,8 @@
-﻿param()
+param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Modifying system hosts file requires Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Modifying system hosts file requires Administrator privileges. Please run PowerShell as Administrator."
 }
 
 $hostsPath = "$env:windir\System32\drivers\etc\hosts"

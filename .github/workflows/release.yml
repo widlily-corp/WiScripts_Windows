@@ -25,6 +25,39 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Extract Release Notes
+        id: release_notes
+        shell: bash
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME:-}"
+          VERSION="${TAG_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ] || [ "$VERSION" = "master" ]; then
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "Target version: $VERSION"
+
+          NOTES_FILE=""
+          if [ -f "RELEASE_NOTES_${VERSION}.md" ]; then
+            NOTES_FILE="RELEASE_NOTES_${VERSION}.md"
+          elif [ -f "RELEASE_NOTES_v${VERSION}.md" ]; then
+            NOTES_FILE="RELEASE_NOTES_v${VERSION}.md"
+          elif [ -f "RELEASE_NOTES.md" ]; then
+            NOTES_FILE="RELEASE_NOTES.md"
+          fi
+
+          if [ -n "$NOTES_FILE" ]; then
+            echo "Using release notes from $NOTES_FILE"
+            {
+              echo "body<<EOF"
+              cat "$NOTES_FILE"
+              echo ""
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "No dedicated release notes file found; using default changelog message."
+            echo "body=WiScripts Windows v${VERSION} update released." >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and Publish Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -34,5 +67,6 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: 'WiScripts v__VERSION__'
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: false
           prerelease: false

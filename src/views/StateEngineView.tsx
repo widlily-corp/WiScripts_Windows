@@ -163,6 +163,11 @@ export function StateEngineView() {
         level: 'error',
         message: `Failed to delete snapshot ${snapshotId}: ${msg}`,
       });
+      addToast({
+        type: 'error',
+        title: t('stateEngine.toasts.deleteErrorTitle', 'Snapshot Deletion Failed'),
+        message: msg,
+      });
     }
   };
 

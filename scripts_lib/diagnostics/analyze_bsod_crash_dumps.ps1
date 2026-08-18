@@ -1,6 +1,11 @@
-﻿param(
+param(
     [int]$MaxEvents = 10
 )
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    throw "Inspecting BSOD crash dumps and system event logs requires Administrator privileges. Please run PowerShell as Administrator."
+}
 
 $ErrorActionPreference = "SilentlyContinue"
 

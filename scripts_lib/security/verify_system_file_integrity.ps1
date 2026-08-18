@@ -1,11 +1,10 @@
-﻿param(
+param(
     [switch]$SkipDism
 )
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Running SFC and DISM file integrity scans requires Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Running SFC and DISM file integrity scans requires Administrator privileges. Please run PowerShell as Administrator."
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

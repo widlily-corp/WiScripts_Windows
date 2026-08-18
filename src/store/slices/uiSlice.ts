@@ -38,6 +38,8 @@ export interface UiSlice {
   toggleCommandPalette: () => void;
 }
 
+const MAX_LOG_ENTRIES = 1000;
+
 export const createUiSlice: StateCreator<AppState, [], [], UiSlice> = (set) => ({
   toasts: [],
   addToast: (toast) => {
@@ -65,16 +67,16 @@ export const createUiSlice: StateCreator<AppState, [], [], UiSlice> = (set) => (
     } catch (e) {
       // Headless / non-Tauri environment fallback
     }
-    set((state) => ({
-      logs: [
-        ...state.logs,
-        {
-          ...log,
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    }));
+    set((state) => {
+      const newLog: ExecutionLog = {
+        ...log,
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        logs: [...state.logs, newLog].slice(-MAX_LOG_ENTRIES),
+      };
+    });
   },
   clearLogs: () => set({ logs: [] }),
 

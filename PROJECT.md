@@ -1,101 +1,66 @@
-# WiScripts Windows v1.0 Production Release Project
+# Project: WiScripts_Windows Comprehensive Error & Vulnerability Hardening
 
 ## Architecture
-- **Backend**: Rust 2021 Edition + Tauri v2.0 desktop core. 25 modular domain engines handling Windows management, optimization rules, service management, process governor controls, audio COM routing, security autoruns, storage deduplication, and custom script execution.
-- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS. 21 functional views, Zustand state management, Refined Minimal aesthetic token system.
-- **Online Script Library**: GitHub-backed repository structure in `scripts_lib/` with typed `manifest.json` catalog and SHA-256 integrity verification.
-- **IPC Interface**: Tauri IPC command surface (`#[tauri::command]`) with async Tokio threading and camelCase serde mapping.
+WiScripts_Windows is a high-performance Windows optimization, debloating, and maintenance desktop application built on Tauri 2.x (Rust backend + WinAPI/COM integration) and React 18 + TypeScript + Zustand + Tailwind CSS (Refined Minimal design aesthetic).
 
-## Code Layout
 ```
-c:\Users\Widlily\Documents\projects\WiScripts_Windows\
-├── .github/
-│   └── workflows/
-│       └── release.yml
-├── scripts_lib/
-│   ├── manifest.json
-│   ├── maintenance/
-│   ├── network/
-│   ├── security/
-│   ├── performance/
-│   └── diagnostics/
-├── src-tauri/
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   └── src/
-│       ├── commands/
-│       ├── metrics/
-│       ├── optimization/
-│       ├── script_runner/
-│       │   └── sync.rs
-│       ├── storage/
-│       └── winapi/
-│           ├── registry.rs
-│           └── services.rs
-└── src/
-    ├── App.tsx
-    ├── components/
-    │   ├── CommandPalette.tsx
-    │   ├── Header.tsx
-    │   ├── Navigation.tsx
-    │   ├── SafetyModal.tsx
-    │   └── ViewSkeleton.tsx
-    ├── hooks/
-    │   └── useTauriCommand.ts
-    ├── store/
-    ├── types/
-    └── views/
-        ├── OptimizationView.tsx
-        ├── PresetsView.tsx
-        ├── ScriptRunnerView.tsx
-        ├── SystemCleaner.tsx
-        └── UninstallerView.tsx
+Frontend (React 18 / Vite / TypeScript / Zustand / i18n)
+       │
+       ▼ Tauri IPC Bridge (68 registered commands)
+Rust Backend (`src-tauri`: Windows API, Registry, COM, Services, Audio, Storage, Script Runner)
 ```
 
 ## Feature Inventory
-| # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | `scripts_lib` Repo Structure | 15 categorized PowerShell scripts in 5 categories with SHA-256 | M1 (DONE) | R1 |
-| 2 | `manifest.json` Typed Catalog | JSON catalog schema with script metadata, risk badges, hashes | M1 (DONE) | R1 |
-| 3 | Backend Sync Engine | ETag / If-None-Match HTTP client, SHA-256 verification, local cache | M1 (DONE) | R1 |
-| 4 | `ScriptRunnerView` Dual-Tab UI | Tabs "Editor & Terminal" and "Online Library", filtering, preview modal | M1 (DONE) | R1 |
-| 5 | Win32 SCM Native Queries | Replace PowerShell `Get-Service` with `OpenSCManagerW` / `QueryServiceConfigW` | M2 | R2 |
-| 6 | Storage 2-Stage Hashing | 4KB header hash + full SHA-256 with small-file direct reuse optimization | M2 | R2 |
-| 7 | Uninstaller Chronological Sort | Multi-format millisecond date parsing for app uninstaller table | M2 | R2 |
-| 8 | Zero-Warning Clippy Compliance | Fix collapsible `str::replace` in `src/metrics/mod.rs` for `-D warnings` | M2 | R2 |
-| 9 | `React.lazy` Code-Splitting | Lazy-load heavy views with `Suspense` and `ViewSkeleton` (<150KB initial) | M3 | R3 |
-| 10 | IPC Hook Optimization | `useTauriCommand` memoization via `useRef` and `getState()` to eliminate re-renders | M3 | R3 |
-| 11 | Command Palette (`Ctrl + K`) | Global fuzzy search across 21 tabs, 74 tweaks, 15 scripts, and apps | M4 | R4 |
-| 12 | Pre-Flight Safety Snapshot | Multi-tier safety engine: StateEngine delta JSON + VSS Restore Point | M4 | R4 |
-| 13 | Windows 11 24H2 Tweaks | Registry/Policy tweaks: Disable Copilot, Recall AI, Start recommendations | M4 | R4 |
-| 14 | `.wiscripts` Profile Import/Export | JSON profile schema for tweaks, ProFlow rules, and autorun preferences | M4 | R4 |
-| 15 | Refined Minimal Design Tokens | Enforce semantic Tailwind tokens, eradicate hardcoded hex colors | M5 | R5 |
-| 16 | WCAG 2.1 AA A11y Compliance | ARIA roles, labels, keyboard navigation (Space/Enter) in Cleaner & Tables | M5 | R5 |
-| 17 | Tabular Numeric Typography | Apply `tabular-nums font-mono` to CPU/RAM gauges and telemetry | M5 | R5 |
-| 18 | Version 1.0.0 Synchronization | Sync version in `package.json`, `Cargo.toml`, `tauri.conf.json`, `Navigation.tsx` | M6 | R6 |
-| 19 | Release Notes & CI/CD Validation | Generate `RELEASE_NOTES_1.0.0.md` and validate `.github/workflows/release.yml` | M6 | R6 |
-| 20 | Git History & Push | Atomic Conventional Commits (`feat:`, `fix:`, `refactor:`, `perf:`, `chore:`) and push | M6 | R6 |
+Every audited feature and bugfix item is inventoried and mapped to its assigned milestone:
+
+| # | Feature / Issue | Description | Milestone | Source |
+|---|---|---|---|---|
+| 1 | Online Scripts Path Traversal Protection | Sanitize and normalize `script.path` in `sync.rs` to prevent directory traversal | M1 | Explorer 1 |
+| 2 | Script Execution Timeout & Kill/Cancel | Implement execution timeout (300s) and cancellation/kill command in `script_runner/` | M1 | Explorer 1 |
+| 3 | Resilient Cache & Corrupt JSON Fallback | Catch corrupted JSON in `get_cached_scripts_library()`, prune cache, fall back to local seed | M1 | Explorer 1 |
+| 4 | Fix Script Library Bugs & Elevation Codes | Fix `setup_power_switcher_service.ps1`, `optimize_windows_tweaks.ps1`, and elevation return codes | M1 | Explorer 1 |
+| 5 | Rust Test Unused Imports Cleanup | Clean up unused imports in `src-tauri/tests/m1_audio_challenger_tests.rs` | M1 | Explorer 3 |
+| 6 | Unbounded Log Capping in Zustand | Cap `logs` array to 1,000 entries in `uiSlice.ts` to prevent memory leak | M2 | Explorer 2 |
+| 7 | CommandPalette IPC Contract Fix | Pass `dryRun` parameter in `create_restore_point` IPC call in `CommandPalette.tsx` | M2 | Explorer 2 |
+| 8 | PresetsView State Batching | Eliminate consecutive unbatched `toggleOptimizationSelected` state updates in `PresetsView.tsx` | M2 | Explorer 2 |
+| 9 | Header Tab Titles & i18n Completeness | Add missing tabs in `Header.tsx` `TAB_TITLES` and sync `en.json` & `ru.json` keys | M2 | Explorer 2 |
+| 10 | ErrorBoundary & Sub-View Polish | Fix `h-screen` layout blowout, wrap hardcoded labels in `i18n.t()`, fix timer in `ScriptRunnerView` | M2 | Explorer 2 |
+| 11 | Parameter Dialog in ScriptRunnerView | Add parameter inputs dialog for parameterized scripts in `ScriptRunnerView.tsx` | M2 | Explorer 1 |
+| 12 | Legacy Test Suite Modernization | Update `test_challenger_m1_adversarial.cjs` and `test_m1_challenger_2_script_library.cjs` for 27 scripts | M3 | Explorer 3 |
+| 13 | Regression Test Suite Expansion | Add regression tests for path traversal, cache recovery, cancel IPC, and log bounds | M3 | Explorer 1/2/3 |
+| 14 | Full E2E & Build Verification | Verify `npm run build`, `cargo check`, `cargo test`, `node tests/e2e/runner.js`, i18n parity | M3 | Original Request |
 
 ## Milestones
+
 | # | Name | Scope | Dependencies | Status |
-|---|------|-------|-------------|--------|
-| M1 | Online Script Library & Sync Engine | Features 1, 2, 3, 4 (R1) | none | DONE |
-| M2 | Core Rust Backend Hardening | Features 5, 6, 7, 8 (R2) | none | DONE |
-| M3 | Frontend Code Splitting & IPC Optimization | Features 9, 10 (R3) | none | DONE |
-| M4 | Flagship Features & Win 11 24H2 Support | Features 11, 12, 13, 14 (R4) | M1, M2 | DONE |
-| M5 | Design Tokens, A11y & Typography | Features 15, 16, 17 (R5) | M3, M4 | PLANNED |
-| M6 | Release Engineering, Version Sync & Git Push | Features 18, 19, 20 (R6) | M1-M5 | PLANNED |
+|---|---|---|---|---|
+| M1 | Rust Backend & Online Scripts Hardening | Items 1, 2, 3, 4, 5: Path traversal security, script timeout/cancellation, cache corruption recovery, script bugs, test imports | None | DONE |
+| M2 | Frontend, Zustand Stores, i18n & UI Polish | Items 6, 7, 8, 9, 10, 11: Zustand log bounds, CommandPalette IPC alignment, Presets batching, i18n keys, ErrorBoundary, Script params | M1 (for cancel/params IPC) | DONE |
+| M3 | Test Suite Alignment, Regression Prevention & E2E Validation | Items 12, 13, 14: Test script updates, regression suites, full build & E2E verification | M1, M2 | DONE |
 
 ## Interface Contracts
-### `scripts_lib` Sync Engine ↔ Frontend IPC
-- `sync_scripts_library(force: bool)` -> `Result<ScriptsLibraryManifest, AppError>`
-- `get_cached_scripts_library()` -> `Result<ScriptsLibraryManifest, AppError>`
-- `read_library_script(script_id: String)` -> `Result<String, AppError>`
 
-### Win32 SCM Services ↔ Optimization Engine
-- `winapi::services::query_service_start_type(name: &str)` -> `Result<u32, String>` (2=Auto, 3=Manual, 4=Disabled)
-- `winapi::services::is_service_disabled(name: &str)` -> `Result<bool, String>`
-- `winapi::registry::get_dword(key: &str, val: &str)` -> `Result<u32, String>`
+### Online Scripts IPC (`src-tauri/src/commands/mod.rs` ↔ `src/store/slices/scriptRunnerSlice.ts`)
+- `sync_scripts_library(custom_url: Option<String>) -> Result<ScriptsLibraryManifest, AppError>`
+- `get_scripts_library() -> Result<ScriptsLibraryManifest, AppError>`
+- `download_script(script_id: String) -> Result<DownloadScriptResult, AppError>`
+- `execute_online_script(script_id: String, parameters: Option<HashMap<String, String>>, dry_run: bool) -> Result<ScriptExecutionResult, AppError>`
+- `cancel_running_script(execution_id: String) -> Result<(), AppError>`
 
-### StateEngine / System Restore ↔ Safety Pipeline
-- `create_preflight_snapshot(description: String, rule_ids: Vec<String>)` -> `Result<PreflightSnapshotResult, AppError>`
+### Restore Point IPC (`src-tauri/src/commands/mod.rs` ↔ `src/components/CommandPalette.tsx`)
+- `create_restore_point(description: String, dry_run: bool) -> Result<RestorePoint, AppError>`
+
+## Code Layout
+
+- `src-tauri/src/` — Rust backend source files:
+  - `script_runner/sync.rs` — Manifest fetching, local caching, download, SHA256 integrity
+  - `script_runner/mod.rs` — Script execution engine, process spawning, timeout, output capture
+  - `commands/mod.rs` — Tauri IPC command handlers
+- `scripts_lib/` — PowerShell scripts catalog and `manifest.json`
+- `src/` — React / TypeScript frontend:
+  - `store/slices/` — Zustand store slices (`uiSlice.ts`, `scriptRunnerSlice.ts`, `presetsSlice.ts`, etc.)
+  - `components/` — UI views, modals, command palette, header, error boundary
+  - `i18n/locales/` — `en.json`, `ru.json` localization files
+- `tests/` — Automated test suite:
+  - `e2e/runner.js` — 4-tier E2E test runner
+  - `test_*.cjs` — Standalone unit, parity, and challenger test suites

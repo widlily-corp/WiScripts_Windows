@@ -21,7 +21,7 @@
         "maintenance",
         "services"
       ],
-      "sha256": "f1acfa0b8ac1544af3567c2d468a00a0c1f058420ff8ba34ca7e395265aec53d",
+      "sha256": "972447519cf58922f72b25a4f19c7f8bcd4e8c65d9944171d9240a695feab16a",
       "parameters": []
     },
     {
@@ -59,7 +59,7 @@
         "component-store",
         "disk-cleanup"
       ],
-      "sha256": "90ea6c4658081df3f1cc1854ffed1c25d7653cc8ef491630676fef8a02d048b5",
+      "sha256": "4c7027c581b4c62d4c52161f1fb24f296b608a9fdd35ec68e877f06b0ae6de2e",
       "parameters": [
         {
           "name": "ResetBase",
@@ -85,7 +85,7 @@
         "network",
         "repair"
       ],
-      "sha256": "91edd4b83aeb326f631d339a13a1553b4dd61f97a19798606b0fdbcadf36e629",
+      "sha256": "ff875895f61c2859b191524bcee8ec3da3f967d625d90163f09d8facaed7a2a3",
       "parameters": []
     },
     {
@@ -105,7 +105,7 @@
         "arp",
         "network"
       ],
-      "sha256": "876f290e51da234169a493bfb56758d204b589d3236eb7faf8f4b5d3e769d8d1",
+      "sha256": "aac13eaf9f6458e8d8a6bb91ab9bf88bce900d08752cca6deda3658d11505a9f",
       "parameters": []
     },
     {
@@ -125,7 +125,7 @@
         "performance",
         "throughput"
       ],
-      "sha256": "c31971adc83f0353489c96dd740d4b6d772e4512c6f9c3b6848cfc79079c9566",
+      "sha256": "6bab310c279dcd1760d9c8d0bcfb4b5dd411ab81117ad8009de8d466eb41239e",
       "parameters": [
         {
           "name": "AutoTuningLevel",
@@ -158,7 +158,7 @@
         "security",
         "hardening"
       ],
-      "sha256": "7a999886512968bb9c22e1d85687d8b9fa47b0c86950bbd2e55ad7cd3252abed",
+      "sha256": "8fdfd89ad072dc31d1146222af61d29e4b531dd784fb04fe79564360a698859e",
       "parameters": []
     },
     {
@@ -177,7 +177,7 @@
         "logging",
         "amsi"
       ],
-      "sha256": "0ea00eda440ce3652b4756fd3278ea88c497f0baf497992192f7b7c990fcabcc",
+      "sha256": "87dd0bc95b38bf7db28689f60936d09b071bf4f92b904aa824b71eae94d4466f",
       "parameters": []
     },
     {
@@ -196,7 +196,7 @@
         "integrity",
         "system-repair"
       ],
-      "sha256": "16309bca00fc2c5f86b860789738b8a26f83ede10e6f67f52dd20654c52fd9ea",
+      "sha256": "1e9f6fbb41efa11a06f3211317d239d38fbcd4c527945a37159d616352fd3ce0",
       "parameters": [
         {
           "name": "SkipDism",
@@ -222,7 +222,7 @@
         "energy",
         "cpu"
       ],
-      "sha256": "980e86575eeebf93a9b1dd12b4cf371541cc16970a16ea04acfb015833a796d5",
+      "sha256": "92a5084e2b1b48ef164c4fb720c2e0ec4a2e766a2c527b05c865207a530baf25",
       "parameters": []
     },
     {
@@ -241,7 +241,7 @@
         "latency",
         "gaming"
       ],
-      "sha256": "00895ee5c6a1917be650b8df13353345644376708fc0e91e73d34c81189b97f1",
+      "sha256": "7e94dc85872fa97185c850b74ee2737e5856a143457e27503da24547d3124a3c",
       "parameters": []
     },
     {
@@ -260,7 +260,7 @@
         "disk-io",
         "fsutil"
       ],
-      "sha256": "1274984a588ed74fd44a7db6ef228a23786fa94db2491edba537a45cddad4f01",
+      "sha256": "3f0baac4f34e26ac98ca3b5367a53c843231ac0d02fd8f75fa660d3d949ea42d",
       "parameters": []
     },
     {
@@ -279,7 +279,7 @@
         "energy",
         "diagnostics"
       ],
-      "sha256": "9c82207bf165dadf098aad518a70bd41c256860da27c2d6930f1636bb3c7e5f1",
+      "sha256": "45c0be9dcc61b78131da09d21c810badd026efabff4cd3c04d8a278cc4c5e3a3",
       "parameters": [
         {
           "name": "OutputDirectory",
@@ -306,7 +306,7 @@
         "eventlog",
         "diagnostics"
       ],
-      "sha256": "c1b587508bb9c9a805ca6137ac4411cbe034b56f251650b75e8decc290c6a280",
+      "sha256": "743050748f99d566d03d05ac3e16dc644ae37c774407340219c1e87f8b53e6ad",
       "parameters": [
         {
           "name": "MaxEvents",
@@ -333,7 +333,7 @@
         "process",
         "audit"
       ],
-      "sha256": "3cfad5fbeea0e4309270951673fdb69158229758d0d89b096232bd2d47c84606",
+      "sha256": "4f5d6b2a9b4f117402d9db139dcffd5bf6baafa5af8c1dc8ab1f0c7e40482a4e",
       "parameters": [
         {
           "name": "StateFilter",
@@ -431,7 +431,7 @@
         "dns",
         "repair"
       ],
-      "sha256": "babd3731a02311eb99feddd7ce4f8ae7749688755df9fba3a6d0c3458495e8be",
+      "sha256": "cfebac2f637e4e08e53e85213ef701066ac5bde68e45e9b63dd84308cf95d7dd",
       "parameters": []
     },
     {
@@ -451,7 +451,7 @@
         "security",
         "network"
       ],
-      "sha256": "90f5a3fcdf73f24db2c2575e2caab73a21214d86ee6aab1ea17b7b095237df1f",
+      "sha256": "557dfb902f1b69111ee0a41f75da930bf7664500691f9592aee67323917e73f6",
       "parameters": []
     },
     {
@@ -471,7 +471,7 @@
         "registry",
         "network"
       ],
-      "sha256": "0050a520964e24f2d6c0468b042ad3877d1ffcda3cfa03217cb195784c6d8439",
+      "sha256": "388329293dbcb225e9b58815534e4284582f6feca6ef3fd6c096c0e0583f5486",
       "parameters": []
     },
     {
@@ -491,7 +491,7 @@
         "repair",
         "network"
       ],
-      "sha256": "82b24ce5d097231fa328e2824988bffd814299adbdbdf638c6b1626358e9ed35",
+      "sha256": "1de5e148286027bc8a41fed8d1a9b6e5c0cdc6c6d0741a16d42bf814a3cf782b",
       "parameters": []
     },
     {
@@ -511,7 +511,7 @@
         "discovery",
         "network"
       ],
-      "sha256": "e29748dc894a1327f702684b161ab6f22ab194f6a29dc9d3622179c209aec309",
+      "sha256": "1ccc761b4836dd19affc52a3d579aa61a7702769b1ef39725f146624aa4053b2",
       "parameters": []
     },
     {
@@ -531,7 +531,7 @@
         "wmi",
         "maintenance"
       ],
-      "sha256": "e53b289f30fca9bcc44bf4e286d1958af5e1fe78f9a7033a1094514dcc1bd923",
+      "sha256": "3e8f83e831eea2536e11d32bd5e026534155950d6615c98888dc0e7d865b7733",
       "parameters": []
     },
     {
@@ -551,7 +551,7 @@
         "telemetry",
         "privacy"
       ],
-      "sha256": "1fa2c530b9dce4beeef504568837ec9392d1dda180ce4ffba3b4a3d07c11fa69",
+      "sha256": "fc0d77122186766ed7644b9b177ea60cbca620eb17889063d81d3b609612b088",
       "parameters": []
     },
     {
@@ -570,7 +570,7 @@
         "performance",
         "cpu"
       ],
-      "sha256": "9d578ff95dbd46da5fd4ed1a3f09926b4b29394480622471bcdfadad95613465",
+      "sha256": "0d91704bc9cc90e5dd1d909f5b8a03fd4cd1de44b47bc1aa45cc689a98f573df",
       "parameters": []
     },
     {
@@ -589,7 +589,7 @@
         "energy-saver",
         "efficiency"
       ],
-      "sha256": "a70f6d9d28ecad7982726c64d6eeff6f79e265a7dc9da2c362b7c4bbefe2a46a",
+      "sha256": "efd2e0f07ff1ccf0e04db29a85b4ae71b68d05f74a0ed1cc9d5b4c11d7c65652",
       "parameters": []
     },
     {
@@ -608,7 +608,7 @@
         "automation",
         "battery"
       ],
-      "sha256": "b2cef7616124f171cafefc7932cd046e4215ea60c72ffc3912c5d3d6d4296a0d",
+      "sha256": "7fc73d0d569446fbf04bf78e9cf1fd8d016f5a14be0389aa3509dc448bd3d5e1",
       "parameters": []
     }
   ]

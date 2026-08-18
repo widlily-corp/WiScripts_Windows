@@ -98,6 +98,7 @@ fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<Comma
     let timeout = Duration::from_secs(timeout_secs);
 
     loop {
+        let child_pid = child.id();
         match child.try_wait() {
             Ok(Some(status)) => {
                 let exit_code = status.code().unwrap_or(-1);
@@ -114,6 +115,7 @@ fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<Comma
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
+                    crate::script_runner::kill_process_tree(child_pid);
                     let _ = child.kill();
                     let _ = child.wait();
                     let _ = stdout_handle.join();
@@ -126,6 +128,7 @@ fn run_command_with_timeout(mut cmd: Command, timeout_secs: u64) -> Result<Comma
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
+                crate::script_runner::kill_process_tree(child_pid);
                 let _ = child.kill();
                 let _ = child.wait();
                 let _ = stdout_handle.join();

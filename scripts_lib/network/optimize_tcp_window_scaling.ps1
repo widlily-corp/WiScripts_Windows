@@ -1,12 +1,11 @@
-﻿param(
+param(
     [string]$AutoTuningLevel = "normal",
     [string]$CongestionProvider = "cubic"
 )
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Configuring TCP stack parameters requires Administrator privileges. Please run PowerShell as Administrator."
-    return
+    throw "Configuring TCP stack parameters requires Administrator privileges. Please run PowerShell as Administrator."
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

@@ -7,7 +7,9 @@ import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive, Search } from 'luc
 
 const TAB_TITLES: Record<string, string> = {
   dashboard: 'header.tab_titles.dashboard',
+  script_runner: 'header.tab_titles.script_runner',
   audio_manager: 'header.tab_titles.audio_manager',
+  governor: 'header.tab_titles.governor',
   optimization: 'header.tab_titles.optimization',
   package_manager: 'header.tab_titles.package_manager',
   app_uninstaller: 'header.tab_titles.app_uninstaller',
@@ -16,12 +18,14 @@ const TAB_TITLES: Record<string, string> = {
   storage_utilities: 'header.tab_titles.storage_utilities',
   startup: 'header.tab_titles.startup',
   scheduler: 'header.tab_titles.scheduler',
+  autoruns: 'header.tab_titles.autoruns',
   dns_context: 'header.tab_titles.dns_context',
   driver_backup: 'header.tab_titles.driver_backup',
   diagnostics: 'header.tab_titles.diagnostics',
   odt: 'header.tab_titles.odt',
   activation: 'header.tab_titles.activation',
   restore_points: 'header.tab_titles.restore_points',
+  state_engine: 'header.tab_titles.state_engine',
   settings: 'header.tab_titles.settings',
 };
 

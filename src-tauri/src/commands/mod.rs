@@ -19,7 +19,8 @@ use crate::storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
 pub use crate::script_runner::{
-    execute_custom_script, get_cached_scripts_library, read_library_script, sync_scripts_library,
+    cancel_running_script, execute_custom_script, get_cached_scripts_library, read_library_script,
+    sync_scripts_library,
 };
 use serde::{Deserialize, Serialize};
 use std::io::Write;

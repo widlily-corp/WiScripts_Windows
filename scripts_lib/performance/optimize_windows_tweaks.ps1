@@ -1,11 +1,23 @@
-﻿param()
+param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Warning "Some system optimization steps require Administrator privileges."
+    throw "Windows OS optimization tweaks require Administrator privileges. Please run PowerShell as Administrator."
 }
 
-$logPath = if ($PSScriptRoot) { Join-Path $PSScriptRoot "optimize_log.txt" } else { "C:\Users\Widlily\Documents\projects\optimize_log.txt" }
+$logDir = if ($env:LOCALAPPDATA) {
+    Join-Path $env:LOCALAPPDATA "WiScripts\Logs"
+} elseif ($env:TEMP) {
+    $env:TEMP
+} else {
+    $env:USERPROFILE
+}
+
+if (-not (Test-Path $logDir)) {
+    New-Item -ItemType Directory -Path $logDir -Force -ErrorAction SilentlyContinue | Out-Null
+}
+
+$logPath = Join-Path $logDir "WiScripts_optimize_log.txt"
 Start-Transcript -Path $logPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "=== 1. Removing Microsoft PC Manager ===" -ForegroundColor Cyan

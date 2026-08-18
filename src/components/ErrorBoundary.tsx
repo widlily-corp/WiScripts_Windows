@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertOctagon, RotateCcw, Bug } from 'lucide-react';
+import i18n from '../i18n/config';
 import { GitHubIssueModal } from './GitHubIssueModal';
 
 interface Props {
@@ -39,18 +40,22 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      const errMessage = this.state.error?.toString() || 'Unknown application error';
+      const errMessage = this.state.error?.toString() || i18n.t('error_boundary.unknown_error', 'Unknown application error');
 
       return (
-        <div className="flex h-screen w-screen items-center justify-center bg-background p-6 text-text-primary">
+        <div className="flex h-full w-full min-h-[400px] items-center justify-center bg-background p-6 text-text-primary">
           <div className="w-full max-w-md rounded-[6px] border border-status-danger/40 bg-surface p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-status-danger">
               <div className="flex h-10 w-10 items-center justify-center rounded-[6px] bg-status-dangerSubtle">
                 <AlertOctagon className="h-6 w-6 text-status-danger" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-text-primary">Application Error</h2>
-                <p className="text-xs text-text-secondary">An unexpected rendering error occurred.</p>
+                <h2 className="text-base font-semibold text-text-primary">
+                  {i18n.t('error_boundary.title', 'Application Error')}
+                </h2>
+                <p className="text-xs text-text-secondary">
+                  {i18n.t('error_boundary.description', 'An unexpected rendering error occurred.')}
+                </p>
               </div>
             </div>
 
@@ -66,7 +71,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface-subtle px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
               >
                 <Bug className="h-3.5 w-3.5 text-status-danger" />
-                <span>Report Crash on GitHub</span>
+                <span>{i18n.t('error_boundary.report_button', 'Report Crash on GitHub')}</span>
               </button>
 
               <button
@@ -74,7 +79,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex items-center gap-2 rounded-[6px] bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-hover transition-colors"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span>Reload Application</span>
+                <span>{i18n.t('error_boundary.reload_button', 'Reload Application')}</span>
               </button>
             </div>
           </div>

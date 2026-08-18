@@ -1,7 +1,12 @@
-﻿param(
+param(
     [string]$OutputDirectory = "$env:USERPROFILE\Desktop",
     [switch]$IncludeEnergyAudit
 )
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    throw "Generating energy diagnostics and reports requires Administrator privileges. Please run PowerShell as Administrator."
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " WiScripts: Battery Health & Energy Diagnostics" -ForegroundColor Cyan
@@ -24,15 +29,10 @@ if ($batteryProc.ExitCode -eq 0) {
 }
 
 if ($IncludeEnergyAudit) {
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if ($isAdmin) {
-        Write-Host "Running 10-second Energy Efficiency Audit..." -ForegroundColor Cyan
-        $energyProc = Start-Process -FilePath "powercfg.exe" -ArgumentList @("/energy", "/duration", "10", "/output", "`"$energyReportPath`"") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
-        if ($energyProc.ExitCode -eq 0) {
-            Write-Host "[OK] Energy report saved to: $energyReportPath" -ForegroundColor Green
-        }
-    } else {
-        Write-Warning "Energy efficiency audit requires Administrator privileges. Skipped."
+    Write-Host "Running 10-second Energy Efficiency Audit..." -ForegroundColor Cyan
+    $energyProc = Start-Process -FilePath "powercfg.exe" -ArgumentList @("/energy", "/duration", "10", "/output", "`"$energyReportPath`"") -NoNewWindow -Wait -PassThru -ErrorAction SilentlyContinue
+    if ($energyProc.ExitCode -eq 0) {
+        Write-Host "[OK] Energy report saved to: $energyReportPath" -ForegroundColor Green
     }
 }
 

@@ -16,6 +16,44 @@ function extractDownloadPayload(event: DownloadEvent): DownloadEventPayload | un
   return ev.data || ev.payload;
 }
 
+async function fetchReleaseNotesFallback(version: string): Promise<string | undefined> {
+  const cleanVer = version.replace(/^v/, '');
+  const urls = [
+    `https://api.github.com/repos/widlily-corp/WiScripts_Windows/releases/tags/v${cleanVer}`,
+    `https://api.github.com/repos/widlily-corp/WiScripts_Windows/releases/tags/${cleanVer}`,
+    `https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/RELEASE_NOTES_${cleanVer}.md`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { Accept: 'application/vnd.github.v3+json, text/plain' },
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) continue;
+
+      if (url.includes('api.github.com')) {
+        const data = (await res.json()) as { body?: string };
+        if (data.body && data.body.trim().length > 0) {
+          return data.body.trim();
+        }
+      } else {
+        const text = await res.text();
+        if (text && text.trim().length > 0 && !text.includes('404: Not Found')) {
+          return text.trim();
+        }
+      }
+    } catch {
+      // Ignore network errors on fallback
+    }
+  }
+  return undefined;
+}
+
 export interface UpdaterSlice {
   appVersion: string;
   setAppVersion: (version: string) => void;
@@ -36,7 +74,7 @@ export interface UpdaterSlice {
 }
 
 export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = (set, get) => ({
-  appVersion: '1.1.0',
+  appVersion: '1.2.0',
   setAppVersion: (ver) => set({ appVersion: ver }),
   fetchAppVersion: async () => {
     try {
@@ -48,7 +86,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     } catch (err) {
       // Dev mode fallback
     }
-    const current = get().appVersion || '0.9.7';
+    const current = get().appVersion || '1.2.0';
     return current;
   },
 
@@ -66,11 +104,11 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
 
   triggerMockUpdate: (mockInfo) => {
     const info: UpdateInfo = {
-      version: mockInfo?.version || '0.9.5',
-      currentVersion: get().appVersion || '0.9.7',
+      version: mockInfo?.version || '1.2.0',
+      currentVersion: get().appVersion || '1.1.0',
       body:
         mockInfo?.body ||
-        `# What's New in v0.9.7\n\n### Architecture\n- **Zustand Slice Architecture**: Monolithic store decomposed into 7 independent slices.\n- **Strict TypeScript**: All \`as any\` assertions replaced with proper Type Guards.\n\n### Performance\n- **Optimized Bundle**: Manual chunk splitting eliminates 500kB+ warnings.\n\n### Quality\n- **226 Rust tests passing**: All backend modules verified.\n- **Full i18n coverage**: No hardcoded strings remain.\n\n> Restart your system after updating for service adjustments to take effect.`,
+        `# What's New in v1.2.0\n\n### Online Scripts & Backend Security\n- **Strict Path Traversal Protection**: Sandbox normalization prevents directory traversal.\n- **Process Supervision & Cancellation**: 300s execution limits and process tree termination.\n- **PowerShell 5.1 & CP1251 AST Fixes**: Clean UTF-8 BOM encoding and \`param()\` position protection.\n\n### Frontend Performance & i18n\n- **Memory Leak Protection**: Bounded log ring buffer (1,000 max).\n- **Preset Batching**: 18.5x faster batch operations.\n- **100% i18n Parity**: Full parity across 1,173 localized keys.`,
       date: mockInfo?.date || new Date().toISOString().split('T')[0],
     };
     set({
@@ -108,10 +146,15 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
         return false;
       }
 
+      let releaseBody = update.body?.trim();
+      if (!releaseBody) {
+        releaseBody = await fetchReleaseNotesFallback(update.version);
+      }
+
       const info: UpdateInfo = {
         version: update.version,
         currentVersion: get().appVersion,
-        body: update.body || undefined,
+        body: releaseBody || undefined,
         date: update.date || undefined,
       };
       set({

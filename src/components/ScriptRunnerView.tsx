@@ -23,20 +23,24 @@ import {
   Activity,
   Layers,
   Code2,
-  ExternalLink,
   X,
   FileText,
   Copy,
   Check,
+  Square,
+  Timer,
+  Sliders,
+  RotateCcw,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
-import type { ScriptCategory, ScriptManifestEntry, ScriptRiskLevel } from '../types';
+import type { ScriptCategory, ScriptRiskLevel } from '../types';
 
 export function ScriptRunnerView() {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Store state
   const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
@@ -45,6 +49,9 @@ export function ScriptRunnerView() {
   const uploadedFileName = useAppStore((s) => s.uploadedFileName);
   const outputLogs = useAppStore((s) => s.outputLogs);
   const isExecutingScript = useAppStore((s) => s.isExecutingScript);
+  const activeExecutionId = useAppStore((s) => s.activeExecutionId);
+  const isCancellingScript = useAppStore((s) => s.isCancellingScript);
+  const executionStartTime = useAppStore((s) => s.executionStartTime);
 
   // Online Library state
   const libraryManifest = useAppStore((s) => s.libraryManifest);
@@ -59,12 +66,18 @@ export function ScriptRunnerView() {
   const previewContent = useAppStore((s) => s.previewContent);
   const isLoadingPreview = useAppStore((s) => s.isLoadingPreview);
 
+  // Parameter Configuration Dialog State
+  const parameterDialogScript = useAppStore((s) => s.parameterDialogScript);
+  const parameterValues = useAppStore((s) => s.parameterValues);
+  const parameterValidationErrors = useAppStore((s) => s.parameterValidationErrors);
+
   // Actions
   const setScriptContent = useAppStore((s) => s.setScriptContent);
   const setScriptType = useAppStore((s) => s.setScriptType);
   const setUploadedFileName = useAppStore((s) => s.setUploadedFileName);
   const clearOutputLogs = useAppStore((s) => s.clearOutputLogs);
   const executeScript = useAppStore((s) => s.executeScript);
+  const cancelRunningScript = useAppStore((s) => s.cancelRunningScript);
   const downloadOutputLog = useAppStore((s) => s.downloadOutputLog);
   const setupScriptOutputListener = useAppStore((s) => s.setupScriptOutputListener);
   const cleanupScriptOutputListener = useAppStore((s) => s.cleanupScriptOutputListener);
@@ -79,14 +92,46 @@ export function ScriptRunnerView() {
   const loadScriptToEditor = useAppStore((s) => s.loadScriptToEditor);
   const runLibraryScriptDirectly = useAppStore((s) => s.runLibraryScriptDirectly);
 
+  // Parameter Dialog Actions
+  const closeParameterDialog = useAppStore((s) => s.closeParameterDialog);
+  const setParameterValue = useAppStore((s) => s.setParameterValue);
+  const resetParameterValues = useAppStore((s) => s.resetParameterValues);
+  const executeScriptWithParameters = useAppStore((s) => s.executeScriptWithParameters);
+
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  // Timer tracking active execution
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isExecutingScript && executionStartTime) {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - executionStartTime) / 1000)));
+      interval = setInterval(() => {
+        setElapsedSeconds(Math.max(0, Math.floor((Date.now() - executionStartTime) / 1000)));
+      }, 500);
+    } else {
+      setElapsedSeconds(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isExecutingScript, executionStartTime]);
+
+  const formattedElapsed = useMemo(() => {
+    const mins = Math.floor(elapsedSeconds / 60);
+    const secs = elapsedSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, [elapsedSeconds]);
 
   // Mount effects
   useEffect(() => {
     setupScriptOutputListener();
     return () => {
       cleanupScriptOutputListener();
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
     };
   }, [setupScriptOutputListener, cleanupScriptOutputListener]);
 
@@ -102,16 +147,20 @@ export function ScriptRunnerView() {
     }
   }, [outputLogs, autoScroll]);
 
-  // Handle ESC key for modal
+  // Handle ESC key for modal dialogs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && previewScript) {
-        closeScriptPreview();
+      if (e.key === 'Escape') {
+        if (parameterDialogScript) {
+          closeParameterDialog();
+        } else if (previewScript) {
+          closeScriptPreview();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScript, closeScriptPreview]);
+  }, [previewScript, closeScriptPreview, parameterDialogScript, closeParameterDialog]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -146,7 +195,13 @@ export function ScriptRunnerView() {
   const handleCopyChecksum = (hash: string) => {
     navigator.clipboard.writeText(hash);
     setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => {
+      setCopiedHash(false);
+      copyTimeoutRef.current = null;
+    }, 2000);
   };
 
   // Filtered scripts calculation
@@ -264,6 +319,33 @@ export function ScriptRunnerView() {
 
       {/* Admin Elevation Warning Banner (if non-elevated) */}
       <AdminElevationBanner featureName={t('script_runner.admin_feature_name', 'Script Execution')} />
+
+      {/* Active Execution Floating/Sticky Banner when in library view */}
+      {isExecutingScript && activeRunnerTab === 'library' && (
+        <div className="flex items-center justify-between p-3 rounded-[6px] border border-brand/40 bg-brand/10 text-text-primary text-xs shadow-sm">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-brand" />
+            <span className="font-medium">{t('script_runner.active_execution_banner', 'A script is actively executing')}</span>
+            <span className="font-mono text-brand font-bold tabular-nums">({formattedElapsed})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => cancelRunningScript()}
+              disabled={isCancellingScript}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] font-medium text-xs bg-status-error hover:bg-status-error/90 text-white transition-colors disabled:opacity-50"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+              <span>{isCancellingScript ? t('script_runner.cancelling', 'Cancelling...') : t('script_runner.cancel', 'Cancel')}</span>
+            </button>
+            <button
+              onClick={() => setActiveRunnerTab('editor')}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] font-medium text-xs bg-surface-card hover:bg-surface-hover border border-border text-text-primary transition-colors"
+            >
+              <span>{t('script_runner.view_terminal', 'View Terminal')}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Primary Navigation Tabs */}
       <div className="flex items-center justify-between border-b border-border pb-2">
@@ -422,7 +504,7 @@ export function ScriptRunnerView() {
               />
             </div>
 
-            {/* Footer Bar (File & Line Info + Execution Trigger) */}
+            {/* Footer Bar (File & Line Info + Execution Trigger / Cancel Trigger) */}
             <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-text-secondary">
               <div className="flex items-center gap-3">
                 {uploadedFileName && (
@@ -435,23 +517,35 @@ export function ScriptRunnerView() {
                 </span>
               </div>
 
-              <button
-                onClick={() => executeScript()}
-                disabled={isExecutingScript || !scriptContent.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isExecutingScript ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>{t('script_runner.executing', 'Executing...')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 fill-current" />
-                    <span>{t('script_runner.execute', 'Execute Script')}</span>
-                  </>
-                )}
-              </button>
+              {isExecutingScript ? (
+                <button
+                  onClick={() => cancelRunningScript()}
+                  disabled={isCancellingScript}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-status-error hover:bg-status-error/90 text-white transition-colors disabled:opacity-50 shadow-sm"
+                  title={t('script_runner.cancel_tooltip', 'Terminate script process tree immediately')}
+                >
+                  {isCancellingScript ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>{t('script_runner.cancelling', 'Cancelling...')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="h-4 w-4 fill-current" />
+                      <span>{t('script_runner.cancel_execution', 'Cancel Execution')}</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => executeScript()}
+                  disabled={!scriptContent.trim()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>{t('script_runner.execute', 'Execute Script')}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -466,6 +560,24 @@ export function ScriptRunnerView() {
               </div>
 
               <div className="flex items-center gap-2">
+                {isExecutingScript && (
+                  <div className="flex items-center gap-1.5 mr-1">
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-brand bg-brand/10 px-2 py-0.5 rounded border border-brand/30">
+                      <Timer className="h-3 w-3 animate-pulse" />
+                      <span>{formattedElapsed}</span>
+                    </span>
+                    <button
+                      onClick={() => cancelRunningScript()}
+                      disabled={isCancellingScript}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-[4px] font-mono text-[11px] bg-status-errorSubtle hover:bg-status-error/20 text-status-error border border-status-error/40 transition-colors disabled:opacity-50"
+                      title={t('script_runner.cancel_execution', 'Cancel Execution')}
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                      <span>{isCancellingScript ? t('script_runner.cancelling', 'Cancelling...') : t('script_runner.cancel', 'Cancel')}</span>
+                    </button>
+                  </div>
+                )}
+
                 <button
                   onClick={() => setAutoScroll(!autoScroll)}
                   className={`inline-flex items-center gap-1 px-2 py-1 rounded-[4px] font-mono text-[11px] border transition-colors ${
@@ -906,6 +1018,123 @@ export function ScriptRunnerView() {
                 >
                   <Play className="h-4 w-4 fill-current" />
                   <span>{t('script_runner.run_directly', 'Run Directly')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Parameter Configuration Modal Dialog */}
+      {parameterDialogScript && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex flex-col w-full max-w-xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-[6px] bg-brand/10 border border-brand/30 text-brand">
+                  <Sliders className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-text-primary">
+                    {t('script_runner.param_dialog_title', 'Configure Script Parameters')}
+                  </h2>
+                  <p className="text-xs text-text-secondary">
+                    {parameterDialogScript.name} (v{parameterDialogScript.version})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeParameterDialog}
+                className="p-1.5 rounded-[6px] text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {parameterDialogScript.parameters?.map((param) => {
+                const error = parameterValidationErrors[param.name];
+                const value = parameterValues[param.name];
+                return (
+                  <div
+                    key={param.name}
+                    className={`p-3 rounded-[6px] border bg-surface-subtle space-y-1.5 ${
+                      error ? 'border-status-error/60' : 'border-border'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="font-mono text-xs font-bold text-brand">
+                        ${param.name}
+                      </label>
+                      <span className="text-[10px] text-text-secondary">
+                        Default: {String(param.default)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-secondary">
+                      {param.description}
+                    </p>
+                    {param.type === 'boolean' ? (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setParameterValue(param.name, !value)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none border border-transparent ${
+                            value ? 'bg-brand' : 'bg-surface-card border-border'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-sm mt-0.5 ${
+                              value ? 'translate-x-4' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type={param.type === 'number' ? 'number' : 'text'}
+                        value={value !== undefined && value !== null ? String(value) : ''}
+                        onChange={(e) =>
+                          setParameterValue(
+                            param.name,
+                            param.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value
+                          )
+                        }
+                        className="w-full bg-surface-card border border-border rounded-[4px] px-3 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                      />
+                    )}
+                    {error && <p className="text-[11px] text-status-error">{error}</p>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between p-4 border-t border-border bg-surface-subtle">
+              <button
+                onClick={resetParameterValues}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>{t('script_runner.param_dialog_reset', 'Reset to Defaults')}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={closeParameterDialog}
+                  className="px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  {t('script_runner.cancel', 'Cancel')}
+                </button>
+                <button
+                  onClick={() => executeScriptWithParameters(parameterDialogScript)}
+                  disabled={isExecutingScript}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-[4px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-sm"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <span>{t('script_runner.param_dialog_run', 'Run with Parameters')}</span>
                 </button>
               </div>
             </div>

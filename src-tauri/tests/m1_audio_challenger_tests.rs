@@ -1,8 +1,7 @@
 use std::sync::Arc;
 use std::thread;
-use wiscripts_windows_lib::audio::types::{AudioFlow, AudioDevice, AudioDevicesPayload, AppAudioSession, DeviceState};
+use wiscripts_windows_lib::audio::types::AudioFlow;
 use wiscripts_windows_lib::audio::{AudioBackend, MockAudioBackend, WindowsAudioBackend};
-use wiscripts_windows_lib::error::AppError;
 
 #[test]
 fn test_mock_backend_concurrency_stress() {

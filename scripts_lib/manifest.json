@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "1.0.0",
-  "lastUpdated": "2026-08-18T11:00:00Z",
+  "version": "1.1.0",
+  "lastUpdated": "2026-08-18T12:15:00Z",
   "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
   "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
   "scripts": [
@@ -15,7 +15,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["windows-update", "cache", "maintenance", "services"],
+      "tags": [
+        "windows-update",
+        "cache",
+        "maintenance",
+        "services"
+      ],
       "sha256": "ffbec1863076ff3abd3c16c892b209414d0568e2508a0a94f5e5173995f63dd0",
       "parameters": []
     },
@@ -29,7 +34,12 @@
       "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["explorer", "icon-cache", "thumbnails", "ui"],
+      "tags": [
+        "explorer",
+        "icon-cache",
+        "thumbnails",
+        "ui"
+      ],
       "sha256": "e959c3cd709e8e8333d0cc7938c0ad97c3367900aa15b77fae28de440a5137ab",
       "parameters": []
     },
@@ -43,7 +53,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["dism", "winsxs", "component-store", "disk-cleanup"],
+      "tags": [
+        "dism",
+        "winsxs",
+        "component-store",
+        "disk-cleanup"
+      ],
       "sha256": "1ce8873ac69772472eace291cc805fc1d04ee32304300e3a8469bef6039f8d09",
       "parameters": [
         {
@@ -64,7 +79,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["dns", "winsock", "network", "repair"],
+      "tags": [
+        "dns",
+        "winsock",
+        "network",
+        "repair"
+      ],
       "sha256": "24e26160d67fcfca1cf94d74239bed97f3bad613d70cbca4696b5777ed7c23e5",
       "parameters": []
     },
@@ -78,7 +98,13 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["tcp-ip", "netsh", "dhcp", "arp", "network"],
+      "tags": [
+        "tcp-ip",
+        "netsh",
+        "dhcp",
+        "arp",
+        "network"
+      ],
       "sha256": "dac511319bf5cadf83ffcf5284fffa3bc67f8710cf0e5741d1e29baa8c72085c",
       "parameters": []
     },
@@ -92,7 +118,13 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["tcp", "autotuning", "rss", "performance", "throughput"],
+      "tags": [
+        "tcp",
+        "autotuning",
+        "rss",
+        "performance",
+        "throughput"
+      ],
       "sha256": "6c72d0f02e2d8048afefaee4679f4c84fa743c1f2c79245190d1bf67dd9eb03e",
       "parameters": [
         {
@@ -119,7 +151,13 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["smb", "netbios", "llmnr", "security", "hardening"],
+      "tags": [
+        "smb",
+        "netbios",
+        "llmnr",
+        "security",
+        "hardening"
+      ],
       "sha256": "2b99cfbe857c48dac26acd9704211203314e8f311f3c705c23577ab519e39c8d",
       "parameters": []
     },
@@ -133,7 +171,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["powershell", "security", "logging", "amsi"],
+      "tags": [
+        "powershell",
+        "security",
+        "logging",
+        "amsi"
+      ],
       "sha256": "e4018d23e661ab0ebbaccee6f887ccde9ccd4b38089661591292baf7acae976e",
       "parameters": []
     },
@@ -147,7 +190,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["sfc", "dism", "integrity", "system-repair"],
+      "tags": [
+        "sfc",
+        "dism",
+        "integrity",
+        "system-repair"
+      ],
       "sha256": "3ef80a6c6a52e0d6b3dbd17cba206bdadaa1204292dd99a16a5908bfc48d4b34",
       "parameters": [
         {
@@ -168,7 +216,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["powercfg", "performance", "energy", "cpu"],
+      "tags": [
+        "powercfg",
+        "performance",
+        "energy",
+        "cpu"
+      ],
       "sha256": "a41494e83eed818f72c7eebe9559bdbbe0cd6c91a428b82e623d22582a64471e",
       "parameters": []
     },
@@ -182,7 +235,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["cpu", "core-parking", "latency", "gaming"],
+      "tags": [
+        "cpu",
+        "core-parking",
+        "latency",
+        "gaming"
+      ],
       "sha256": "6b00eb27752e45e10d07714395dd276a3831ae36447c49a68fdf1bcebda93553",
       "parameters": []
     },
@@ -196,7 +254,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["ntfs", "filesystem", "disk-io", "fsutil"],
+      "tags": [
+        "ntfs",
+        "filesystem",
+        "disk-io",
+        "fsutil"
+      ],
       "sha256": "61bfe26dbda079e185dc2cf46e86c2f40faf100e0c149f5851d010b174f88288",
       "parameters": []
     },
@@ -210,7 +273,12 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["battery", "powercfg", "energy", "diagnostics"],
+      "tags": [
+        "battery",
+        "powercfg",
+        "energy",
+        "diagnostics"
+      ],
       "sha256": "269323c1e22a847b492a199ff374fb4e555bec75512a536fa1e19e707a0d13fe",
       "parameters": [
         {
@@ -231,7 +299,13 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["bsod", "crash", "minidump", "eventlog", "diagnostics"],
+      "tags": [
+        "bsod",
+        "crash",
+        "minidump",
+        "eventlog",
+        "diagnostics"
+      ],
       "sha256": "564cab26868904cd2e83948de3a23883572a073ba9cb17b3139a3a82e6c5d88d",
       "parameters": [
         {
@@ -252,7 +326,13 @@
       "requiresAdmin": true,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
-      "tags": ["network", "sockets", "tcp", "process", "audit"],
+      "tags": [
+        "network",
+        "sockets",
+        "tcp",
+        "process",
+        "audit"
+      ],
       "sha256": "7bafa6ab2e55d85a1322938d2b1a90791ba7a3fa318aa2fc2eb8775803922dcc",
       "parameters": [
         {
@@ -268,6 +348,268 @@
           "description": "Maximum number of socket connections to return"
         }
       ]
+    },
+    {
+      "id": "diag-deep-network-audit",
+      "name": "Deep Network & Internet Health Audit",
+      "category": "diagnostics",
+      "path": "diagnostics/diagnose_network_health.ps1",
+      "description": "Full-stack L1-L7 network health audit: Wi-Fi telemetry, Gateway ping/jitter, MTU fragmentation test, DNS latency benchmark (System/Google/Cloudflare/Yandex), Hosts integrity, Captive Portal, TCP handshake ports (443, 53), and WinINet/WinHTTP proxy audit.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "network",
+        "diagnostics",
+        "wifi",
+        "dns",
+        "mtu",
+        "latency",
+        "jitter",
+        "proxy"
+      ],
+      "sha256": "75609e7b5014f93dc7305a197d06cdc6d55bedcec0e2dc1597fea6a79b8dae4d",
+      "parameters": [
+        {
+          "name": "TargetHost",
+          "type": "string",
+          "default": "cloudflare.com",
+          "description": "Target domain for DNS and connectivity testing"
+        }
+      ]
+    },
+    {
+      "id": "diag-network-stability-jitter",
+      "name": "Internet Stability, Jitter & Packet Loss Benchmark",
+      "category": "diagnostics",
+      "path": "diagnostics/test_network_stability.ps1",
+      "description": "Real-time multi-hop latency and stability benchmark: measures Min/Avg/Max latency, jitter (deviation), and packet loss percentage across Local Gateway, National DNS (Yandex), and Global CDN (Cloudflare).",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "network",
+        "stability",
+        "jitter",
+        "packet-loss",
+        "ping",
+        "benchmark"
+      ],
+      "sha256": "6cc223278c96a16260191912d25a8a2c5496477b11da28394d82642488574070",
+      "parameters": [
+        {
+          "name": "Count",
+          "type": "number",
+          "default": 10,
+          "description": "Number of ICMP packets per target node"
+        },
+        {
+          "name": "RemoteHost",
+          "type": "string",
+          "default": "1.1.1.1",
+          "description": "Remote international endpoint to benchmark"
+        }
+      ]
+    },
+    {
+      "id": "net-full-reset-repair",
+      "name": "Complete Network Stack Reset & Renewal",
+      "category": "network",
+      "path": "network/reset_network_full.ps1",
+      "description": "Comprehensive network restoration: releases and renews IP lease, flushes DNS resolver cache, resets Winsock catalog, resets TCP/IP stack (netsh int ip reset), and re-registers DNS names.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "network",
+        "reset",
+        "winsock",
+        "ipconfig",
+        "dns",
+        "repair"
+      ],
+      "sha256": "fa9953c6dbe0d5276b346884b6f2d1535df657f79a9f4a88c9f870ce4b169fde",
+      "parameters": []
+    },
+    {
+      "id": "net-restore-hosts-file",
+      "name": "Restore & Clean System Hosts File",
+      "category": "network",
+      "path": "network/fix_hosts_file.ps1",
+      "description": "Resets %SystemRoot%\\System32\\drivers\\etc\\hosts to clean Microsoft default state, removing malicious redirects or corrupted telemetry blocks.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "hosts",
+        "dns",
+        "repair",
+        "security",
+        "network"
+      ],
+      "sha256": "60f6c05d37ec93ccc9304fc8b7a108b0db5b13a1a6f811b6f564f4681114f07a",
+      "parameters": []
+    },
+    {
+      "id": "net-disable-quic-http3",
+      "name": "Disable QUIC Protocol (HTTP/3 Workaround)",
+      "category": "network",
+      "path": "network/disable_quic_protocol.ps1",
+      "description": "Disables experimental UDP-based QUIC / HTTP/3 protocol across system registry and Chromium browsers to resolve connection throttling and ISP DPI filtering issues.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "quic",
+        "http3",
+        "dpi",
+        "registry",
+        "network"
+      ],
+      "sha256": "1efb5c13ef92b3451e6f6db758125d6e35be1ee46969a971b87e953716932837",
+      "parameters": []
+    },
+    {
+      "id": "net-fix-yandex-access",
+      "name": "Fix Yandex Services & DNS Routing",
+      "category": "network",
+      "path": "network/fix_yandex_routing.ps1",
+      "description": "Flushes specific DNS caches and routes to restore accessibility to Yandex search, cloud, and infrastructure endpoints.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "yandex",
+        "dns",
+        "routing",
+        "repair",
+        "network"
+      ],
+      "sha256": "4552779c64b3171d644f9691f075d3aa2aadd3760a1362d13d7f6642dc196e45",
+      "parameters": []
+    },
+    {
+      "id": "net-setup-lan-sharing",
+      "name": "Configure LAN File Sharing & Discovery",
+      "category": "network",
+      "path": "network/setup_network_share.ps1",
+      "description": "Enables network discovery, file and printer sharing, and firewall rules for seamless local network interoperability.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "smb",
+        "share",
+        "lan",
+        "discovery",
+        "network"
+      ],
+      "sha256": "dbde89082fdcf9ee85abd15953898b09a5503aace61ca0fad62e01e725128b02",
+      "parameters": []
+    },
+    {
+      "id": "maint-deep-system-recovery",
+      "name": "Deep Windows Component & Service Fix",
+      "category": "maintenance",
+      "path": "maintenance/deep_system_fix.ps1",
+      "description": "All-in-one system repair: restarts corrupted RPC/WMI/DCOM services, purges temp files, resets network interfaces, and repairs Component-Based Servicing (CBS).",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "repair",
+        "services",
+        "cbs",
+        "wmi",
+        "maintenance"
+      ],
+      "sha256": "43df1e948701240847495dfeaefe5bd788d833c2111d3bb30d6d53add3b10108",
+      "parameters": []
+    },
+    {
+      "id": "perf-windows-os-tweaks",
+      "name": "Windows OS Performance & Privacy Tweaks",
+      "category": "performance",
+      "path": "performance/optimize_windows_tweaks.ps1",
+      "description": "Optimizes Windows kernel responsiveness, disables diagnostic telemetry, turns off background gaming DVR overhead, and tunes visual effects for maximum frame rates.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "performance",
+        "tweaks",
+        "gaming",
+        "telemetry",
+        "privacy"
+      ],
+      "sha256": "79a346614dc4225ff39891ff007cc85b0883cb88e687fe4f61f9134a8f341dc7",
+      "parameters": []
+    },
+    {
+      "id": "perf-power-ac-mode",
+      "name": "Apply AC High Performance Power Profile",
+      "category": "performance",
+      "path": "performance/power_ac_performance_mode.ps1",
+      "description": "Switches Windows power plan to High/Ultimate Performance with unparked cores and unthrottled GPU clocks for AC mains operation.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "powercfg",
+        "ac-mode",
+        "performance",
+        "cpu"
+      ],
+      "sha256": "3d20bda2bf1c54339459dc9eb555632b08d2097ba6917efd955c5bbecd7e2428",
+      "parameters": []
+    },
+    {
+      "id": "perf-power-battery-mode",
+      "name": "Apply Battery Saver Power Profile",
+      "category": "performance",
+      "path": "performance/power_battery_saving_mode.ps1",
+      "description": "Enables energy efficient power scheme with aggressive core idling and reduced display/bus power draws for prolonged battery longevity.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "powercfg",
+        "battery",
+        "energy-saver",
+        "efficiency"
+      ],
+      "sha256": "76d11d6830fee614ba6449f998c04d6b36de18cf206729cc181ee5600e80b223",
+      "parameters": []
+    },
+    {
+      "id": "perf-power-autoswitcher-service",
+      "name": "Install AC/Battery Auto-Switcher Task",
+      "category": "performance",
+      "path": "performance/setup_power_switcher_service.ps1",
+      "description": "Registers a Windows Scheduled Task to automatically toggle High Performance on AC plug-in and Battery Saver on unplug.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "scheduled-task",
+        "powercfg",
+        "automation",
+        "battery"
+      ],
+      "sha256": "2df26285eef8a3ffd9b994afbc95785bc5c928db6a52c96fa78650e1bea79e2e",
+      "parameters": []
     }
   ]
 }

@@ -585,7 +585,7 @@ mod tests {
         // Large files with identical 4KB header but different bodies (> 4096 bytes)
         let large1_path = dir.path().join("large1.bin");
         let large2_path = dir.path().join("large2.bin");
-        let mut large_content1 = vec![0xAAu8; 8192];
+        let large_content1 = vec![0xAAu8; 8192];
         let mut large_content2 = vec![0xAAu8; 8192];
         // Modify bytes after 4096 in large2
         large_content2[5000] = 0xBB;

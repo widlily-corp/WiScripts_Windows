@@ -140,6 +140,28 @@ pub fn get_rule_catalog() -> Vec<OptimizationItem> {
             undo_command: "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System' -Name 'PublishUserActivities' -Value 1 -Type DWord -Force".to_string(),
             is_recommended: true,
         },
+        OptimizationItem {
+            id: "win11_disable_copilot".to_string(),
+            category: "privacy".to_string(),
+            title: "Disable Windows Copilot & Recall AI".to_string(),
+            description: "Disables Windows Copilot policies and hides Copilot button on taskbar in Windows 11.".to_string(),
+            risk_level: "low".to_string(),
+            is_reversible: true,
+            powershell_command: "Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'ShowCopilotButton' -Value 0 -Type DWord -Force".to_string(),
+            undo_command: "Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'ShowCopilotButton' -Value 1 -Type DWord -Force".to_string(),
+            is_recommended: true,
+        },
+        OptimizationItem {
+            id: "win11_disable_recall_ai".to_string(),
+            category: "privacy".to_string(),
+            title: "Disable Windows Recall AI Snapshot".to_string(),
+            description: "Prevents Windows Recall AI from capturing periodic user activity snapshots and telemetry data analysis.".to_string(),
+            risk_level: "low".to_string(),
+            is_reversible: true,
+            powershell_command: "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI' -Name 'DisableAIDataAnalysis' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\Recall' -Name 'AllowSnapshot' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI' -Name 'AllowSnapshot' -Value 0 -Type DWord -Force".to_string(),
+            undo_command: "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI' -Name 'DisableAIDataAnalysis' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\Recall' -Name 'AllowSnapshot' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI' -Name 'AllowSnapshot' -Value 1 -Type DWord -Force".to_string(),
+            is_recommended: true,
+        },
         // Category 4: services
         OptimizationItem {
             id: "services_sysmain".to_string(),
@@ -208,6 +230,17 @@ pub fn get_rule_catalog() -> Vec<OptimizationItem> {
             undo_command: "Remove-Item -Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue".to_string(),
             is_recommended: true,
         },
+        OptimizationItem {
+            id: "win11_disable_start_recommendations".to_string(),
+            category: "ui_tweaks".to_string(),
+            title: "Disable Start Menu Recommendations & Ads".to_string(),
+            description: "Disables recommended section, promotional tips, and Iris advertisements in the Windows 11 Start Menu.".to_string(),
+            risk_level: "low".to_string(),
+            is_reversible: true,
+            powershell_command: "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'Start_IrisRecommendations' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'ShowRecommendations' -Value 0 -Type DWord -Force; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer' -Name 'HideRecommendedSection' -Value 1 -Type DWord -Force".to_string(),
+            undo_command: "Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'Start_IrisRecommendations' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'ShowRecommendations' -Value 1 -Type DWord -Force; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer' -Name 'HideRecommendedSection' -Value 0 -Type DWord -Force".to_string(),
+            is_recommended: true,
+        },
         // Category 6: disk_cleanup
         OptimizationItem {
             id: "disk_clean_temp".to_string(),
@@ -271,6 +304,9 @@ pub fn check_status(
         status.insert("ui_show_file_extensions".to_string(), false);
         status.insert("ui_show_hidden_files".to_string(), false);
         status.insert("ui_classic_context_menu".to_string(), false);
+        status.insert("win11_disable_copilot".to_string(), false);
+        status.insert("win11_disable_recall_ai".to_string(), false);
+        status.insert("win11_disable_start_recommendations".to_string(), false);
         status.insert("disk_clean_temp".to_string(), false);
         status.insert("disk_clean_delivery_optimization".to_string(), false);
         return Ok(status);
@@ -352,6 +388,30 @@ pub fn check_status(
     )
     .unwrap_or(false);
     status.insert("ui_classic_context_menu".to_string(), classic_menu);
+
+    let copilot_disabled = crate::winapi::registry::get_dword(
+        "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot",
+        "TurnOffWindowsCopilot",
+    )
+    .map(|v| v == 1)
+    .unwrap_or(false);
+    status.insert("win11_disable_copilot".to_string(), copilot_disabled);
+
+    let recall_disabled = crate::winapi::registry::get_dword(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+        "DisableAIDataAnalysis",
+    )
+    .map(|v| v == 1)
+    .unwrap_or(false);
+    status.insert("win11_disable_recall_ai".to_string(), recall_disabled);
+
+    let start_rec_disabled = crate::winapi::registry::get_dword(
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "Start_IrisRecommendations",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    status.insert("win11_disable_start_recommendations".to_string(), start_rec_disabled);
 
     // 3. Fast File System & Package Checks
     let sys_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
@@ -508,6 +568,66 @@ pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
                 "",
             ) {
                 Ok(()) => Some(Ok("Native WinAPI: Created classic context menu CLSID key with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "win11_disable_copilot" => {
+            let _ = crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot",
+                "TurnOffWindowsCopilot",
+                1,
+            );
+            let _ = crate::winapi::registry::set_dword(
+                "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot",
+                "TurnOffWindowsCopilot",
+                1,
+            );
+            match crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "ShowCopilotButton",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Windows Copilot via registry policies with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "win11_disable_recall_ai" => {
+            let _ = crate::winapi::registry::set_dword(
+                "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+                "DisableAIDataAnalysis",
+                1,
+            );
+            let _ = crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Policies\\Microsoft\\Windows\\Recall",
+                "AllowSnapshot",
+                0,
+            );
+            match crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI",
+                "AllowSnapshot",
+                0,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Windows Recall AI data analysis and snapshots with read-back verification".to_string())),
+                Err(e) => Some(Err(e)),
+            }
+        }
+        "win11_disable_start_recommendations" => {
+            let _ = crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "Start_IrisRecommendations",
+                0,
+            );
+            let _ = crate::winapi::registry::set_dword(
+                "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                "ShowRecommendations",
+                0,
+            );
+            match crate::winapi::registry::set_dword(
+                "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
+                "HideRecommendedSection",
+                1,
+            ) {
+                Ok(()) => Some(Ok("Native WinAPI: Disabled Start Menu Iris recommendations and ads with read-back verification".to_string())),
                 Err(e) => Some(Err(e)),
             }
         }

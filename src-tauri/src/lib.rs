@@ -94,6 +94,7 @@ pub fn run() {
             commands::set_app_audio_device,
             commands::set_app_volume,
             commands::create_state_snapshot,
+            commands::create_preflight_snapshot,
             commands::rollback_state_snapshot,
             commands::list_state_snapshots,
             commands::delete_state_snapshot,

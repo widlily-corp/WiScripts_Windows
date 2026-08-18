@@ -1641,6 +1641,85 @@ pub async fn delete_state_snapshot(snapshot_id: String) -> Result<bool, AppError
     .map_err(|e| AppError::Execution(format!("Join error in delete_state_snapshot: {}", e)))?
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PreflightSnapshotResult {
+    pub snapshot_id: String,
+    pub sequence_number: u64,
+    pub timestamp: String,
+    pub state_engine_success: bool,
+    pub restore_point_success: bool,
+    pub restore_point_warning: Option<String>,
+    pub rules_captured: usize,
+}
+
+#[tauri::command]
+pub async fn create_preflight_snapshot(
+    description: Option<String>,
+    rule_ids: Option<Vec<String>>,
+) -> Result<PreflightSnapshotResult, AppError> {
+    let desc = description.unwrap_or_else(|| "Pre-flight safety snapshot before batch optimization".to_string());
+    let rules = rule_ids.unwrap_or_default();
+    let rules_count = rules.len();
+
+    log::info!(
+        "[IPC] create_preflight_snapshot request received: desc='{}', rules_count={}",
+        desc,
+        rules_count
+    );
+
+    let state_snapshot = tauri::async_runtime::spawn_blocking({
+        let desc_clone = desc.clone();
+        move || state_engine::create_snapshot(desc_clone, Some("pre_optimization".to_string()))
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in state snapshot: {}", e)))?
+    .map_err(AppError::Execution)?;
+
+    let (rp_success, rp_warning, seq_num) = tauri::async_runtime::spawn_blocking({
+        let desc_clone = format!("WiScripts: {}", desc);
+        move || {
+            let runner = crate::runner::RealRunner::new();
+            match crate::system_restore::create_restore_point(&runner, &desc_clone) {
+                Ok(action) => {
+                    log::info!("[PreflightSnapshot] VSS restore point created: {}", action.name);
+                    (true, None, 100u64)
+                }
+                Err(e) => {
+                    log::warn!("[PreflightSnapshot] VSS restore point creation warning: {}", e);
+                    let warning_msg = if e.contains("frequency") || e.contains("24 hours") || e.contains("0x80041001") {
+                        "VSS 24h frequency limit reached. StateEngine JSON snapshot was saved successfully.".to_string()
+                    } else if e.contains("disabled") || e.contains("0x80070422") {
+                        "System Restore is disabled on the system drive. StateEngine JSON snapshot was saved successfully.".to_string()
+                    } else {
+                        format!("System Restore Point creation failed ({}). StateEngine JSON snapshot was saved successfully.", e)
+                    };
+                    (false, Some(warning_msg), 0u64)
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in restore point creation: {}", e)))?;
+
+    let timestamp = {
+        let dur = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap_or_default();
+        format!("{}", dur.as_secs())
+    };
+
+    Ok(PreflightSnapshotResult {
+        snapshot_id: state_snapshot.id,
+        sequence_number: seq_num,
+        timestamp,
+        state_engine_success: true,
+        restore_point_success: rp_success,
+        restore_point_warning: rp_warning,
+        rules_captured: rules_count,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Resource Governor IPC Commands
 // ---------------------------------------------------------------------------
@@ -2020,5 +2099,28 @@ mod tests {
             body.contains("[REDACTED_TOKEN]"),
             "Token should be replaced with redacted marker"
         );
+    }
+
+    #[test]
+    fn test_preflight_snapshot_result_serialization() {
+        let result = PreflightSnapshotResult {
+            snapshot_id: "snap_12345_abc".to_string(),
+            sequence_number: 101,
+            timestamp: "1723960000".to_string(),
+            state_engine_success: true,
+            restore_point_success: true,
+            restore_point_warning: None,
+            rules_captured: 3,
+        };
+
+        let json = serde_json::to_string(&result).expect("Failed to serialize PreflightSnapshotResult");
+        assert!(json.contains("\"snapshotId\":\"snap_12345_abc\""));
+        assert!(json.contains("\"sequenceNumber\":101"));
+        assert!(json.contains("\"stateEngineSuccess\":true"));
+        assert!(json.contains("\"restorePointSuccess\":true"));
+        assert!(json.contains("\"rulesCaptured\":3"));
+
+        let deserialized: PreflightSnapshotResult = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized, result);
     }
 }

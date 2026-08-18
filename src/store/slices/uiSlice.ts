@@ -32,6 +32,10 @@ export interface UiSlice {
   pendingSafetyModal: PendingSafetyModal | null;
   openSafetyModal: (modal: Omit<PendingSafetyModal, 'isOpen'>) => void;
   closeSafetyModal: () => void;
+
+  isCommandPaletteOpen: boolean;
+  setCommandPaletteOpen: (open: boolean) => void;
+  toggleCommandPalette: () => void;
 }
 
 export const createUiSlice: StateCreator<AppState, [], [], UiSlice> = (set) => ({
@@ -80,4 +84,8 @@ export const createUiSlice: StateCreator<AppState, [], [], UiSlice> = (set) => (
       pendingSafetyModal: { ...modal, isOpen: true },
     }),
   closeSafetyModal: () => set({ pendingSafetyModal: null }),
+
+  isCommandPaletteOpen: false,
+  setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
+  toggleCommandPalette: () => set((state) => ({ isCommandPaletteOpen: !state.isCommandPaletteOpen })),
 });

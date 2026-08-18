@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from './store/useAppStore';
 import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
+import { CommandPalette } from './components/CommandPalette';
 import { ViewSkeleton } from './components/ViewSkeleton';
 import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
@@ -125,6 +126,34 @@ export function App() {
     generateXmlPreview();
   }, [odtConfig, setGeneratedXml]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K or Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        useAppStore.getState().toggleCommandPalette();
+        return;
+      }
+
+      // '/' key when not focused in an input/textarea/contentEditable
+      if (e.key === '/') {
+        const activeElem = document.activeElement;
+        const isInput =
+          activeElem instanceof HTMLInputElement ||
+          activeElem instanceof HTMLTextAreaElement ||
+          (activeElem as HTMLElement | null)?.isContentEditable;
+
+        if (!isInput) {
+          e.preventDefault();
+          useAppStore.getState().setCommandPaletteOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-text-primary">
       <Navigation />
@@ -162,6 +191,7 @@ export function App() {
         </main>
       </div>
 
+      <CommandPalette />
       <SafetyConfirmationModal />
       <ExecutionProgressModal />
       <ReleaseNotesModal />

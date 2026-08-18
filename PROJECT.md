@@ -81,8 +81,8 @@ c:\Users\Widlily\Documents\projects\WiScripts_Windows\
 |---|------|-------|-------------|--------|
 | M1 | Online Script Library & Sync Engine | Features 1, 2, 3, 4 (R1) | none | DONE |
 | M2 | Core Rust Backend Hardening | Features 5, 6, 7, 8 (R2) | none | DONE |
-| M3 | Frontend Code Splitting & IPC Optimization | Features 9, 10 (R3) | none | PLANNED |
-| M4 | Flagship Features & Win 11 24H2 Support | Features 11, 12, 13, 14 (R4) | M1, M2 | PLANNED |
+| M3 | Frontend Code Splitting & IPC Optimization | Features 9, 10 (R3) | none | DONE |
+| M4 | Flagship Features & Win 11 24H2 Support | Features 11, 12, 13, 14 (R4) | M1, M2 | DONE |
 | M5 | Design Tokens, A11y & Typography | Features 15, 16, 17 (R5) | M3, M4 | PLANNED |
 | M6 | Release Engineering, Version Sync & Git Push | Features 18, 19, 20 (R6) | M1-M5 | PLANNED |
 

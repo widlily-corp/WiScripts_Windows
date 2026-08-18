@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 import { SystemInfo } from '../types';
-import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive, Search } from 'lucide-react';
 
 const TAB_TITLES: Record<string, string> = {
   dashboard: 'header.tab_titles.dashboard',
@@ -109,6 +109,20 @@ export function Header() {
             />
           </button>
         </div>
+
+        {/* Command Palette Search Trigger Button */}
+        <button
+          onClick={() => useAppStore.getState().setCommandPaletteOpen(true)}
+          className="flex items-center gap-2 px-2.5 py-1 rounded-[6px] border border-border bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors text-xs"
+          title="Open Command Palette (Ctrl+K)"
+          aria-label="Open Command Palette"
+        >
+          <Search className="h-3.5 w-3.5 text-brand" />
+          <span className="hidden sm:inline text-[11px] text-text-muted">Search...</span>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
+            Ctrl+K
+          </kbd>
+        </button>
 
         {/* Refresh Button */}
         <button

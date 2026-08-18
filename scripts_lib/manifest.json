@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "1.1.0",
-  "lastUpdated": "2026-08-18T12:15:00Z",
+  "version": "1.1.2",
+  "lastUpdated": "2026-08-18T12:26:00Z",
   "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
   "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
   "scripts": [
@@ -158,7 +158,7 @@
         "security",
         "hardening"
       ],
-      "sha256": "2b99cfbe857c48dac26acd9704211203314e8f311f3c705c23577ab519e39c8d",
+      "sha256": "0b0d6f2c623765859135edcfb12296097cd75a500b473033e1fb4d4672f7dd9d",
       "parameters": []
     },
     {
@@ -177,7 +177,7 @@
         "logging",
         "amsi"
       ],
-      "sha256": "e4018d23e661ab0ebbaccee6f887ccde9ccd4b38089661591292baf7acae976e",
+      "sha256": "3e7ddd390c094210d45ef97dfdee554c5bc8e71faaba52be3f2b89727f165d6d",
       "parameters": []
     },
     {
@@ -241,7 +241,7 @@
         "latency",
         "gaming"
       ],
-      "sha256": "6b00eb27752e45e10d07714395dd276a3831ae36447c49a68fdf1bcebda93553",
+      "sha256": "e163d607b6cbc9e909f5540c21434764bee335f0758643a4369336633b0ca28d",
       "parameters": []
     },
     {
@@ -279,7 +279,7 @@
         "energy",
         "diagnostics"
       ],
-      "sha256": "269323c1e22a847b492a199ff374fb4e555bec75512a536fa1e19e707a0d13fe",
+      "sha256": "76e7a041579b117e24e9c2ea10720147b0e50602ac10c0fd11ea32472dbdf334",
       "parameters": [
         {
           "name": "OutputDirectory",
@@ -369,7 +369,7 @@
         "jitter",
         "proxy"
       ],
-      "sha256": "75609e7b5014f93dc7305a197d06cdc6d55bedcec0e2dc1597fea6a79b8dae4d",
+      "sha256": "e01c59b92fd8d14e77a9d33a08ac6744f321e0f899a081cd0777c8f57d1bdf8f",
       "parameters": [
         {
           "name": "TargetHost",
@@ -397,7 +397,7 @@
         "ping",
         "benchmark"
       ],
-      "sha256": "6cc223278c96a16260191912d25a8a2c5496477b11da28394d82642488574070",
+      "sha256": "171798babd21a78916ccfde3860b27a8a6286c32b0293e47727145b581a5ab96",
       "parameters": [
         {
           "name": "Count",
@@ -431,7 +431,7 @@
         "dns",
         "repair"
       ],
-      "sha256": "fa9953c6dbe0d5276b346884b6f2d1535df657f79a9f4a88c9f870ce4b169fde",
+      "sha256": "fd77793c4b12914d875964d291775ec2598dd500749ba2cb1d9d270c8d0c36dc",
       "parameters": []
     },
     {
@@ -451,7 +451,7 @@
         "security",
         "network"
       ],
-      "sha256": "60f6c05d37ec93ccc9304fc8b7a108b0db5b13a1a6f811b6f564f4681114f07a",
+      "sha256": "61eb99cc54fd8f4769983160991d9689adf4b0f838bd287674d7a032950bc75d",
       "parameters": []
     },
     {
@@ -471,7 +471,7 @@
         "registry",
         "network"
       ],
-      "sha256": "1efb5c13ef92b3451e6f6db758125d6e35be1ee46969a971b87e953716932837",
+      "sha256": "d347f6b1b897aaa13e7b3aff7afdda0a5b7b336248458c867840d5c73487b872",
       "parameters": []
     },
     {
@@ -491,7 +491,7 @@
         "repair",
         "network"
       ],
-      "sha256": "4552779c64b3171d644f9691f075d3aa2aadd3760a1362d13d7f6642dc196e45",
+      "sha256": "3d9558d2a280153431e5f02baeafcaedda9044e8f340f8a0f1ab676ae7638843",
       "parameters": []
     },
     {
@@ -511,7 +511,7 @@
         "discovery",
         "network"
       ],
-      "sha256": "dbde89082fdcf9ee85abd15953898b09a5503aace61ca0fad62e01e725128b02",
+      "sha256": "d2d2fa8e10b9359d6c2cc01d8601f3f1102a0b3df9fa26585329d73d30dc6f40",
       "parameters": []
     },
     {
@@ -531,7 +531,7 @@
         "wmi",
         "maintenance"
       ],
-      "sha256": "43df1e948701240847495dfeaefe5bd788d833c2111d3bb30d6d53add3b10108",
+      "sha256": "083e610e94a8dc1701c5d08764aa36c45e5ca0f907a7fbf46f6557bc1dd04d44",
       "parameters": []
     },
     {
@@ -551,7 +551,7 @@
         "telemetry",
         "privacy"
       ],
-      "sha256": "79a346614dc4225ff39891ff007cc85b0883cb88e687fe4f61f9134a8f341dc7",
+      "sha256": "a71b0ea929b1c6cf1a9df4f19fc7e21ea6907d59828cc33d76a059975b3525a1",
       "parameters": []
     },
     {
@@ -570,7 +570,7 @@
         "performance",
         "cpu"
       ],
-      "sha256": "3d20bda2bf1c54339459dc9eb555632b08d2097ba6917efd955c5bbecd7e2428",
+      "sha256": "525dd49c0ff571cde01cdb752f3e54c1695d34f56ae829d83cef47e66c274a4f",
       "parameters": []
     },
     {
@@ -589,7 +589,7 @@
         "energy-saver",
         "efficiency"
       ],
-      "sha256": "76d11d6830fee614ba6449f998c04d6b36de18cf206729cc181ee5600e80b223",
+      "sha256": "462a9a4b6070fdcee36cec9560426adfefd40657c7e5e2b03eb4961ea0cd2f5f",
       "parameters": []
     },
     {
@@ -608,7 +608,7 @@
         "automation",
         "battery"
       ],
-      "sha256": "2df26285eef8a3ffd9b994afbc95785bc5c928db6a52c96fa78650e1bea79e2e",
+      "sha256": "700d7fb6f3238708452562e4f319f3c94dd1799215600aafe6290de3b254624c",
       "parameters": []
     }
   ]

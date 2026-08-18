@@ -1,16 +1,28 @@
-﻿# Requires -RunAsAdministrator
+﻿<#
+.SYNOPSIS
+    Installs scheduled task to automatically switch power profiles on AC/Battery events.
+#>
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Registering a scheduled task requires Administrator privileges. Please run PowerShell as Administrator."
+    return
+}
 
 $taskName = "AutoPowerProfileSwitcher"
-$scriptPath = "C:\Users\Widlily\Documents\projects\power_switch_manager.ps1"
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { "C:\Users\Widlily\Documents\projects\_tools\windows-scripts" }
+$managerScript = Join-Path $scriptDir "power_switch_manager.ps1"
 
-# Удаляем задачу, если она уже существует
+if (-not (Test-Path $managerScript)) {
+    Write-Error "Manager script not found at: $managerScript"
+    return
+}
+
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     Write-Host "Removed existing task '$taskName'."
 }
 
-# Мы будем использовать прямую регистрацию через XML, так как стандартный командлет
-# New-ScheduledTaskTrigger не поддерживает расширенные фильтры событий (EventTrigger).
 $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -48,7 +60,7 @@ $xml = @"
   <Actions Context="Author">
     <Exec>
       <Command>PowerShell.exe</Command>
-      <Arguments>-WindowStyle Hidden -ExecutionPolicy Bypass -File "$scriptPath"</Arguments>
+      <Arguments>-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$managerScript"</Arguments>
     </Exec>
   </Actions>
 </Task>
@@ -56,8 +68,8 @@ $xml = @"
 
 $xmlPath = "$env:TEMP\PowerTask.xml"
 $xml | Out-File $xmlPath -Encoding UTF8
-Register-ScheduledTask -Xml (Get-Content $xmlPath -Raw) -TaskName $taskName -Force | Out-Null
-Remove-Item $xmlPath
+Register-ScheduledTask -Xml (Get-Content $xmlPath -Raw) -TaskName $taskName -Force -ErrorAction SilentlyContinue | Out-Null
+Remove-Item $xmlPath -ErrorAction SilentlyContinue
 
 Write-Host "Task '$taskName' successfully registered." -ForegroundColor Green
-Write-Host "It will trigger automatically on AC/Battery switch (Event 105)."
+Write-Host "Triggers automatically on AC/Battery switch (Kernel-Power Event 105)."

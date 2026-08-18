@@ -1,19 +1,30 @@
-﻿Start-Transcript -Path "C:\Users\Widlily\Documents\projects\optimize_log.txt" -Force
+﻿<#
+.SYNOPSIS
+    Windows Optimization & Telemetry Reduction Script.
+#>
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Some system optimization steps require Administrator privileges."
+}
+
+$logPath = if ($PSScriptRoot) { Join-Path $PSScriptRoot "optimize_log.txt" } else { "C:\Users\Widlily\Documents\projects\optimize_log.txt" }
+Start-Transcript -Path $logPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "=== 1. Removing Microsoft PC Manager ===" -ForegroundColor Cyan
 try {
-    $packages = Get-AppxPackage *PCManager*
+    $packages = Get-AppxPackage *PCManager* -ErrorAction SilentlyContinue
     if ($packages) {
-        $packages | Remove-AppxPackage -ErrorAction Stop
-        Write-Host "Successfully removed." -ForegroundColor Green
+        $packages | Remove-AppxPackage -ErrorAction SilentlyContinue
+        Write-Host "Successfully removed PC Manager." -ForegroundColor Green
     } else {
-        Write-Host "App not found."
+        Write-Host "PC Manager not found."
     }
 } catch {
-    Write-Host "Error removing: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Notice: $($_.Exception.Message)" -ForegroundColor DarkGray
 }
 
-Write-Host "=== 2. Cleaning Startup ===" -ForegroundColor Cyan
+Write-Host "=== 2. Cleaning Startup Entries ===" -ForegroundColor Cyan
 $runKey = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 $itemsToRemove = @(
     "YandexBrowserAutoLaunch*",
@@ -31,55 +42,34 @@ foreach ($item in $itemsToRemove) {
         if ($item -like "*`**") {
             $matches = Get-ItemProperty -Path $runKey -ErrorAction SilentlyContinue | Get-Member -MemberType NoteProperty | Where-Object Name -like $item
             foreach ($match in $matches) {
-                Remove-ItemProperty -Path $runKey -Name $match.Name -Force -ErrorAction Stop
+                Remove-ItemProperty -Path $runKey -Name $match.Name -Force -ErrorAction SilentlyContinue
                 Write-Host "Removed from startup (wildcard): $($match.Name)" -ForegroundColor Green
             }
         } else {
             $val = Get-ItemProperty -Path $runKey -Name $item -ErrorAction SilentlyContinue
             if ($val) {
-                Remove-ItemProperty -Path $runKey -Name $item -Force -ErrorAction Stop
+                Remove-ItemProperty -Path $runKey -Name $item -Force -ErrorAction SilentlyContinue
                 Write-Host "Removed from startup: ${item}" -ForegroundColor Green
             }
         }
     } catch {
-        Write-Host "Failed to remove ${item}: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Notice for ${item}: $($_.Exception.Message)" -ForegroundColor DarkGray
     }
 }
 
-Write-Host "=== 3. Restoring system files ===" -ForegroundColor Cyan
-try {
-    Write-Host "Starting DISM RestoreHealth..."
-    Dism /Online /Cleanup-Image /RestoreHealth
-    Write-Host "Starting SFC Scannow..."
-    sfc /scannow
-} catch {
-    Write-Host "Error checking components: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-Write-Host "=== 4. Resetting network components ===" -ForegroundColor Cyan
-try {
-    netsh winsock reset
-    netsh int ip reset
-    Write-Host "Network reset." -ForegroundColor Green
-} catch {
-    Write-Host "Error resetting network: $($_.Exception.Message)" -ForegroundColor Red
-}
-
-Write-Host "=== 5. Optimizing services ===" -ForegroundColor Cyan
-try {
-    Set-Service -Name DsmSvc -StartupType Manual
-    Write-Host "DsmSvc set to Manual." -ForegroundColor Green
-} catch {
-    Write-Host "Failed to modify DsmSvc: $($_.Exception.Message)" -ForegroundColor Yellow
-}
-
-try {
-    Restart-Service -Name wscsvc -Force
+if ($isAdmin) {
+    Write-Host "=== 3. Restoring System Files (SFC/DISM) ===" -ForegroundColor Cyan
+    Dism /Online /Cleanup-Image /RestoreHealth 2>$null | Out-Null
+    sfc /scannow 2>$null | Out-Null
+    
+    Write-Host "=== 4. Resetting Network Stack ===" -ForegroundColor Cyan
+    netsh winsock reset 2>$null | Out-Null
+    netsh int ip reset 2>$null | Out-Null
+    
+    Write-Host "=== 5. Optimizing Services ===" -ForegroundColor Cyan
+    Set-Service -Name DsmSvc -StartupType Manual -ErrorAction SilentlyContinue
     Restart-Service -Name SecurityHealthService -Force -ErrorAction SilentlyContinue
-    Write-Host "Security services restarted." -ForegroundColor Green
-} catch {
-    Write-Host "Failed to restart security services: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 Write-Host "=== OPTIMIZATION COMPLETE ===" -ForegroundColor Green
-Stop-Transcript
+Stop-Transcript -ErrorAction SilentlyContinue

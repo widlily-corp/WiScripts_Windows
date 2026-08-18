@@ -2,15 +2,8 @@
 .SYNOPSIS
     Комплексная сквозная диагностика сети и интернет-соединения в Windows.
 .DESCRIPTION
-    Выполняет многоуровневый аудит сетевого стека:
-    - Layer 1/2: Сетевые адаптеры, скорость линка, Wi-Fi телеметрия (SSID, сигнал, канал, протокол).
-    - Layer 3: IPv4/IPv6 конфигурация, Default Gateway, MTU / тест фрагментации, маршрутизация.
-    - Layer 4/7: DNS аудит (настроенные DNS, бенчмарк Cloudflare/Google/Yandex, проверка hosts файла).
-    - Layer 7: HTTP/HTTPS доступность, проверка TLS, Captive Portal, сетевые порты (53, 123, 443, 853).
-    - Security & Stack: WinINet/WinHTTP прокси, профили Windows Firewall, TCP Auto-Tuning, сокеты.
-    - Health Verdict: Автоматическое выявление неполадок и рекомендации по устранению.
-.OUTPUTS
-    Форматированный отчет в консоли с цветной индикацией и сводной таблицей проблем.
+    Многоуровневый аудит сетевого стека: L1/L2 (адаптеры, Wi-Fi), L3 (IP, шлюзы, MTU),
+    L4/L7 (DNS, порты, веб-сервисы), прокси, брандмауэр, сокеты и вердикт.
 #>
 
 [CmdletBinding()]
@@ -63,9 +56,7 @@ Write-Host "       WINDOWS NETWORK & INTERNET DEEP DIAGNOSTICS SUITE       " -Fo
 Write-Host "       Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')    " -ForegroundColor DarkGray
 Write-Host "===============================================================" -ForegroundColor Cyan
 
-# -------------------------------------------------------------
-# 1. АКТИВНЫЕ СЕТЕВЫЕ АДАПТЕРЫ И ФИЗИЧЕСКИЙ УРОВЕНЬ (L1/L2)
-# -------------------------------------------------------------
+# 1. Сетевые адаптеры (L1/L2)
 Write-SectionHeader "1. Сетевые адаптеры и физический линк"
 
 $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
@@ -82,7 +73,7 @@ if (-not $adapters) {
 
 # Wi-Fi телеметрия
 $wlanInfo = netsh wlan show interfaces 2>$null | Out-String
-if ($wlanInfo -match "State\s*:\s*connected" -or $wlanInfo -match "Состояние\s*:\s*подключено") {
+if ($wlanInfo -match "(?:State|Состояние)\s*:\s*(?:connected|подключено)") {
     $ssid = if ($wlanInfo -match '(?:SSID|Имя)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
     $signal = if ($wlanInfo -match '(?:Signal|Сигнал)\s*:\s*(\d+)%') { [int]$matches[1] } else { 0 }
     $radio = if ($wlanInfo -match '(?:Radio type|Тип радиомодуля)\s*:\s*(.+)') { $matches[1].Trim() } else { "N/A" }
@@ -93,13 +84,10 @@ if ($wlanInfo -match "State\s*:\s*connected" -or $wlanInfo -match "Состоя�
     if ($signal -lt 45) {
         $Warnings.Add("Слабый уровень сигнала Wi-Fi ($signal%). Возможны потери пакетов и скачки джиттера.")
     }
-    
     Write-Status "Wi-Fi Сеть (SSID)" "$signal%" "SSID: $ssid | $radio ($band) | Канал: $channel" $wifiLevel
 }
 
-# -------------------------------------------------------------
-# 2. IP КОНФИГУРАЦИЯ, ШЛЮЗ И МАРШРУТИЗАЦИЯ (L3)
-# -------------------------------------------------------------
+# 2. IP Конфигурация и шлюзы (L3)
 Write-SectionHeader "2. IP-конфигурация, шлюз и маршрутизация"
 
 $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object -Property RouteMetric
@@ -122,7 +110,6 @@ if (-not $primaryRoute) {
         Write-Status "Основной IPv4 [$primaryAlias]" "OK" "IP: $ipv4 | Шлюз: $primaryGw (Метрика: $($primaryRoute.RouteMetric))" "OK"
     }
     
-    # Пинг до основного физического шлюза
     if ($primaryGw -and $primaryGw -ne "0.0.0.0") {
         $gwPing = Test-Connection -ComputerName $primaryGw -Count 3 -ErrorAction SilentlyContinue
         if ($gwPing) {
@@ -139,7 +126,7 @@ if (-not $primaryRoute) {
     }
 }
 
-# Тест MTU и фрагментации (Don't Fragment)
+# Тест MTU
 $pingDF = & ping.exe 1.1.1.1 -f -l 1472 -n 1 2>$null | Out-String
 if ($pingDF -match "Packet needs to be fragmented" -or $pingDF -match "Требуется фрагментация") {
     Write-Status "MTU Тест (1500 bytes)" "WARN" "Пакет 1472+28 байт требует фрагментации (MSS/MTU Clamping)" "WARN"
@@ -149,9 +136,7 @@ if ($pingDF -match "Packet needs to be fragmented" -or $pingDF -match "Треб�
     Write-Status "MTU Тест (1500 bytes)" "INFO" "Пакет Don't Fragment отправлен" "INFO"
 }
 
-# -------------------------------------------------------------
-# 3. DNS СЕРВЕРЫ И РЕЗОЛВИНГ (L4/L7)
-# -------------------------------------------------------------
+# 3. DNS
 Write-SectionHeader "3. Аудит DNS-серверов и резолвинга имен"
 
 $configuredDns = (Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object { $_.ServerAddresses.Count -gt 0 }).ServerAddresses | Select-Object -Unique
@@ -163,7 +148,6 @@ if (-not $configuredDns) {
     Write-Status "Настроенные DNS" "INFO" ($configuredDns -join ", ") "INFO"
 }
 
-# Тест скорости резолвинга через системный DNS и публичные DNS
 $benchmarkDomains = @("google.com", "cloudflare.com", "yandex.ru")
 $testServers = @(
     @{ Name = "System DNS"; IP = $null },
@@ -198,7 +182,6 @@ foreach ($srv in $testServers) {
     }
 }
 
-# Проверка hosts файла на посторонние записи
 $hostsPath = "$env:SystemRoot\System32\drivers\etc\hosts"
 if (Test-Path $hostsPath) {
     $hostsLines = Get-Content $hostsPath | Where-Object { $_ -notmatch '^\s*#' -and -not [string]::IsNullOrWhiteSpace($_) }
@@ -210,12 +193,9 @@ if (Test-Path $hostsPath) {
     }
 }
 
-# -------------------------------------------------------------
-# 4. ИНТЕРНЕТ-СВЯЗНОСТЬ, ПОРТЫ И WEB-СЕРВИСЫ (L7)
-# -------------------------------------------------------------
+# 4. Порты и сервисы
 Write-SectionHeader "4. Доступность веб-сервисов и портов (L7)"
 
-# Проверка Captive Portal
 try {
     $webReq = [System.Net.HttpWebRequest]::Create("http://www.msftconnecttest.com/connecttest.txt")
     $webReq.Timeout = 4000
@@ -232,7 +212,6 @@ try {
     Write-Status "Captive Portal" "INFO" "msftconnecttest завершен" "INFO"
 }
 
-# HTTP / HTTPS / TCP Handshake к ключевым сервисам
 $endpoints = @(
     @{ Name = "Cloudflare CDN"; Host = "1.1.1.1"; Port = 443 },
     @{ Name = "Google Services"; Host = "8.8.8.8"; Port = 53 },
@@ -253,12 +232,9 @@ foreach ($ep in $endpoints) {
     }
 }
 
-# -------------------------------------------------------------
-# 5. ПРОКСИ, БРАНДМАУЭР И ПАРАМЕТРЫ СТЕКА TCP
-# -------------------------------------------------------------
+# 5. Прокси и параметры стека
 Write-SectionHeader "5. Прокси, Windows Firewall и стек TCP"
 
-# WinINet Proxy
 $proxyReg = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
 $proxyEnable = (Get-ItemProperty -Path $proxyReg -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable
 $proxyServer = (Get-ItemProperty -Path $proxyReg -Name ProxyServer -ErrorAction SilentlyContinue).ProxyServer
@@ -270,15 +246,13 @@ if ($proxyEnable -eq 1) {
     Write-Status "Пользовательский Proxy" "OK" "Отключен (Прямое подключение)" "OK"
 }
 
-# WinHTTP Proxy
 $winhttp = netsh winhttp show proxy 2>$null | Out-String
-if ($winhttp -match "Direct access" -or $winhttp -match "Прямой доступ") {
+if ($winhttp -match "(?:Direct access|Прямой доступ)") {
     Write-Status "Системный WinHTTP Proxy" "OK" "Прямой доступ (Без прокси)" "OK"
 } else {
     Write-Status "Системный WinHTTP Proxy" "WARN" "Настроен системный прокси: $winhttp" "WARN"
 }
 
-# Брандмауэр Windows (Firewall Profiles)
 $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
 $allFwOn = ($fwProfiles | Where-Object { $_.Enabled -eq $true }).Count -eq $fwProfiles.Count
 if ($allFwOn) {
@@ -287,14 +261,12 @@ if ($allFwOn) {
     Write-Status "Windows Firewall" "INFO" "Один или несколько профилей брандмауэра отключены" "INFO"
 }
 
-# TCP Stack Auto-Tuning
 $tcpGlobal = netsh int tcp show global 2>$null | Out-String
 if ($tcpGlobal -match '(?:Receive Window Auto-Tuning Level|Уровень автонастройки окна получения)\s*:\s*(.+)') {
     $autoTuning = $matches[1].Trim()
     Write-Status "TCP Window Auto-Tuning" "INFO" "Режим: $autoTuning" "INFO"
 }
 
-# Анализ сокетов
 $allSockets = Get-NetTCPConnection -ErrorAction SilentlyContinue
 $timeWaitCount = ($allSockets | Where-Object { $_.State -eq "TimeWait" }).Count
 $estabCount = ($allSockets | Where-Object { $_.State -eq "Established" }).Count
@@ -306,9 +278,7 @@ if ($timeWaitCount -gt 2000) {
     Write-Status "TCP Сокеты" "OK" "Активных (Established): $estabCount | TIME_WAIT: $timeWaitCount" "OK"
 }
 
-# -------------------------------------------------------------
-# 6. ИТОГОВЫЙ ВЕРДИКТ И РЕКОМЕНДАЦИИ
-# -------------------------------------------------------------
+# 6. Вердикт
 Write-SectionHeader "6. Итоговый отчет о состоянии сети"
 
 if ($Issues.Count -eq 0 -and $Warnings.Count -eq 0) {

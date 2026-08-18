@@ -3,17 +3,16 @@
     Тест стабильности интернет-соединения: Packet Loss, Jitter и Latency Benchmark.
 .DESCRIPTION
     Отправляет серию ICMP пакетов по 3 ключевым узлам:
-    1. Локальный основной шлюз (Роутер по наименьшей метрике маршрута)
+    1. Локальный основной шлюз (Роутер)
     2. Региональный DNS (Yandex 77.88.8.8)
     3. Международный CDN (Cloudflare 1.1.1.1)
-    Рассчитывает Min/Avg/Max задержку, джиттер (вариацию задержки) и процент потерь.
 .PARAMETER Count
-    Количество пакетов на каждый узел (по умолчанию 10).
+    Количество пакетов на каждый узел (по умолчанию 4).
 #>
 
 [CmdletBinding()]
 param(
-    [int]$Count = 10,
+    [int]$Count = 4,
     [string]$RemoteHost = "1.1.1.1"
 )
 
@@ -24,7 +23,6 @@ Write-Host "`n===============================================================" -
 Write-Host "      INTERNET STABILITY, JITTER & PACKET LOSS BENCHMARK       " -ForegroundColor White
 Write-Host "===============================================================" -ForegroundColor Cyan
 
-# Поиск основного физического шлюза по минимальной метрике
 $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object -Property RouteMetric
 $primaryGw = ($routes | Select-Object -First 1).NextHop
 
@@ -57,7 +55,6 @@ function Get-JitterStats([string]$HostTarget, [int]$PacketCount) {
     $latencies = $pings | ForEach-Object { [double]$_.ResponseTime }
     $stats = $latencies | Measure-Object -Minimum -Maximum -Average
     
-    # Вычисление джиттера (среднее абсолютное отклонение последовательных пакетов)
     $jitterSum = 0
     for ($i = 1; $i -lt $latencies.Count; $i++) {
         $jitterSum += [math]::Abs($latencies[$i] - $latencies[$i - 1])

@@ -1,4 +1,15 @@
-﻿$hostsPath = "$env:windir\System32\drivers\etc\hosts"
+﻿<#
+.SYNOPSIS
+    Resets Windows hosts file to clean Microsoft default state.
+#>
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Warning "Modifying system hosts file requires Administrator privileges. Please run PowerShell as Administrator."
+    return
+}
+
+$hostsPath = "$env:windir\System32\drivers\etc\hosts"
 
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host "      Full Hosts Reset by Antigravity" -ForegroundColor Cyan
@@ -29,13 +40,15 @@ $defaultHosts = @"
 "@
 
 Write-Host "Resetting hosts file to Windows defaults..."
-$defaultHosts | Set-Content $hostsPath -Force
+$defaultHosts | Set-Content $hostsPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "Flushing DNS Cache..."
-ipconfig /flushdns | Out-Null
+ipconfig /flushdns 2>$null | Out-Null
 
 Write-Host "=============================================" -ForegroundColor Green
 Write-Host "Hosts file is now completely CLEAN!" -ForegroundColor Green
 Write-Host "=============================================" -ForegroundColor Green
 
-Read-Host "Press Enter to exit..."
+if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    Read-Host "Press Enter to exit..."
+}

@@ -1,124 +1,101 @@
-# Project: WiScripts_Windows v0.9.9
+# WiScripts Windows v1.0 Production Release Project
 
-## Architecture Overview
-WiScripts_Windows is a desktop system optimization, diagnostics, script execution workstation, and hardware monitoring application for Windows 10/11 built on React 18, TypeScript 5.6, Zustand 4.5, Tailwind CSS, Vite, and Tauri v2 (Rust 2021).
+## Architecture
+- **Backend**: Rust 2021 Edition + Tauri v2.0 desktop core. 25 modular domain engines handling Windows management, optimization rules, service management, process governor controls, audio COM routing, security autoruns, storage deduplication, and custom script execution.
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS. 21 functional views, Zustand state management, Refined Minimal aesthetic token system.
+- **Online Script Library**: GitHub-backed repository structure in `scripts_lib/` with typed `manifest.json` catalog and SHA-256 integrity verification.
+- **IPC Interface**: Tauri IPC command surface (`#[tauri::command]`) with async Tokio threading and camelCase serde mapping.
 
-- **Frontend**: React 18 + TS in `src/`, UI components & modals in `src/components/`, high-density feature views in `src/views/`, state in `src/store/slices/`, localization in `src/i18n/locales/`.
-- **Backend**: Rust 2021 in `src-tauri/`, IPC command handlers in `src-tauri/src/commands/mod.rs`, execution runner in `src-tauri/src/runner/mod.rs`, streaming script engine in `src-tauri/src/script_runner/mod.rs`, multi-tier hardware metrics in `src-tauri/src/metrics/mod.rs`, state engine in `src-tauri/src/state_engine/mod.rs`, and resource governor in `src-tauri/src/governor/mod.rs`.
-- **Testing**: 57-test multi-tier E2E testing suite in `tests/e2e/runner.js`, component & i18n tests in `tests/`, and Rust unit tests in `src-tauri/src/`.
-
----
+## Code Layout
+```
+c:\Users\Widlily\Documents\projects\WiScripts_Windows\
+├── .github/
+│   └── workflows/
+│       └── release.yml
+├── scripts_lib/
+│   ├── manifest.json
+│   ├── maintenance/
+│   ├── network/
+│   ├── security/
+│   ├── performance/
+│   └── diagnostics/
+├── src-tauri/
+│   ├── Cargo.toml
+│   ├── tauri.conf.json
+│   └── src/
+│       ├── commands/
+│       ├── metrics/
+│       ├── optimization/
+│       ├── script_runner/
+│       │   └── sync.rs
+│       ├── storage/
+│       └── winapi/
+│           ├── registry.rs
+│           └── services.rs
+└── src/
+    ├── App.tsx
+    ├── components/
+    │   ├── CommandPalette.tsx
+    │   ├── Header.tsx
+    │   ├── Navigation.tsx
+    │   ├── SafetyModal.tsx
+    │   └── ViewSkeleton.tsx
+    ├── hooks/
+    │   └── useTauriCommand.ts
+    ├── store/
+    ├── types/
+    └── views/
+        ├── OptimizationView.tsx
+        ├── PresetsView.tsx
+        ├── ScriptRunnerView.tsx
+        ├── SystemCleaner.tsx
+        └── UninstallerView.tsx
+```
 
 ## Feature Inventory
-
-| # | Feature | Description | Milestone | Status |
+| # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | **F1.1 Script Runner UI** | Dedicated script editor with `.ps1`/`.bat`/`.cmd` uploader, syntax metrics, and live streaming output | M1 | COMPLETED |
-| 2 | **F1.2 Streaming IPC Execution** | Rust backend `execute_custom_script` command streaming stdout/stderr `script-output-line` IPC events | M1 | COMPLETED |
-| 3 | **F1.3 Output Log Download** | UI button & backend helper to export terminal execution logs with timestamps | M1 | COMPLETED |
-| 4 | **F1.4 UAC & Elevation Banner** | Elevation status indicator and Dry-Run toggle safety guard | M1 | COMPLETED |
-| 5 | **F2.1 Celebratory Success Banner** | Dynamic top banner switching to green celebratory state when queue N = 0 | M2 | COMPLETED |
-| 6 | **F2.2 Status Polling on Mount** | Automatic trigger of `fetchOptimizationsStatus()` on Dashboard mount | M2 | COMPLETED |
-| 7 | **F2.3 Dynamic Telemetry Styling** | Dynamic badge colors and styling for Telemetry card based on `telemetryStatus` | M2 | COMPLETED |
-| 8 | **F2.4 Localization Parity** | Full English and Russian translation keys for Script Runner and banners | M2 | COMPLETED |
-| 9 | **F3.1 Multi-Tier Temp Collector** | 6-tier sensor cascade (LHM, OHM, NVML DLL, ACPI WMI, nvidia-smi, sysinfo) | M3 | COMPLETED |
-| 10 | **F3.2 Extended Sensor Payload** | Detailed sensor list (`sensor_items`) with provider, ID, label, and reading | M3 | COMPLETED |
-| 11 | **F3.3 Manual Sensor Selector UI** | Dropdown selector in `TemperatureSensorWidget` allowing user sensor selection override & persistence | M3 | COMPLETED |
-| 12 | **F4.1 Win32 Native Elevation** | Native Win32 `OpenProcessToken` + `TOKEN_ELEVATION` check replacing legacy `net session` | M4 | COMPLETED |
-| 13 | **F4.2 ShellExecuteW Escaping** | Robust double-quote and escape sanitization in `uninstaller/mod.rs` preventing argument injection | M4 | COMPLETED |
-| 14 | **F4.3 WMI Subprocess Timeout** | 3-second non-blocking timeout protection for WMI PowerShell subprocesses in `metrics/mod.rs` | M4 | COMPLETED |
-| 15 | **F4.4 Secure Temp Dir Execution** | Isolated script execution directory (`%LOCALAPPDATA%\WiScripts\TempScripts\`) with drop cleanup | M1/M4 | COMPLETED |
-| 16 | **F4.5 Autorun & Security Fixes** | Registry key sanitization, lock error handling (sharing violation), path traversal guards | M4 | COMPLETED |
+| 1 | `scripts_lib` Repo Structure | 15 categorized PowerShell scripts in 5 categories with SHA-256 | M1 (DONE) | R1 |
+| 2 | `manifest.json` Typed Catalog | JSON catalog schema with script metadata, risk badges, hashes | M1 (DONE) | R1 |
+| 3 | Backend Sync Engine | ETag / If-None-Match HTTP client, SHA-256 verification, local cache | M1 (DONE) | R1 |
+| 4 | `ScriptRunnerView` Dual-Tab UI | Tabs "Editor & Terminal" and "Online Library", filtering, preview modal | M1 (DONE) | R1 |
+| 5 | Win32 SCM Native Queries | Replace PowerShell `Get-Service` with `OpenSCManagerW` / `QueryServiceConfigW` | M2 | R2 |
+| 6 | Storage 2-Stage Hashing | 4KB header hash + full SHA-256 with small-file direct reuse optimization | M2 | R2 |
+| 7 | Uninstaller Chronological Sort | Multi-format millisecond date parsing for app uninstaller table | M2 | R2 |
+| 8 | Zero-Warning Clippy Compliance | Fix collapsible `str::replace` in `src/metrics/mod.rs` for `-D warnings` | M2 | R2 |
+| 9 | `React.lazy` Code-Splitting | Lazy-load heavy views with `Suspense` and `ViewSkeleton` (<150KB initial) | M3 | R3 |
+| 10 | IPC Hook Optimization | `useTauriCommand` memoization via `useRef` and `getState()` to eliminate re-renders | M3 | R3 |
+| 11 | Command Palette (`Ctrl + K`) | Global fuzzy search across 21 tabs, 74 tweaks, 15 scripts, and apps | M4 | R4 |
+| 12 | Pre-Flight Safety Snapshot | Multi-tier safety engine: StateEngine delta JSON + VSS Restore Point | M4 | R4 |
+| 13 | Windows 11 24H2 Tweaks | Registry/Policy tweaks: Disable Copilot, Recall AI, Start recommendations | M4 | R4 |
+| 14 | `.wiscripts` Profile Import/Export | JSON profile schema for tweaks, ProFlow rules, and autorun preferences | M4 | R4 |
+| 15 | Refined Minimal Design Tokens | Enforce semantic Tailwind tokens, eradicate hardcoded hex colors | M5 | R5 |
+| 16 | WCAG 2.1 AA A11y Compliance | ARIA roles, labels, keyboard navigation (Space/Enter) in Cleaner & Tables | M5 | R5 |
+| 17 | Tabular Numeric Typography | Apply `tabular-nums font-mono` to CPU/RAM gauges and telemetry | M5 | R5 |
+| 18 | Version 1.0.0 Synchronization | Sync version in `package.json`, `Cargo.toml`, `tauri.conf.json`, `Navigation.tsx` | M6 | R6 |
+| 19 | Release Notes & CI/CD Validation | Generate `RELEASE_NOTES_1.0.0.md` and validate `.github/workflows/release.yml` | M6 | R6 |
+| 20 | Git History & Push | Atomic Conventional Commits (`feat:`, `fix:`, `refactor:`, `perf:`, `chore:`) and push | M6 | R6 |
 
----
-
-## Milestones & Delivery Status
-
-| # | Milestone Name | Scope | Dependencies | Status | Test Coverage |
-|---|----------------|-------|-------------|--------|---------------|
-| **M1** | Script Runner Engine & UI | Script runner view, streaming IPC backend, log download, safe temp script execution (F1.1-F1.4, F4.4) | None | **COMPLETED** | 100% (Tier 1 & 2) |
-| **M2** | Dynamic Dashboard & Queue State | Celebratory N=0 success banner, mount status polling, dynamic telemetry card, i18n parity (F2.1-F2.4) | None | **COMPLETED** | 100% (Tier 1 & 2) |
-| **M3** | Multi-Tier Temp Sensors & Selector | 6-tier sensor cascade, extended payload, manual sensor dropdown selector UI (F3.1-F3.3) | None | **COMPLETED** | 100% (Tier 1 & 2) |
-| **M4** | Security Audit & Codebase Hardening | Native Win32 elevation check, ShellExecuteW argument escaping, WMI 3s timeouts, security bugfixes (F4.1-F4.3, F4.5) | None | **COMPLETED** | 100% (Tier 1 & 2) |
-| **M_E2E** | Multi-Tier E2E Test Suite | Automated test harness & 57 test cases covering Tiers 1-4 with 100% pass rate | M1-M4 | **COMPLETED** | 57 / 57 Passing |
-| **M_V1.0** | Production Release Candidate | Adversarial stress testing, release packaging, automated updater integrity, documentation polishing | M_E2E | **IN_PROGRESS** | Planned |
-
----
+## Milestones
+| # | Name | Scope | Dependencies | Status |
+|---|------|-------|-------------|--------|
+| M1 | Online Script Library & Sync Engine | Features 1, 2, 3, 4 (R1) | none | DONE |
+| M2 | Core Rust Backend Hardening | Features 5, 6, 7, 8 (R2) | none | DONE |
+| M3 | Frontend Code Splitting & IPC Optimization | Features 9, 10 (R3) | none | PLANNED |
+| M4 | Flagship Features & Win 11 24H2 Support | Features 11, 12, 13, 14 (R4) | M1, M2 | PLANNED |
+| M5 | Design Tokens, A11y & Typography | Features 15, 16, 17 (R5) | M3, M4 | PLANNED |
+| M6 | Release Engineering, Version Sync & Git Push | Features 18, 19, 20 (R6) | M1-M5 | PLANNED |
 
 ## Interface Contracts
+### `scripts_lib` Sync Engine ↔ Frontend IPC
+- `sync_scripts_library(force: bool)` -> `Result<ScriptsLibraryManifest, AppError>`
+- `get_cached_scripts_library()` -> `Result<ScriptsLibraryManifest, AppError>`
+- `read_library_script(script_id: String)` -> `Result<String, AppError>`
 
-### 1. Script Runner IPC Contract
-- **Command:** `execute_custom_script`
-  - **Input:**
-    ```json
-    {
-      "script_content": "Get-Process | Select-Object -First 10",
-      "script_type": "ps1",
-      "dry_run": false
-    }
-    ```
-  - **Output:**
-    ```json
-    {
-      "exit_code": 0,
-      "stdout": "...",
-      "stderr": ""
-    }
-    ```
-  - **Streaming Event:** `app.emit("script-output-line", { line: String, stream: "stdout" | "stderr" })`
+### Win32 SCM Services ↔ Optimization Engine
+- `winapi::services::query_service_start_type(name: &str)` -> `Result<u32, String>` (2=Auto, 3=Manual, 4=Disabled)
+- `winapi::services::is_service_disabled(name: &str)` -> `Result<bool, String>`
+- `winapi::registry::get_dword(key: &str, val: &str)` -> `Result<u32, String>`
 
-### 2. Multi-Tier Temperature IPC Contract
-- **Commands:** `get_temperatures`, `get_system_info`, `get_system_temperatures`
-  - **Output Payload:**
-    ```json
-    {
-      "cpu_temp_celsius": 45.2,
-      "gpu_temp_celsius": 52.0,
-      "is_cpu_temp_available": true,
-      "is_gpu_temp_available": true,
-      "sensor_source": "LibreHardwareMonitor WMI",
-      "sensor_items": [
-        {
-          "id": "lhm_cpu_package",
-          "name": "AMD Ryzen 7 7800X3D Package",
-          "label": "CPU Package",
-          "temperature_celsius": 45.2,
-          "sensor_type": "cpu",
-          "provider": "LibreHardwareMonitor WMI"
-        },
-        {
-          "id": "nvml_gpu_0",
-          "name": "NVIDIA GeForce RTX 4080",
-          "label": "GPU Core",
-          "temperature_celsius": 52.0,
-          "sensor_type": "gpu",
-          "provider": "NVIDIA NVML"
-        }
-      ],
-      "selected_cpu_sensor_id": null,
-      "selected_gpu_sensor_id": null
-    }
-    ```
-
-### 3. StateEngine IPC Contract
-- **Command:** `create_state_snapshot` / `rollback_state_snapshot`
-  - **Input:** `{ label: String, description: String }` / `{ snapshot_id: String }`
-  - **Output:** `StateSnapshot` / `RollbackResult { success: bool, rolled_back_count: u32, errors: Vec<String> }`
-
-### 4. ProFlow Resource Governor IPC Contract
-- **Commands:** `apply_process_governor_rule`, `trim_process_working_set`, `get_governor_status`
-  - **Input:** `{ rule: GovernorRule }` / `{ pid: u32 }`
-  - **Output:** `GovernorStatus { active_rules: Vec<GovernorRule>, managed_processes_count: usize, memory_saved_mb: u64 }`
-
----
-
-## Code Layout & Organization
-
-- **Frontend Core:** `src/App.tsx`, `src/main.tsx`, `src/index.css`
-- **Frontend Views (`src/views/`):** `AutorunsView.tsx`, `GovernorView.tsx`, `StateEngineView.tsx`, `UninstallerView.tsx`
-- **Frontend Components (`src/components/`):** `Dashboard.tsx`, `ScriptRunnerView.tsx`, `OptimizationView.tsx`, `AudioView.tsx`, `PackageManagerView.tsx`, `StorageUtilities.tsx`, `SystemCleaner.tsx`, `DiagnosticsView.tsx`, `MasView.tsx`, `OdtView.tsx`, `PresetsView.tsx`, `StartupView.tsx`, `SchedulerView.tsx`, `DnsContextMenuView.tsx`, `DriverBackupView.tsx`, `RestorePointsView.tsx`, `SettingsView.tsx`, `TemperatureSensorWidget.tsx`, `AdminElevationBanner.tsx`, `ToastContainer.tsx`, `ErrorBoundary.tsx`
-- **Frontend Store (`src/store/slices/`):** `audioSlice`, `optimizationSlice`, `packageManagerSlice`, `scriptRunnerSlice`, `systemSlice`, `systemToolsSlice`, `uiSlice`, `updaterSlice`
-- **Frontend Localization (`src/i18n/`):** `ru.json`, `en.json`
-- **Backend Rust Modules (`src-tauri/src/`):** 23 modules (`commands`, `script_runner`, `metrics`, `governor`, `state_engine`, `autoruns`, `cleaner`, `storage`, `audio`, `uninstaller`, `winapi`, `runner`, etc.)
-- **E2E & Integration Tests:** `tests/e2e/` (runner.js, suite.js, specs)
-- **Utility Scripts:** `scripts/` (migration & data consolidation tools)
+### StateEngine / System Restore ↔ Safety Pipeline
+- `create_preflight_snapshot(description: String, rule_ids: Vec<String>)` -> `Result<PreflightSnapshotResult, AppError>`

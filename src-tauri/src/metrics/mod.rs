@@ -299,7 +299,7 @@ fn parse_wmi_hardware_monitor_json(json_str: &str, provider: &str, prefix: &str)
                     };
 
                     let raw_id = if !identifier.is_empty() {
-                        identifier.replace('/', "_").replace('\\', "_")
+                        identifier.replace(['/', '\\'], "_")
                     } else {
                         format!("{}_{}", name.to_lowercase().replace(' ', "_"), idx)
                     };
@@ -561,7 +561,7 @@ fn query_sysinfo_sensors() -> Vec<TemperatureSensorInfo> {
 
         if temp > 0.0 && temp < 130.0 {
             let clean_label = comp.label().to_string();
-            let slug = clean_label.to_lowercase().replace(' ', "_").replace('/', "_");
+            let slug = clean_label.to_lowercase().replace([' ', '/'], "_");
             sensors.push(TemperatureSensorInfo {
                 id: format!("sysinfo_{}_{}", slug, idx),
                 name: clean_label.clone(),

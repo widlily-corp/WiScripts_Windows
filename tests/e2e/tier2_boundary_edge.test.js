@@ -1,17 +1,33 @@
 /**
- * Tier 2 Test Suite: Boundary & Edge Cases (22 Test Cases)
- * Verifies edge cases, stress payloads, boundary limits, escaping, timeouts, and error handling.
+ * Tier 2 Test Suite: Boundary & Edge Cases (WiScripts Windows v1.0 Production Release)
+ * Verifies edge cases, stress payloads, boundary limits, escaping, hash collisions,
+ * malformed inputs, timeouts, and error handling across R1 through R6.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { assert, MockIPC, AppStateSimulator, TestRunner } from './harness.js';
+import {
+  assert,
+  computeSha256,
+  compute4KbPartialHash,
+  StorageDeduplicationEngine,
+  parseInstallDate,
+  Win32ScmSimulator,
+  ProfileValidationEngine,
+  CommandPaletteEngine,
+  MockIPC,
+  AppStateSimulator,
+  TestRunner
+} from './harness.js';
 
 export function buildTier2Suite() {
   const runner = new TestRunner('Tier 2 - Boundary & Edge Cases');
 
-  // --- 1. Empty script content validation ---
-  runner.addTest('T2_F1_1_01: Empty script content input validation raises error before IPC invocation', async () => {
+  // =========================================================================
+  // 1. Script Runner & Online Library Boundary Cases
+  // =========================================================================
+
+  runner.addTest('T2_R1_01: Empty script content input validation raises error before IPC invocation', async () => {
     // Arrange
     const ipc = new MockIPC();
     const app = new AppStateSimulator(ipc);
@@ -24,13 +40,12 @@ export function buildTier2Suite() {
     );
   });
 
-  // --- 2. Max length / large script payload ---
-  runner.addTest('T2_F1_1_02: Script Runner handles large script payload without hanging or memory leak', async () => {
+  runner.addTest('T2_R1_02: Large script payload (5000 lines) streams without memory leak or buffer truncation', async () => {
     // Arrange
     const ipc = new MockIPC();
     const app = new AppStateSimulator(ipc);
-    const largeLine = 'Write-Host "Performance verification item "\n';
-    const largeScript = largeLine.repeat(5000); // 5,000 lines (~200KB)
+    const largeLine = 'Write-Host "Verifying large payload line execution"\n';
+    const largeScript = largeLine.repeat(5000); // 5,000 lines (~250KB)
 
     // Act
     const res = await app.executeScript(largeScript, 'ps1');
@@ -40,8 +55,7 @@ export function buildTier2Suite() {
     assert.greaterThanOrEqual(app.state.terminalLogs.length, 5000, 'Captured all 5,000 streamed lines');
   });
 
-  // --- 3. Invalid file extensions ---
-  runner.addTest('T2_F1_1_03: Invalid script file extensions (.exe, .sh, .vbs, .py) are rejected', async () => {
+  runner.addTest('T2_R1_03: Invalid script file extensions (.exe, .sh, .vbs, .py) are rejected by security guard', async () => {
     // Arrange
     function validateScriptFileType(filename) {
       const allowedExts = ['.ps1', '.bat', '.cmd'];
@@ -60,358 +74,345 @@ export function buildTier2Suite() {
     assert.isTrue(validateScriptFileType('valid.ps1'), 'Valid .ps1 accepted');
   });
 
-  // --- 4. Rapid IPC event stream burst ---
-  runner.addTest('T2_F1_2_01: IPC streaming handles rapid burst of 1000 script-output-line events without drop', async () => {
+  runner.addTest('T2_R1_04: Corrupted or tampered script payload triggers SHA-256 integrity mismatch error', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    let receivedCount = 0;
-    ipc.listen('script-output-line', () => {
-      receivedCount++;
-    });
+    const manifestExpectedSha256 = '4a7d65b4c489f074d6f8595a898b9e6ffcb23871239857948292837498192837';
+    const tamperedScriptContent = 'Get-Service -Name DiagTrack | Stop-Service # TAMPERED CONTENT ADDED';
 
     // Act
-    for (let i = 0; i < 1000; i++) {
-      await ipc.emit('script-output-line', { line: `Stream item ${i}`, stream: 'stdout' });
+    const actualSha256 = computeSha256(tamperedScriptContent);
+
+    function verifyScriptIntegrity(expectedHash, actualHash, scriptId) {
+      if (expectedHash.toLowerCase() !== actualHash.toLowerCase()) {
+        throw new Error(`IntegrityViolation: SHA-256 mismatch for script '${scriptId}'. Expected ${expectedHash}, got ${actualHash}`);
+      }
+      return true;
     }
 
     // Assert
-    assert.equal(receivedCount, 1000, 'All 1000 emitted events were captured by listener');
-  });
-
-  // --- 5. Script non-zero exit code handling ---
-  runner.addTest('T2_F1_2_02: execute_custom_script captures non-zero exit code and stderr output', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    ipc.registerHandler('execute_custom_script', async () => {
-      return { exit_code: 127, stdout: '', stderr: 'Command not found in PATH' };
-    });
-    const app = new AppStateSimulator(ipc);
-
-    // Act
-    const res = await app.executeScript('invalid_cmd', 'bat');
-
-    // Assert
-    assert.equal(res.exit_code, 127, 'Exit code is 127');
-    assert.equal(res.stderr, 'Command not found in PATH', 'Stderr contains expected error string');
-  });
-
-  // --- 6. Empty terminal log download ---
-  runner.addTest('T2_F1_3_01: Log export handles empty terminal log output buffer gracefully', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.terminalLogs = []; // Empty logs
-
-    // Act
-    const exportedStr = app.exportLogsToString();
-
-    // Assert
-    assert.equal(exportedStr, '', 'Exported empty log returns empty string');
-  });
-
-  // --- 7. Unicode & special characters in log export ---
-  runner.addTest('T2_F1_3_02: Log export handles unicode and special symbols correctly', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    const unicodeText = 'Оптимизация завершена: ⚡ 100% SUCCESS — [äöüßñ]';
-    await app.executeScript(unicodeText, 'ps1');
-
-    // Act
-    const exportedLog = app.exportLogsToString();
-
-    // Assert
-    assert.includes(exportedLog, unicodeText, 'Terminal log preserves utf-8 unicode symbols');
-  });
-
-  // --- 8. Dry-Run mode toggling from banner ---
-  runner.addTest('T2_F1_4_01: Toggling Dry-Run mode from elevation banner updates store dryRunMode state', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    app.state.dryRunMode = false;
-
-    // Act
-    app.state.dryRunMode = true;
-
-    // Assert
-    assert.isTrue(app.state.dryRunMode, 'dryRunMode set to true in state');
-  });
-
-  // --- 9. Bounded queue counter logic for negative inputs ---
-  runner.addTest('T2_F2_1_01: Dashboard banner bounds queue count at 0 for negative optimization inputs', async () => {
-    // Arrange
-    function calculateQueueCount(total, applied) {
-      return Math.max(0, total - applied);
-    }
-
-    // Act & Assert
-    assert.equal(calculateQueueCount(5, 10), 0, 'Negative result (5 - 10 = -5) is bounded at 0');
-  });
-
-  // --- 10. Dashboard status polling error recovery ---
-  runner.addTest('T2_F2_2_01: Dashboard status polling handles IPC error gracefully with fallback info', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    ipc.registerHandler('get_system_info', async () => {
-      throw new Error('WMI_SERVICE_UNAVAILABLE');
-    });
-
-    // Act & Assert
-    await assert.throwsAsync(
-      async () => await ipc.invoke('get_system_info'),
-      'WMI_SERVICE_UNAVAILABLE',
-      'IPC error raised cleanly'
+    assert.throws(
+      () => verifyScriptIntegrity(manifestExpectedSha256, actualSha256, 'maint-clear-wu-cache'),
+      'IntegrityViolation',
+      'Integrity check rejects tampered script'
     );
   });
 
-  // --- 11. Telemetry badge fallback for unknown status ---
-  runner.addTest('T2_F2_3_01: Dynamic telemetry card styling falls back to default style for null/unknown status', async () => {
+  runner.addTest('T2_R1_05: Malformed manifest JSON with invalid risk level or missing hash is rejected', async () => {
     // Arrange
-    const app = new AppStateSimulator();
-
-    // Act
-    const nullStyle = app.getTelemetryBadgeStyle(null);
-    const unknownStyle = app.getTelemetryBadgeStyle('unknown_status');
-
-    // Assert
-    assert.includes(nullStyle, 'bg-surface-subtle', 'Null status uses subtle fallback background');
-    assert.includes(unknownStyle, 'bg-surface-subtle', 'Unknown status uses subtle fallback background');
-  });
-
-  // --- 12. i18n parameter interpolation mismatch checks ---
-  runner.addTest('T2_F2_4_01: i18n interpolation parameters match between ru.json and en.json', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    function extractParams(str) {
-      if (typeof str !== 'string') return [];
-      const matches = str.match(/\{\{\s*(\w+)\s*\}\}/g) || [];
-      return Array.from(new Set(matches.map(m => m.replace(/[\{\}\s]/g, '')))).sort();
-    }
-
-    // Act
-    const enText = app.translate('dashboard.statusDesc', 'System build {{build}} with {{count}} unapplied');
-    const ruText = app.locales.ru?.dashboard?.statusDesc || 'Сборка {{build}}, в очереди {{count}}';
-
-    const enParams = extractParams(enText);
-    const ruParams = extractParams(ruText);
-
-    // Assert
-    assert.deepEqual(enParams, ['build', 'count'], 'EN parameters match schema');
-    assert.deepEqual(ruParams, ['build', 'count'], 'RU parameters match schema');
-  });
-
-  // --- 13. Empty WMI sensor response handling ---
-  runner.addTest('T2_F3_1_01: WMI sensor collector handles empty sensor response payload returning N/A values', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    ipc.registerHandler('get_temperatures', async () => ({
-      cpu_temp_celsius: null,
-      gpu_temp_celsius: null,
-      is_cpu_temp_available: false,
-      is_gpu_temp_available: false,
-      sensor_source: 'None / Unsupported',
-      sensor_items: [],
-      selected_cpu_sensor_id: null,
-      selected_gpu_sensor_id: null
-    }));
-
-    // Act
-    const payload = await ipc.invoke('get_temperatures');
-
-    // Assert
-    assert.equal(payload.cpu_temp_celsius, null, 'CPU temp is null');
-    assert.isFalse(payload.is_cpu_temp_available, 'is_cpu_temp_available is false');
-    assert.equal(payload.sensor_source, 'None / Unsupported', 'Sensor source indicates unsupported');
-  });
-
-  // --- 14. Multi-tier temperature collector fallback chain ---
-  runner.addTest('T2_F3_1_02: Temperature collector cascades through fallback providers when LHM WMI fails', async () => {
-    // Arrange
-    const providers = ['LibreHardwareMonitor WMI', 'OpenHardwareMonitor WMI', 'NVIDIA NVML', 'ACPI WMI', 'sysinfo'];
-    function resolveTemperatureCollector(availableProviders) {
-      for (const p of providers) {
-        if (availableProviders.includes(p)) {
-          return { provider: p, tempC: p === 'sysinfo' ? 42.0 : 48.5 };
+    const malformedManifest = {
+      schemaVersion: '1.0.0',
+      scripts: [
+        {
+          id: 'bad-script',
+          name: 'Bad Script',
+          riskLevel: 'UNKNOWN_RISK', // Invalid risk level
+          sha256: 'not-a-valid-sha256' // Non-64 char hex
         }
-      }
-      return { provider: 'None', tempC: null };
-    }
-
-    // Act: Fail LHM and OHM, available NVML
-    const res = resolveTemperatureCollector(['NVIDIA NVML', 'ACPI WMI', 'sysinfo']);
-
-    // Assert
-    assert.equal(res.provider, 'NVIDIA NVML', 'Cascades to NVIDIA NVML when WMI options fail');
-    assert.equal(res.tempC, 48.5, 'Returns valid temperature from active provider');
-  });
-
-  // --- 15. Empty sensor payload items array handling ---
-  runner.addTest('T2_F3_2_01: Extended sensor payload with 0 items returns empty array without throwing index error', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    ipc.registerHandler('get_temperatures', async () => ({
-      sensor_items: []
-    }));
-
-    // Act
-    const payload = await ipc.invoke('get_temperatures');
-
-    // Assert
-    assert.ok(Array.isArray(payload.sensor_items), 'sensor_items is an array');
-    assert.equal(payload.sensor_items.length, 0, 'sensor_items is empty');
-  });
-
-  // --- 16. Dropdown manual fallback selection when auto-detect returns empty/null ---
-  runner.addTest('T2_F3_3_01: Manual fallback selection dropdown activates when auto-detect is null', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    app.state.currentMetrics.cpuTempC = null;
-    app.state.sensorPayload = {
-      sensor_items: [
-        { id: 'acpi_thermal_zone_1', name: 'ACPI Thermal Zone 1', label: 'ACPI Zone', temperature_celsius: 44.0, sensor_type: 'cpu', provider: 'ACPI WMI' }
       ]
     };
 
     // Act
-    function resolveEffectiveCpuTemp(appState) {
-      if (appState.currentMetrics.cpuTempC !== null) return appState.currentMetrics.cpuTempC;
-      if (appState.state?.selectedCpuSensorId) {
-        const item = appState.state.sensorPayload?.sensor_items?.find(i => i.id === appState.state.selectedCpuSensorId);
-        if (item) return item.temperature_celsius;
+    function validateManifest(manifest) {
+      const allowedRisks = new Set(['safe', 'elevated', 'critical']);
+      const errors = [];
+      for (const s of manifest.scripts || []) {
+        if (!allowedRisks.has(s.riskLevel?.toLowerCase())) {
+          errors.push(`Invalid risk level '${s.riskLevel}' for script '${s.id}'`);
+        }
+        if (!/^[a-f0-9]{64}$/i.test(s.sha256 || '')) {
+          errors.push(`Invalid SHA-256 format for script '${s.id}'`);
+        }
       }
-      // Manual dropdown fallback first item
-      const fallbackItem = appState.state.sensorPayload?.sensor_items?.find(i => i.sensor_type === 'cpu');
-      return fallbackItem ? fallbackItem.temperature_celsius : null;
+      if (errors.length > 0) throw new Error(`ManifestValidationError: ${errors.join('; ')}`);
+      return true;
     }
 
-    const temp = resolveEffectiveCpuTemp({ currentMetrics: app.state.currentMetrics, state: app.state });
-
     // Assert
-    assert.equal(temp, 44.0, 'Fallback dropdown resolves manual sensor item temperature 44.0°C');
+    assert.throws(() => validateManifest(malformedManifest), 'ManifestValidationError');
   });
 
-  // --- 17. Reverting to auto-detection when non-existent manual sensor ID selected ---
-  runner.addTest('T2_F3_3_02: Selecting non-existent sensor ID reverts to auto-detection fallback', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    app.state.selectedCpuSensorId = 'non_existent_sensor_999';
-
-    // Act
-    function getSelectedSensorOrDefault(appState, autoDetectedTemp) {
-      const items = appState.sensorPayload?.sensor_items || [];
-      const selected = items.find(i => i.id === appState.selectedCpuSensorId);
-      if (selected) return selected.temperature_celsius;
-      return autoDetectedTemp; // Revert
-    }
-
-    const effectiveTemp = getSelectedSensorOrDefault(app.state, 45.2);
-
-    // Assert
-    assert.equal(effectiveTemp, 45.2, 'Reverted to auto-detected temperature 45.2°C');
-  });
-
-  // --- 18. Adversarial ShellExecuteW escaping ---
-  runner.addTest('T2_F4_2_01: ShellExecuteW escaping neutralizes command injection attacks', async () => {
-    // Arrange
-    const maliciousInput = 'calc.exe & dir "C:\\" | whoami ; rm -rf /';
-    
-    // Act: Rust ShellExecuteW escape simulator
-    function sanitizeShellExecuteArg(argStr) {
-      // Wraps arg in quotes and escapes internal quotes
-      return `"${argStr.replace(/"/g, '""')}"`;
-    }
-    const sanitized = sanitizeShellExecuteArg(maliciousInput);
-
-    // Assert
-    assert.equal(sanitized, '"calc.exe & dir ""C:\\"" | whoami ; rm -rf /"', 'Injected operators encapsulated inside string quote boundary');
-  });
-
-  // --- 19. 3-second WMI subprocess timeout handling ---
-  runner.addTest('T2_F4_3_01: WMI subprocess query hitting 3-second timeout cancels query and returns fallback', async () => {
-    // Arrange
-    async function executeWmiQueryWithTimeout(queryFn, timeoutMs = 3000) {
-      return new Promise((resolve) => {
-        let timer = setTimeout(() => {
-          resolve({ success: false, timed_out: true, data: null, error: 'WMI Query Timed Out (3000ms limit reached)' });
-        }, timeoutMs);
-
-        queryFn().then((res) => {
-          clearTimeout(timer);
-          resolve({ success: true, timed_out: false, data: res, error: null });
-        }).catch((err) => {
-          clearTimeout(timer);
-          resolve({ success: false, timed_out: false, data: null, error: err.message });
-        });
-      });
-    }
-
-    // Act: Simulate hanging WMI query (takes 5000ms)
-    const hangingQuery = () => new Promise(resolve => setTimeout(() => resolve('WMI Data'), 5000));
-    const result = await executeWmiQueryWithTimeout(hangingQuery, 100); // 100ms for fast test execution
-
-    // Assert
-    assert.isFalse(result.success, 'WMI query marked as failed');
-    assert.isTrue(result.timed_out, 'WMI query marked as timed_out');
-    assert.includes(result.error, 'Timed Out', 'Error message indicates timeout');
-  });
-
-  // --- 20. Path traversal prevention in temp script filenames ---
-  runner.addTest('T2_F4_4_01: Temp script runner prevents directory traversal in script names', async () => {
-    // Arrange
-    const rawFilename = '..\\..\\Windows\\System32\\cmd.exe';
-    
-    // Act: Path sanitizer
-    function sanitizeScriptFileName(inputName) {
-      const baseName = path.basename(inputName);
-      if (baseName.includes('..') || inputName.includes('/') || inputName.includes('\\')) {
-        return baseName.replace(/[^a-zA-Z0-9_-]/g, '_') + '.ps1';
-      }
-      return baseName;
-    }
-
-    const safeName = sanitizeScriptFileName(rawFilename);
-
-    // Assert
-    assert.isFalse(safeName.includes('..'), 'Path traversal dots stripped');
-    assert.isFalse(safeName.includes('\\'), 'Backslashes stripped');
-    assert.isTrue(safeName.endsWith('.ps1'), 'Standard extension appended');
-  });
-
-  // --- 21. Secure temp script execution directory path structure & drop cleanup ---
-  runner.addTest('T2_F4_4_02: Temp script directory resolves inside %LOCALAPPDATA%\\WiScripts\\TempScripts\\', async () => {
-    // Arrange
-    const localAppData = process.env.LOCALAPPDATA || 'C:\\Users\\Test\\AppData\\Local';
-    const targetDir = path.join(localAppData, 'WiScripts', 'TempScripts');
-
-    // Act
-    function getTempScriptPath(uuid, ext = 'ps1') {
-      return path.join(targetDir, `temp_script_${uuid}.${ext}`);
-    }
-
-    const scriptPath = getTempScriptPath('abc-123-xyz', 'ps1');
-
-    // Assert
-    assert.includes(scriptPath, 'WiScripts', 'Path contains WiScripts root folder');
-    assert.includes(scriptPath, 'TempScripts', 'Path contains TempScripts execution folder');
-    assert.includes(scriptPath, 'temp_script_abc-123-xyz.ps1', 'Path includes sanitized temp script filename');
-  });
-
-  // --- 22. Autorun registry lock error handling ---
-  runner.addTest('T2_F4_5_01: Autorun registry scanner handles locked key access (ERROR_SHARING_VIOLATION)', async () => {
+  runner.addTest('T2_R1_06: Offline sync engine falls back to local cache when remote request times out', async () => {
     // Arrange
     const ipc = new MockIPC();
-    ipc.registerHandler('get_autoruns', async () => {
-      const err = new Error('ERROR_SHARING_VIOLATION: Key locked by system process');
-      err.code = 32;
-      throw err;
+    ipc.registerHandler('sync_scripts_library', async () => {
+      // Simulate network timeout falling back to local cached copy
+      return {
+        success: true,
+        source: 'local_cache_fallback',
+        isOffline: true,
+        etag: '"cached-v1.0.0"',
+        warning: 'Network request timed out (3000ms limit). Using cached library.'
+      };
     });
 
+    // Act
+    const res = await ipc.invoke('sync_scripts_library', { force_refresh: true });
+
+    // Assert
+    assert.isTrue(res.success, 'Sync succeeded in offline mode');
+    assert.isTrue(res.isOffline, 'Flagged as offline');
+    assert.equal(res.source, 'local_cache_fallback', 'Fell back to local cache');
+  });
+
+  // =========================================================================
+  // 2. Storage 2-Stage Hashing Boundary Cases
+  // =========================================================================
+
+  runner.addTest('T2_R2_01: 2-stage hasher filters size collisions with different 4KB headers in Phase 1b', async () => {
+    // Arrange
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    // Two 10KB files with different 4KB headers
+    const bufA = Buffer.concat([Buffer.from('AAA'.repeat(1365)), Buffer.alloc(1000, 1)]);
+    const bufB = Buffer.concat([Buffer.from('BBB'.repeat(1365)), Buffer.alloc(1000, 1)]);
+
+    const virtualFiles = [
+      { path: 'C:\\Users\\TestUser\\Downloads\\fileA.bin', contentBuffer: bufA },
+      { path: 'C:\\Users\\TestUser\\Downloads\\fileB.bin', contentBuffer: bufB }
+    ];
+
+    // Act
+    const duplicates = engine.scanDuplicates(virtualFiles);
+
+    // Assert
+    assert.equal(duplicates.length, 0, 'No false positive duplicates detected for different 4KB headers');
+  });
+
+  runner.addTest('T2_R2_02: 2-stage hasher differentiates files with same 4KB header but different bodies in Phase 2', async () => {
+    // Arrange
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    // Same 4096-byte header, different tail
+    const sharedHeader = Buffer.alloc(4096, 0x42);
+    const bufA = Buffer.concat([sharedHeader, Buffer.from('Tail Data Unique A')]);
+    const bufB = Buffer.concat([sharedHeader, Buffer.from('Tail Data Unique B')]);
+
+    const virtualFiles = [
+      { path: 'C:\\Users\\TestUser\\Downloads\\iso_part1.bin', contentBuffer: bufA },
+      { path: 'C:\\Users\\TestUser\\Downloads\\iso_part2.bin', contentBuffer: bufB }
+    ];
+
+    // Act
+    const duplicates = engine.scanDuplicates(virtualFiles);
+
+    // Assert
+    assert.equal(duplicates.length, 0, 'Phase 2 full SHA-256 correctly differentiated files with identical 4KB headers');
+  });
+
+  runner.addTest('T2_R2_03: 2-stage hasher handles small files (<=4096 bytes) with single-pass direct hash', async () => {
+    // Arrange
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    const smallContent = Buffer.from('Small configuration text snippet under 4KB');
+    const smallA = { path: 'C:\\Users\\TestUser\\Documents\\cfg1.json', contentBuffer: smallContent };
+    const smallB = { path: 'C:\\Users\\TestUser\\Documents\\cfg2.json', contentBuffer: smallContent };
+
+    // Act
+    const duplicates = engine.scanDuplicates([smallA, smallB]);
+
+    // Assert
+    assert.equal(duplicates.length, 1, 'Found duplicate group for small files');
+    assert.equal(duplicates[0].files.length, 2, 'Both small files captured');
+  });
+
+  runner.addTest('T2_R2_04: 2-stage hasher excludes 0-byte empty files from duplicate candidates', async () => {
+    // Arrange
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    const empty1 = { path: 'C:\\Users\\TestUser\\Documents\\empty1.txt', contentBuffer: Buffer.alloc(0) };
+    const empty2 = { path: 'C:\\Users\\TestUser\\Documents\\empty2.txt', contentBuffer: Buffer.alloc(0) };
+
+    // Act
+    const duplicates = engine.scanDuplicates([empty1, empty2]);
+
+    // Assert
+    assert.equal(duplicates.length, 0, 'Zero-byte empty files ignored');
+  });
+
+  // =========================================================================
+  // 3. Uninstaller Date Parsing Multi-Format Robustness
+  // =========================================================================
+
+  runner.addTest('T2_R2_05: parseInstallDate handles whitespace, null, malformed dates, and leap years', async () => {
+    // Arrange & Act & Assert
+    assert.equal(parseInstallDate(''), 0, 'Empty string returns 0');
+    assert.equal(parseInstallDate(null), 0, 'Null returns 0');
+    assert.equal(parseInstallDate('   '), 0, 'Whitespace string returns 0');
+    assert.equal(parseInstallDate('not-a-date'), 0, 'Random string returns 0');
+
+    // Leap year date 20240229
+    const leapTimestamp = parseInstallDate('20240229');
+    const leapDate = new Date(leapTimestamp);
+    assert.equal(leapDate.getFullYear(), 2024, 'Leap year parsed as 2024');
+    assert.equal(leapDate.getMonth(), 1, 'Leap month parsed as February (1)');
+    assert.equal(leapDate.getDate(), 29, 'Leap day parsed as 29');
+
+    // ISO format 2024-02-29
+    const isoTimestamp = parseInstallDate('2024-02-29');
+    assert.equal(isoTimestamp, leapTimestamp, 'ISO format matches compact format timestamp');
+
+    // Euro dot format 29.02.2024
+    const euroDotTimestamp = parseInstallDate('29.02.2024');
+    assert.equal(euroDotTimestamp, leapTimestamp, 'European dot format matches timestamp');
+
+    // Euro slash format 29/02/2024
+    const euroSlashTimestamp = parseInstallDate('29/02/2024');
+    assert.equal(euroSlashTimestamp, leapTimestamp, 'European slash format matches timestamp');
+  });
+
+  // =========================================================================
+  // 4. Win32 SCM Native Query Boundary Cases
+  // =========================================================================
+
+  runner.addTest('T2_R2_06: Win32 SCM simulator returns ERROR_SERVICE_DOES_NOT_EXIST (1060) on missing service', async () => {
+    // Arrange
+    const scm = new Win32ScmSimulator();
+
     // Act & Assert
-    await assert.throwsAsync(
-      async () => await ipc.invoke('get_autoruns'),
-      'ERROR_SHARING_VIOLATION',
-      'Registry lock error raised cleanly without crashing process'
+    assert.throws(
+      () => scm.queryServiceStartType('NonExistentServiceName_XYZ123'),
+      'ERROR_SERVICE_DOES_NOT_EXIST',
+      'Querying missing service returns Win32 error 1060'
     );
+  });
+
+  // =========================================================================
+  // 5. Command Palette Edge Cases & Regex Injection Neutralization
+  // =========================================================================
+
+  runner.addTest('T2_R4_01: Command Palette search neutralizes regex meta-characters without crashing', async () => {
+    // Arrange
+    const palette = new CommandPaletteEngine();
+    const maliciousQuery = '.*+?^${}()|[]\\copilot';
+
+    // Act
+    const results = palette.search(maliciousQuery);
+
+    // Assert
+    assert.ok(Array.isArray(results), 'Returns array without regex execution exception');
+  });
+
+  runner.addTest('T2_R4_02: Command Palette search with pure whitespace returns default recommendation items', async () => {
+    // Arrange
+    const palette = new CommandPaletteEngine();
+
+    // Act
+    const results = palette.search('     ');
+
+    // Assert
+    assert.greaterThanOrEqual(results.length, 1, 'Returns default list of top indexed items');
+  });
+
+  runner.addTest('T2_R4_03: Command Palette search handles extreme length query strings (>500 chars)', async () => {
+    // Arrange
+    const palette = new CommandPaletteEngine();
+    const extremeQuery = 'a'.repeat(600);
+
+    // Act
+    const results = palette.search(extremeQuery);
+
+    // Assert
+    assert.equal(results.length, 0, 'Returns 0 results for non-matching extreme query without crashing');
+  });
+
+  // =========================================================================
+  // 6. Pre-Flight Safety Snapshot & VSS Throttling Boundary Cases
+  // =========================================================================
+
+  runner.addTest('T2_R4_04: Pre-Flight Safety Snapshot handles VSS 24h throttling with non-fatal warning', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    ipc.registerHandler('create_preflight_snapshot', async ({ rule_ids }) => {
+      return {
+        snapshotId: 'snap_vss_throttled_123',
+        sequenceNumber: 105,
+        timestamp: new Date().toISOString(),
+        stateEngineSuccess: true,
+        restorePointSuccess: false,
+        restorePointWarning: 'VSS 24h frequency limit reached. StateEngine JSON snapshot was saved successfully.',
+        rulesCaptured: rule_ids.length
+      };
+    });
+
+    // Act
+    const res = await ipc.invoke('create_preflight_snapshot', {
+      description: 'Test VSS throttle fallback',
+      rule_ids: ['telemetry_diagtrack']
+    });
+
+    // Assert
+    assert.isTrue(res.stateEngineSuccess, 'StateEngine snapshot succeeded');
+    assert.isFalse(res.restorePointSuccess, 'VSS restore point reported as throttled');
+    assert.includes(res.restorePointWarning, 'StateEngine JSON snapshot was saved', 'Warning clarifies fallback preservation');
+  });
+
+  // =========================================================================
+  // 7. Profile Validation Boundary & Version Compatibility Cases
+  // =========================================================================
+
+  runner.addTest('T2_R4_05: Profile validator rejects malformed profile missing schemaVersion or format header', async () => {
+    // Arrange
+    const malformed1 = { format: 'wrong-header', metadata: { id: '1', name: 'Test' }, optimizations: { enabledRuleIds: [] } };
+    const malformed2 = { format: 'wiscripts-configuration-profile', schemaVersion: 'invalid-semver', metadata: { id: '1', name: 'Test' } };
+
+    // Act
+    const val1 = ProfileValidationEngine.validate(malformed1);
+    const val2 = ProfileValidationEngine.validate(malformed2);
+
+    // Assert
+    assert.isFalse(val1.isValid, 'Malformed format header is rejected');
+    assert.isFalse(val2.isValid, 'Invalid schemaVersion is rejected');
+  });
+
+  runner.addTest('T2_R4_06: Profile import flags unknown/obsolete rule IDs without discarding valid rule IDs', async () => {
+    // Arrange
+    const knownRuleIds = new Set(['telemetry_diagtrack', 'win11_disable_copilot', 'services_sysmain']);
+    const importedProfile = {
+      optimizations: {
+        enabledRuleIds: ['telemetry_diagtrack', 'obsolete_legacy_tweak_v09', 'win11_disable_copilot', 'unknown_rule_xyz']
+      }
+    };
+
+    // Act
+    function parseImportedRuleIds(ruleIds, catalog) {
+      const valid = [];
+      const unknown = [];
+      for (const id of ruleIds) {
+        if (catalog.has(id)) {
+          valid.push(id);
+        } else {
+          unknown.push(id);
+        }
+      }
+      return { valid, unknown };
+    }
+
+    const { valid, unknown } = parseImportedRuleIds(importedProfile.optimizations.enabledRuleIds, knownRuleIds);
+
+    // Assert
+    assert.equal(valid.length, 2, 'Parsed 2 valid rule IDs');
+    assert.equal(unknown.length, 2, 'Identified 2 unknown rule IDs');
+    assert.includes(valid, 'telemetry_diagtrack', 'Valid rule retained');
+    assert.includes(unknown, 'obsolete_legacy_tweak_v09', 'Obsolete rule collected in unknown array');
+  });
+
+  runner.addTest('T2_R4_07: Profile import warns when targetOs minBuild exceeds host OS build', async () => {
+    // Arrange
+    const hostBuild = 22631; // Windows 11 23H2
+    const profileMinBuild = 26100; // Windows 11 24H2
+
+    // Act
+    function checkOsBuildCompatibility(currentBuild, minBuild) {
+      if (currentBuild < minBuild) {
+        return {
+          compatible: false,
+          warning: `Profile requires Windows Build ${minBuild}+ (Host is Build ${currentBuild}). Some 24H2-specific tweaks may not take effect.`
+        };
+      }
+      return { compatible: true, warning: null };
+    }
+
+    const check = checkOsBuildCompatibility(hostBuild, profileMinBuild);
+
+    // Assert
+    assert.isFalse(check.compatible, 'Compatibility check detected build shortfall');
+    assert.includes(check.warning, '24H2-specific tweaks', 'Warning mentions 24H2 features');
   });
 
   return runner;

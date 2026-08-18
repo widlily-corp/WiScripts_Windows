@@ -28,15 +28,54 @@ export function formatAppSize(sizeKb?: number | null): string {
   return `${(sizeKb / (1024 * 1024)).toFixed(2)} GB`;
 }
 
-export function parseInstallDate(dateStr?: string | null): number {
-  if (!dateStr || !dateStr.trim()) return 0;
-  const s = dateStr.trim();
-  if (/^\d{8}$/.test(s)) {
-    const year = parseInt(s.slice(0, 4), 10);
-    const month = parseInt(s.slice(4, 6), 10);
-    const day = parseInt(s.slice(6, 8), 10);
-    return new Date(year, month - 1, day).getTime();
+export function parseInstallDate(dateStr?: string | number | null): number {
+  if (dateStr === null || dateStr === undefined) return 0;
+  if (typeof dateStr === 'number') {
+    return isNaN(dateStr) || dateStr < 0 ? 0 : dateStr;
   }
+  const s = String(dateStr).trim();
+  if (!s) return 0;
+
+  // 1. Compact YYYYMMDD (e.g., 20240229)
+  const compactMatch = /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  if (compactMatch) {
+    const year = parseInt(compactMatch[1], 10);
+    const month = parseInt(compactMatch[2], 10);
+    const day = parseInt(compactMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const d = new Date(year, month - 1, day);
+      const ts = d.getTime();
+      return isNaN(ts) ? 0 : ts;
+    }
+  }
+
+  // 2. YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const isoMatch = /^(\d{4})[-/. ](\d{1,2})[-/. ](\d{1,2})$/.exec(s);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10);
+    const day = parseInt(isoMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const d = new Date(year, month - 1, day);
+      const ts = d.getTime();
+      return isNaN(ts) ? 0 : ts;
+    }
+  }
+
+  // 3. DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY (European)
+  const euroMatch = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(s);
+  if (euroMatch) {
+    const day = parseInt(euroMatch[1], 10);
+    const month = parseInt(euroMatch[2], 10);
+    const year = parseInt(euroMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const d = new Date(year, month - 1, day);
+      const ts = d.getTime();
+      return isNaN(ts) ? 0 : ts;
+    }
+  }
+
+  // 4. Standard Date.parse fallback
   const parsed = Date.parse(s);
   return isNaN(parsed) ? 0 : parsed;
 }

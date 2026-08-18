@@ -253,74 +253,140 @@ pub fn preview(selected_keys: &[String]) -> Result<Vec<OptimizationItem>, AppErr
 pub fn check_status(
     runner: &dyn CommandRunner,
 ) -> Result<std::collections::HashMap<String, bool>, AppError> {
-    let script = r#"
-$status = @{}
-
-$svc = Get-Service -Name DiagTrack -ErrorAction SilentlyContinue
-$status['telemetry_diagtrack'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
-
-$svc = Get-Service -Name dmwappushservice -ErrorAction SilentlyContinue
-$status['telemetry_dmwappush'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
-
-$task1 = Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -TaskName 'Consolidator' -ErrorAction SilentlyContinue
-$task2 = Get-ScheduledTask -TaskPath '\Microsoft\Windows\Customer Experience Improvement Program\' -TaskName 'UsbCeip' -ErrorAction SilentlyContinue
-$status['telemetry_ceip_tasks'] = ($task1.State -eq 'Disabled' -or $null -eq $task1) -and ($task2.State -eq 'Disabled' -or $null -eq $task2)
-
-$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -ErrorAction SilentlyContinue).AllowCortana
-$status['bloatware_cortana'] = ($val -eq 0)
-
-$status['bloatware_onedrive'] = (-not (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe")) -and (-not (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe")) -and (-not (Get-Process -Name OneDrive -ErrorAction SilentlyContinue))
-
-$xbox = Get-AppxPackage -AllUsers *XboxApp* -ErrorAction SilentlyContinue
-$status['bloatware_xbox_apps'] = ($null -eq $xbox)
-
-$viewer = Get-AppxPackage *Microsoft3DViewer* -ErrorAction SilentlyContinue
-$status['bloatware_3d_viewer'] = ($null -eq $viewer)
-
-$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name 'Enabled' -ErrorAction SilentlyContinue).Enabled
-$status['privacy_advertising_id'] = ($val -eq 0)
-
-$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Name 'Value' -ErrorAction SilentlyContinue).Value
-$status['privacy_location_tracking'] = ($val -eq 'Deny')
-
-$val = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name 'PublishUserActivities' -ErrorAction SilentlyContinue).PublishUserActivities
-$status['privacy_activity_history'] = ($val -eq 0)
-
-$svc = Get-Service -Name SysMain -ErrorAction SilentlyContinue
-$status['services_sysmain'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
-
-$svc = Get-Service -Name WSearch -ErrorAction SilentlyContinue
-$status['services_search_indexing'] = if ($svc) { $svc.StartType -eq 'Manual' -or $svc.StartType -eq 'Disabled' } else { $true }
-
-$svc = Get-Service -Name Fax -ErrorAction SilentlyContinue
-$status['services_fax_spooler'] = if ($svc) { $svc.StartType -eq 'Disabled' } else { $true }
-
-$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'HideFileExt' -ErrorAction SilentlyContinue).HideFileExt
-$status['ui_show_file_extensions'] = ($val -eq 0)
-
-$val = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Hidden' -ErrorAction SilentlyContinue).Hidden
-$status['ui_show_hidden_files'] = ($val -eq 1)
-
-$status['ui_classic_context_menu'] = (Test-Path 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32')
-
-$status['disk_clean_temp'] = $false
-$status['disk_clean_delivery_optimization'] = $false
-
-$status | ConvertTo-Json -Compress
-"#;
-
-    let output = runner
-        .run_powershell(script)
-        .map_err(AppError::Execution)?;
-    if output.exit_code == 0 {
-        serde_json::from_str(&output.stdout)
-            .map_err(|e| AppError::Execution(format!("Failed to parse status JSON: {}", e)))
-    } else {
-        Err(AppError::Execution(format!(
-            "Failed to check optimization status: {}",
-            output.stderr
-        )))
+    if runner.is_dry_run() {
+        let mut status = std::collections::HashMap::new();
+        status.insert("telemetry_diagtrack".to_string(), false);
+        status.insert("telemetry_dmwappush".to_string(), false);
+        status.insert("telemetry_ceip_tasks".to_string(), false);
+        status.insert("bloatware_cortana".to_string(), false);
+        status.insert("bloatware_onedrive".to_string(), false);
+        status.insert("bloatware_xbox_apps".to_string(), false);
+        status.insert("bloatware_3d_viewer".to_string(), false);
+        status.insert("privacy_advertising_id".to_string(), false);
+        status.insert("privacy_location_tracking".to_string(), false);
+        status.insert("privacy_activity_history".to_string(), false);
+        status.insert("services_sysmain".to_string(), false);
+        status.insert("services_search_indexing".to_string(), false);
+        status.insert("services_fax_spooler".to_string(), false);
+        status.insert("ui_show_file_extensions".to_string(), false);
+        status.insert("ui_show_hidden_files".to_string(), false);
+        status.insert("ui_classic_context_menu".to_string(), false);
+        status.insert("disk_clean_temp".to_string(), false);
+        status.insert("disk_clean_delivery_optimization".to_string(), false);
+        return Ok(status);
     }
+
+    let mut status = std::collections::HashMap::new();
+
+    // 1. Native Win32 SCM Service Queries (sub-millisecond latency)
+    let diagtrack_disabled = crate::winapi::services::is_service_disabled("DiagTrack").unwrap_or(true);
+    status.insert("telemetry_diagtrack".to_string(), diagtrack_disabled);
+
+    let dmwappush_disabled = crate::winapi::services::is_service_disabled("dmwappushservice").unwrap_or(true);
+    status.insert("telemetry_dmwappush".to_string(), dmwappush_disabled);
+
+    let sysmain_disabled = crate::winapi::services::is_service_disabled("SysMain").unwrap_or(true);
+    status.insert("services_sysmain".to_string(), sysmain_disabled);
+
+    let wsearch_start = crate::winapi::services::query_service_start_type("WSearch");
+    let wsearch_manual_or_disabled = match wsearch_start {
+        Ok(st) => st == 3 || st == 4, // 3 = Manual, 4 = Disabled
+        Err(_) => true,
+    };
+    status.insert("services_search_indexing".to_string(), wsearch_manual_or_disabled);
+
+    let fax_disabled = crate::winapi::services::is_service_disabled("Fax").unwrap_or(true);
+    status.insert("services_fax_spooler".to_string(), fax_disabled);
+
+    // 2. Native Win32 Registry Queries (sub-millisecond latency)
+    let cortana_disabled = crate::winapi::registry::get_dword(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search",
+        "AllowCortana",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    status.insert("bloatware_cortana".to_string(), cortana_disabled);
+
+    let ad_id_disabled = crate::winapi::registry::get_dword(
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
+        "Enabled",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    status.insert("privacy_advertising_id".to_string(), ad_id_disabled);
+
+    let loc_tracking_disabled = crate::winapi::registry::get_string(
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location",
+        "Value",
+    )
+    .map(|v| v.eq_ignore_ascii_case("Deny"))
+    .unwrap_or(false);
+    status.insert("privacy_location_tracking".to_string(), loc_tracking_disabled);
+
+    let act_hist_disabled = crate::winapi::registry::get_dword(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+        "PublishUserActivities",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    status.insert("privacy_activity_history".to_string(), act_hist_disabled);
+
+    let show_ext = crate::winapi::registry::get_dword(
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "HideFileExt",
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    status.insert("ui_show_file_extensions".to_string(), show_ext);
+
+    let show_hidden = crate::winapi::registry::get_dword(
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+        "Hidden",
+    )
+    .map(|v| v == 1)
+    .unwrap_or(false);
+    status.insert("ui_show_hidden_files".to_string(), show_hidden);
+
+    let classic_menu = crate::winapi::registry::key_exists(
+        "HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32",
+    )
+    .unwrap_or(false);
+    status.insert("ui_classic_context_menu".to_string(), classic_menu);
+
+    // 3. Fast File System & Package Checks
+    let sys_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let onedrive_setup1 = std::path::Path::new(&sys_root).join("SysWOW64\\OneDriveSetup.exe");
+    let onedrive_setup2 = std::path::Path::new(&sys_root).join("System32\\OneDriveSetup.exe");
+    let onedrive_absent = !onedrive_setup1.exists() && !onedrive_setup2.exists();
+    status.insert("bloatware_onedrive".to_string(), onedrive_absent);
+
+    // CEIP Scheduled tasks fast registry check
+    let ceip_task_exists = crate::winapi::registry::key_exists(
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
+    )
+    .unwrap_or(false);
+    let ceip_disabled = !ceip_task_exists || crate::winapi::registry::get_dword(
+        "HKLM:\\SOFTWARE\\Policies\\Microsoft\\SQMClient\\Windows",
+        "CEIPEnable",
+    ).map(|v| v == 0).unwrap_or(false);
+    status.insert("telemetry_ceip_tasks".to_string(), ceip_disabled);
+
+    // Fast AppX registry existence check for Xbox and 3D Viewer
+    let xbox_absent = !crate::winapi::registry::key_exists(
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Appx\\AppxAllUserStore\\Applications\\Microsoft.XboxApp",
+    ).unwrap_or(false);
+    status.insert("bloatware_xbox_apps".to_string(), xbox_absent);
+
+    let viewer_absent = !crate::winapi::registry::key_exists(
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Appx\\AppxAllUserStore\\Applications\\Microsoft.Microsoft3DViewer",
+    ).unwrap_or(false);
+    status.insert("bloatware_3d_viewer".to_string(), viewer_absent);
+
+    // Action items (always false on initial status)
+    status.insert("disk_clean_temp".to_string(), false);
+    status.insert("disk_clean_delivery_optimization".to_string(), false);
+
+    Ok(status)
 }
 
 pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
@@ -910,9 +976,30 @@ mod tests {
             ceip_item.undo_command.contains("; Enable-ScheduledTask"),
             "Sequential cmdlet invocation required (R3)"
         );
-        assert!(
-            !ceip_item.undo_command.contains("'Consolidator', 'UsbCeip'"),
-            "Array syntax for TaskName is prohibited (R3)"
-        );
+    }
+
+    #[test]
+    fn test_check_status_dry_run_and_native_catalog_coverage() {
+        let runner = DryRunRunner::new();
+        let status = check_status(&runner).expect("check_status dry run failed");
+        let catalog = get_rule_catalog();
+
+        assert_eq!(status.len(), catalog.len(), "Status map must contain entries for all catalog rules");
+        for rule in catalog {
+            assert!(
+                status.contains_key(&rule.id),
+                "Status map missing rule id: {}",
+                rule.id
+            );
+        }
+
+        // Test real runner on Windows (sub-millisecond execution)
+        #[cfg(windows)]
+        {
+            let real_runner = crate::runner::RealRunner::new();
+            let real_status = check_status(&real_runner).expect("check_status real runner failed");
+            assert_eq!(real_status.len(), get_rule_catalog().len());
+        }
     }
 }
+

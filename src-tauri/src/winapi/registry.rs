@@ -413,6 +413,199 @@ pub fn delete_value(key_path: &str, value_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+pub fn get_dword(key_path: &str, value_name: &str) -> Result<u32, String> {
+    let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
+    let subpath_u16 = to_u16_vec(&subpath);
+    let val_u16 = to_u16_vec(&clean_val_name);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key_handle,
+        );
+
+        if status.is_err() {
+            return Err(format!(
+                "RegOpenKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
+        }
+
+        let mut read_type = REG_VALUE_TYPE::default();
+        let mut read_buf = [0u8; 4];
+        let mut buf_size = read_buf.len() as u32;
+
+        let query_res = RegQueryValueExW(
+            key_handle,
+            PCWSTR(val_u16.as_ptr()),
+            None,
+            Some(&mut read_type),
+            Some(read_buf.as_mut_ptr()),
+            Some(&mut buf_size),
+        );
+
+        let _ = RegCloseKey(key_handle);
+
+        if query_res.is_err() {
+            return Err(format!(
+                "RegQueryValueExW failed for '{}'\\'{}': {:?}",
+                key_path, value_name, query_res
+            ));
+        }
+
+        if read_type != REG_DWORD {
+            return Err(format!(
+                "Registry value type mismatch for '{}'\\'{}' (expected REG_DWORD, got {:?})",
+                key_path, value_name, read_type
+            ));
+        }
+
+        Ok(u32::from_ne_bytes(read_buf))
+    }
+}
+
+#[cfg(windows)]
+pub fn get_string(key_path: &str, value_name: &str) -> Result<String, String> {
+    let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
+    let subpath_u16 = to_u16_vec(&subpath);
+    let val_u16 = to_u16_vec(&clean_val_name);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key_handle,
+        );
+
+        if status.is_err() {
+            return Err(format!(
+                "RegOpenKeyExW failed for '{}': {:?}",
+                key_path, status
+            ));
+        }
+
+        let mut read_type = REG_VALUE_TYPE::default();
+        let mut buf_size = 0u32;
+
+        let query_size_res = RegQueryValueExW(
+            key_handle,
+            PCWSTR(val_u16.as_ptr()),
+            None,
+            Some(&mut read_type),
+            None,
+            Some(&mut buf_size),
+        );
+
+        if query_size_res.is_err() || buf_size == 0 {
+            let _ = RegCloseKey(key_handle);
+            return Err(format!(
+                "RegQueryValueExW failed to determine size for '{}'\\'{}'",
+                key_path, value_name
+            ));
+        }
+
+        let mut read_buf = vec![0u16; (buf_size as usize).div_ceil(2)];
+        let query_res = RegQueryValueExW(
+            key_handle,
+            PCWSTR(val_u16.as_ptr()),
+            None,
+            Some(&mut read_type),
+            Some(read_buf.as_mut_ptr() as *mut u8),
+            Some(&mut buf_size),
+        );
+
+        let _ = RegCloseKey(key_handle);
+
+        if query_res.is_err() {
+            return Err(format!(
+                "RegQueryValueExW failed for '{}'\\'{}': {:?}",
+                key_path, value_name, query_res
+            ));
+        }
+
+        if read_type != REG_SZ && read_type != windows::Win32::System::Registry::REG_EXPAND_SZ {
+            return Err(format!(
+                "Registry value type mismatch for '{}'\\'{}' (expected REG_SZ, got {:?})",
+                key_path, value_name, read_type
+            ));
+        }
+
+        let u16_len = (buf_size as usize) / 2;
+        let read_str = String::from_utf16_lossy(&read_buf[..u16_len]);
+        Ok(read_str.trim_matches('\0').to_string())
+    }
+}
+
+#[cfg(windows)]
+pub fn key_exists(key_path: &str) -> Result<bool, String> {
+    let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let subpath_u16 = to_u16_vec(&subpath);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key_handle,
+        );
+
+        if status.is_ok() {
+            let _ = RegCloseKey(key_handle);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn value_exists(key_path: &str, value_name: &str) -> Result<bool, String> {
+    let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
+    let subpath_u16 = to_u16_vec(&subpath);
+    let val_u16 = to_u16_vec(&clean_val_name);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_READ,
+            &mut key_handle,
+        );
+
+        if status.is_err() {
+            return Ok(false);
+        }
+
+        let mut read_type = REG_VALUE_TYPE::default();
+        let query_res = RegQueryValueExW(
+            key_handle,
+            PCWSTR(val_u16.as_ptr()),
+            None,
+            Some(&mut read_type),
+            None,
+            None,
+        );
+
+        let _ = RegCloseKey(key_handle);
+        Ok(query_res.is_ok())
+    }
+}
+
 #[cfg(not(windows))]
 pub fn set_dword(_key_path: &str, _value_name: &str, _data: u32) -> Result<(), String> {
     Err("WinAPI Registry operations are only supported on Windows".to_string())
@@ -435,5 +628,25 @@ pub fn delete_key(_key_path: &str) -> Result<(), String> {
 
 #[cfg(not(windows))]
 pub fn delete_value(_key_path: &str, _value_name: &str) -> Result<(), String> {
+    Err("WinAPI Registry operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn get_dword(_key_path: &str, _value_name: &str) -> Result<u32, String> {
+    Err("WinAPI Registry operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn get_string(_key_path: &str, _value_name: &str) -> Result<String, String> {
+    Err("WinAPI Registry operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn key_exists(_key_path: &str) -> Result<bool, String> {
+    Err("WinAPI Registry operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn value_exists(_key_path: &str, _value_name: &str) -> Result<bool, String> {
     Err("WinAPI Registry operations are only supported on Windows".to_string())
 }

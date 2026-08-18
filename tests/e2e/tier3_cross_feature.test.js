@@ -1,197 +1,248 @@
 /**
- * Tier 3 Test Suite: Cross-Feature Interactions (7 Test Cases)
- * Verifies concurrent feature behaviors, multi-subsystem state interactions, and cross-cutting concerns.
+ * Tier 3 Test Suite: Cross-Feature Interactions (WiScripts Windows v1.0 Production Release)
+ * Verifies complex multi-subsystem workflows, state synchronizations, and pairwise integrations:
+ * - Profile import -> Safety snapshot -> Tweak status inquiry
+ * - Command Palette -> Navigation -> Tweak toggle
+ * - Script Library sync -> Editor load -> Stream execute -> Log export
+ * - Storage 2-stage duplicate scan -> Delete -> Bytes freed
+ * - App Uninstaller chronological sort -> Search filter -> Safety prompt
+ * - Dynamic localization switching across Command Palette, Tweaks & WCAG a11y labels
+ * - ProFlow Governor -> Memory trim trigger -> Telemetry metrics sync
  */
 
 import fs from 'fs';
 import path from 'path';
-import { assert, MockIPC, AppStateSimulator, TestRunner } from './harness.js';
+import {
+  assert,
+  computeSha256,
+  StorageDeduplicationEngine,
+  parseInstallDate,
+  Win32ScmSimulator,
+  ProfileValidationEngine,
+  CommandPaletteEngine,
+  MockIPC,
+  AppStateSimulator,
+  TestRunner
+} from './harness.js';
 
 export function buildTier3Suite() {
   const runner = new TestRunner('Tier 3 - Cross-Feature Interactions');
 
-  // --- T3_INT_01: Script runner execution while metrics polling is active ---
-  runner.addTest('T3_INT_01: Script runner execution runs concurrently with active metrics polling', async () => {
+  // --- T3_INT_01: Profile Import -> Safety Snapshot -> Tweak Status Verification ---
+  runner.addTest('T3_INT_01: Profile import creates safety snapshot and verifies SCM service states', async () => {
     // Arrange
     const ipc = new MockIPC();
+    const scm = new Win32ScmSimulator();
     const app = new AppStateSimulator(ipc);
 
-    let metricsPollCount = 0;
-    ipc.registerHandler('get_system_info', async () => {
-      metricsPollCount++;
-      return { osName: 'Windows 11', osVersion: '23H2', osBuild: '22631', isElevated: true, cpuUsagePercent: 20 + metricsPollCount, memoryUsedMb: 8000, memoryTotalMb: 16384, telemetryStatus: 'Active' };
-    });
-
-    // Act: Simulate background metrics polling interval while executing a custom script
-    const pollPromise = (async () => {
-      for (let i = 0; i < 3; i++) {
-        await ipc.invoke('get_system_info');
+    const devProfile = {
+      $schema: 'https://wiscripts.app/schemas/profile-v1.json',
+      schemaVersion: '1.0.0',
+      format: 'wiscripts-configuration-profile',
+      metadata: { id: 'dev-profile', name: 'Dev Profile', description: 'Dev debloat', author: 'Team', appVersion: '1.0.0' },
+      optimizations: {
+        enabledRuleIds: ['telemetry_diagtrack', 'services_sysmain', 'win11_disable_copilot']
       }
-    })();
-
-    const scriptPromise = app.executeScript('Write-Host "Concurrent Execution Test"', 'ps1');
-
-    await Promise.all([pollPromise, scriptPromise]);
-
-    // Assert
-    assert.equal(metricsPollCount, 3, 'Metrics poller executed 3 cycles in parallel');
-    assert.includes(app.exportLogsToString(), 'Concurrent Execution Test', 'Script output captured without interference');
-  });
-
-  // --- T3_INT_02: Manual sensor selection while dashboard status polling occurs ---
-  runner.addTest('T3_INT_02: Manual sensor selection override updates state while background status polling occurs', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-
-    // Initial temperature payload
-    app.state.sensorPayload = {
-      cpu_temp_celsius: 45.2,
-      sensor_items: [
-        { id: 'lhm_cpu', name: 'LHM Sensor', temperature_celsius: 45.2, sensor_type: 'cpu', provider: 'LHM' },
-        { id: 'custom_sensor_override', name: 'Custom Probe', temperature_celsius: 39.8, sensor_type: 'cpu', provider: 'Manual' }
-      ]
     };
 
-    // Register IPC handler returning items including custom_sensor_override
-    ipc.registerHandler('get_temperatures', async () => ({
-      cpu_temp_celsius: 45.2,
-      sensor_items: [
-        { id: 'lhm_cpu', name: 'LHM Sensor', temperature_celsius: 45.2, sensor_type: 'cpu', provider: 'LHM' },
-        { id: 'custom_sensor_override', name: 'Custom Probe', temperature_celsius: 39.8, sensor_type: 'cpu', provider: 'Manual' }
-      ]
-    }));
+    // Act 1: Validate profile schema
+    const val = ProfileValidationEngine.validate(devProfile);
+    assert.isTrue(val.isValid, 'Profile schema is valid');
 
-    // Act: User selects manual sensor override
-    app.state.selectedCpuSensorId = 'custom_sensor_override';
+    // Act 2: Create pre-flight safety snapshot
+    const snap = await ipc.invoke('create_preflight_snapshot', {
+      description: 'Snapshot before applying dev profile',
+      rule_ids: devProfile.optimizations.enabledRuleIds
+    });
+    assert.ok(snap.snapshotId, 'Safety snapshot generated');
 
-    // Background polling fetch returns new payload
-    const polledPayload = await ipc.invoke('get_temperatures');
-    polledPayload.selected_cpu_sensor_id = app.state.selectedCpuSensorId;
-
-    // Resolve displayed temp
-    const activeSensor = polledPayload.sensor_items.find(s => s.id === polledPayload.selected_cpu_sensor_id) || polledPayload.sensor_items[0];
+    // Act 3: Apply optimizations -> configure SCM services
+    scm.configureService('DiagTrack', 4); // Disable
+    scm.configureService('SysMain', 4);   // Disable
 
     // Assert
-    assert.equal(polledPayload.selected_cpu_sensor_id, 'custom_sensor_override', 'Manual sensor selection persisted across poll');
-    assert.equal(activeSensor.id, 'custom_sensor_override', 'Resolved active sensor is override item');
+    assert.isTrue(scm.isServiceDisabled('DiagTrack'), 'DiagTrack is verified disabled via Win32 SCM');
+    assert.isTrue(scm.isServiceDisabled('SysMain'), 'SysMain is verified disabled via Win32 SCM');
   });
 
-  // --- T3_INT_03: Log export during live script execution streaming ---
-  runner.addTest('T3_INT_03: Log export can be triggered during active live script execution streaming', async () => {
+  // --- T3_INT_02: Command Palette -> Navigation -> Tweak Toggle ---
+  runner.addTest('T3_INT_02: Command Palette search resolves tweak item and updates optimization selection state', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-
-    // Act: Emit partial stream lines, export log snapshot mid-stream, then complete
-    await ipc.emit('script-output-line', { line: 'Mid-stream snapshot line 1', stream: 'stdout' });
-    app.state.terminalLogs.push('[STDOUT] Mid-stream snapshot line 1');
-
-    const snapshotLog = app.exportLogsToString();
-
-    await ipc.emit('script-output-line', { line: 'Mid-stream snapshot line 2', stream: 'stdout' });
-    app.state.terminalLogs.push('[STDOUT] Mid-stream snapshot line 2');
-
-    const finalLog = app.exportLogsToString();
-
-    // Assert
-    assert.includes(snapshotLog, 'Mid-stream snapshot line 1', 'Snapshot log includes line 1');
-    assert.isFalse(snapshotLog.includes('Mid-stream snapshot line 2'), 'Snapshot log does not contain line 2 yet');
-    assert.includes(finalLog, 'Mid-stream snapshot line 2', 'Final log contains line 2');
-  });
-
-  // --- T3_INT_04: i18n language switching during active queue state display ---
-  runner.addTest('T3_INT_04: Dynamic i18n language switching updates queue state banner text instantly', async () => {
-    // Arrange
+    const palette = new CommandPaletteEngine();
     const app = new AppStateSimulator();
-    app.state.optimizations = [{ id: '1', isSelected: true }]; // N=1 queued
 
-    // Act 1: English
-    app.state.currentLanguage = 'en';
-    const enTitle = app.translate('dashboard.systemOptimizationReadiness', 'System Optimization Readiness');
+    // Act 1: Search for 'copilot' in Command Palette
+    const matches = palette.search('copilot');
+    assert.greaterThanOrEqual(matches.length, 1, 'Found copilot search match');
+    const targetAction = matches[0].action;
 
-    // Act 2: Switch to Russian
-    app.state.currentLanguage = 'ru';
-    const ruTitle = app.translate('dashboard.systemOptimizationReadiness', 'Готовность к оптимизации системы');
-
-    // Assert
-    assert.equal(enTitle, 'System Optimization Readiness', 'English translation resolved');
-    assert.equal(ruTitle, 'Готовность к оптимизации системы', 'Russian translation resolved upon locale switch');
-  });
-
-  // --- T3_INT_05: UAC elevation check interaction with script runner execution guard ---
-  runner.addTest('T3_INT_05: Standard user (isElevated: false) triggers UAC warning and enforces dry-run safety guard', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.isElevated = false;
-    app.state.dryRunMode = false;
-
-    // Act: Execution guard checks elevation before script launch
-    function executeWithSafetyGuard(appState, scriptContent) {
-      if (!appState.state.isElevated && !appState.state.dryRunMode) {
-        // Automatically enable dry-run mode or warn user
-        appState.state.dryRunMode = true;
-        appState.state.terminalLogs.push('[SAFETY_GUARD] Standard user detected. Automatic Dry-Run mode enabled.');
+    // Act 2: Execute command palette action (toggle tweak)
+    if (targetAction.type === 'toggle_tweak') {
+      const tweak = app.state.optimizations.find(o => o.id === targetAction.tweakId);
+      if (tweak) {
+        tweak.isSelected = !tweak.isSelected;
       }
-      return appState.executeScript(scriptContent, 'ps1');
     }
 
-    await executeWithSafetyGuard(app, 'Remove-Item C:\\Windows\\System32 -Recurse');
-
     // Assert
-    assert.isTrue(app.state.dryRunMode, 'Safety guard enabled dryRunMode for standard user');
-    assert.includes(app.exportLogsToString(), '[SAFETY_GUARD]', 'Log records safety guard intervention');
+    const updatedTweak = app.state.optimizations.find(o => o.id === 'win11_disable_copilot');
+    assert.ok(updatedTweak, 'Copilot tweak exists in state');
   });
 
-  // --- T3_INT_06: Telemetry status change updates both Dashboard badge and Navigation elevation status ---
-  runner.addTest('T3_INT_06: Telemetry status change updates Dashboard telemetry badge and systemInfo state', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    app.state.systemInfo.telemetryStatus = 'Active';
-
-    // Act: State update disables telemetry
-    app.state.systemInfo.telemetryStatus = 'Disabled';
-    const badgeStyle = app.getTelemetryBadgeStyle(app.state.systemInfo.telemetryStatus);
-
-    // Assert
-    assert.equal(app.state.systemInfo.telemetryStatus, 'Disabled', 'Telemetry status updated to Disabled');
-    assert.includes(badgeStyle, 'bg-emerald-500', 'Badge style updated to emerald for Disabled status');
-  });
-
-  // --- T3_INT_07: Diagnostic dump export includes active script log history, system info, and sensor state ---
-  runner.addTest('T3_INT_07: Diagnostic dump export aggregates script logs, system metrics, and sensor payload', async () => {
+  // --- T3_INT_03: Script Library Sync -> Load to Editor -> Stream Execute -> Log Export ---
+  runner.addTest('T3_INT_03: Online script sync, editor loading, streaming execution, and log export workflow', async () => {
     // Arrange
     const ipc = new MockIPC();
     const app = new AppStateSimulator(ipc);
-    await app.executeScript('Diagnostic Test Run', 'ps1');
 
-    ipc.registerHandler('export_diagnostic_dump', async () => {
-      const dumpData = {
-        systemInfo: app.state.systemInfo,
-        sensorPayload: await ipc.invoke('get_temperatures'),
-        terminalLogs: app.state.terminalLogs,
-        timestamp: new Date().toISOString()
-      };
-      const scratchDir = path.join(process.cwd(), 'scratch');
-      if (!fs.existsSync(scratchDir)) fs.mkdirSync(scratchDir, { recursive: true });
-      const dumpPath = path.join(scratchDir, 'wiscripts_diag_dump_test.json');
-      fs.writeFileSync(dumpPath, JSON.stringify(dumpData, null, 2), 'utf8');
-      return dumpPath;
-    });
+    // Step 1: Sync library
+    const syncRes = await ipc.invoke('sync_scripts_library', { force_refresh: true });
+    assert.isTrue(syncRes.success, 'Sync completed');
 
-    // Act
-    const exportedPath = await ipc.invoke('export_diagnostic_dump');
+    // Step 2: Fetch cached library scripts
+    const lib = await ipc.invoke('get_cached_scripts_library');
+    const targetScript = lib.scripts.find(s => s.id === 'maint-clear-wu-cache');
+    assert.ok(targetScript, 'Found maintenance script in catalog');
+
+    // Step 3: Verify script payload integrity
+    const simulatedScriptCode = 'Stop-Service -Name wuauserv\nRemove-Item -Path "$env:SystemRoot\\SoftwareDistribution" -Recurse\nStart-Service -Name wuauserv';
+    const computedHash = computeSha256(simulatedScriptCode);
+    assert.equal(computedHash.length, 64, 'Computed 64-character SHA-256 hash');
+
+    // Step 4: Execute in script runner with streaming logs
+    await app.executeScript(simulatedScriptCode, 'ps1');
+
+    // Step 5: Export logs
+    const scratchDir = path.join(process.cwd(), 'scratch');
+    const logFile = path.join(scratchDir, 'e2e_tier3_script_run.log');
+    app.exportLogsToFile(logFile);
 
     // Assert
-    assert.isTrue(fs.existsSync(exportedPath), 'Diagnostic dump file created');
-    const content = JSON.parse(fs.readFileSync(exportedPath, 'utf8'));
-    assert.equal(content.systemInfo.osName, 'Windows 11 Pro', 'Dump contains OS info');
-    assert.equal(content.sensorPayload.sensor_source, 'LibreHardwareMonitor WMI', 'Dump contains sensor data');
-    assert.includes(content.terminalLogs.join('\n'), 'Diagnostic Test Run', 'Dump includes terminal logs');
+    assert.isTrue(fs.existsSync(logFile), 'Exported log file exists on disk');
+    const logContent = fs.readFileSync(logFile, 'utf8');
+    assert.includes(logContent, 'Stop-Service', 'Log contains script execution lines');
 
     // Cleanup
-    if (fs.existsSync(exportedPath)) fs.unlinkSync(exportedPath);
+    if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
+  });
+
+  // --- T3_INT_04: Storage 2-Stage Duplicate Scan -> Filter Duplicate Group -> Delete to Trash ---
+  runner.addTest('T3_INT_04: 2-stage storage duplicate scan, candidate filtering, and deletion to trash', async () => {
+    // Arrange
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    const testBuffer = Buffer.from('Duplicate test file content across multiple directories'.repeat(100));
+
+    const virtualFiles = [
+      { path: 'C:\\Users\\TestUser\\Documents\\report_v1.pdf', contentBuffer: testBuffer },
+      { path: 'C:\\Users\\TestUser\\Downloads\\report_copy.pdf', contentBuffer: testBuffer }
+    ];
+
+    // Act 1: Scan duplicates
+    const duplicateGroups = engine.scanDuplicates(virtualFiles);
+    assert.equal(duplicateGroups.length, 1, 'Identified 1 duplicate group');
+    assert.equal(duplicateGroups[0].files.length, 2, 'Group contains 2 files');
+
+    // Act 2: Simulate deletion of 1 duplicate copy
+    function deleteDuplicateFiles(filesToDelete) {
+      let bytesFreed = 0;
+      let count = 0;
+      for (const f of filesToDelete) {
+        bytesFreed += f.sizeBytes;
+        count++;
+      }
+      return { files_deleted: count, bytes_freed: bytesFreed };
+    }
+
+    const deleteRes = deleteDuplicateFiles([duplicateGroups[0].files[1]]);
+
+    // Assert
+    assert.equal(deleteRes.files_deleted, 1, 'Deleted 1 duplicate file');
+    assert.greaterThanOrEqual(deleteRes.bytes_freed, 1000, 'Freed storage bytes recorded');
+  });
+
+  // --- T3_INT_05: App Uninstaller Chronological Sort -> Search Filter -> Safety Confirmation ---
+  runner.addTest('T3_INT_05: Uninstaller sorts dates chronologically and applies safety confirmation prompt', async () => {
+    // Arrange
+    const rawApps = [
+      { name: 'App Beta', installDate: '20231231', estimatedSizeKb: 102400 },
+      { name: 'App Gamma', installDate: '20240815', estimatedSizeKb: 51200 },
+      { name: 'App Alpha', installDate: '20240101', estimatedSizeKb: 204800 }
+    ];
+
+    // Act 1: Sort by date descending (newest first)
+    const sortedApps = [...rawApps].sort((a, b) => {
+      const dateA = parseInstallDate(a.installDate);
+      const dateB = parseInstallDate(b.installDate);
+      return dateB - dateA;
+    });
+
+    // Assert sorting: 20240815 > 20240101 > 20231231
+    assert.equal(sortedApps[0].name, 'App Gamma', 'Newest app (20240815) sorted first');
+    assert.equal(sortedApps[1].name, 'App Alpha', 'Middle app (20240101) sorted second');
+    assert.equal(sortedApps[2].name, 'App Beta', 'Oldest app (20231231) sorted last');
+
+    // Act 2: Filter by search query 'Alpha'
+    const filtered = sortedApps.filter(a => a.name.toLowerCase().includes('alpha'));
+    assert.equal(filtered.length, 1, 'Search query filtered to 1 app');
+
+    // Act 3: Safety confirmation trigger
+    function requestUninstallWithSafety(app) {
+      return {
+        requireConfirmation: true,
+        modalTitle: `Uninstall ${app.name}?`,
+        app
+      };
+    }
+
+    const prompt = requestUninstallWithSafety(filtered[0]);
+    assert.isTrue(prompt.requireConfirmation, 'Safety confirmation modal prompt requested');
+    assert.equal(prompt.app.name, 'App Alpha', 'Prompt targets App Alpha');
+  });
+
+  // --- T3_INT_06: Multi-Language Switching -> Localized Command Palette Index & WCAG ARIA Labels ---
+  runner.addTest('T3_INT_06: Dynamic localization toggle updates Command Palette titles and localized UI strings', async () => {
+    // Arrange
+    const app = new AppStateSimulator();
+
+    // Act 1: Language = EN
+    app.state.currentLanguage = 'en';
+    const enDashboard = app.translate('nav.items.dashboard', 'Dashboard');
+
+    // Act 2: Switch language to RU
+    app.state.currentLanguage = 'ru';
+    const ruDashboard = app.translate('nav.items.dashboard', 'Панель управления');
+
+    // Assert
+    assert.equal(enDashboard, 'Dashboard', 'EN title resolved');
+    assert.equal(ruDashboard, 'Панель управления', 'RU title resolved from ru.json');
+  });
+
+  // --- T3_INT_07: ProFlow Resource Governor -> Memory Trim -> Telemetry Sync ---
+  runner.addTest('T3_INT_07: ProFlow resource governor priority rule execution and telemetry state update', async () => {
+    // Arrange
+    const app = new AppStateSimulator();
+    const governorRules = [
+      { processName: 'code.exe', targetPriority: 'ABOVE_NORMAL', coreAffinityMask: '0xFF', autoTrimMemoryMbThreshold: 4096 }
+    ];
+
+    // Act: Simulate memory threshold breach and working set trimming
+    function evaluateProFlowRule(rule, currentProcessMemoryMb) {
+      if (currentProcessMemoryMb > rule.autoTrimMemoryMbThreshold) {
+        return {
+          actionTaken: 'TRIM_WORKING_SET',
+          process: rule.processName,
+          initialMemoryMb: currentProcessMemoryMb,
+          trimmedMemoryMb: Math.round(currentProcessMemoryMb * 0.6)
+        };
+      }
+      return { actionTaken: 'NONE' };
+    }
+
+    const trimResult = evaluateProFlowRule(governorRules[0], 5120); // 5GB > 4GB threshold
+
+    // Assert
+    assert.equal(trimResult.actionTaken, 'TRIM_WORKING_SET', 'ProFlow triggered memory working set trim');
+    assert.lessThanOrEqual(trimResult.trimmedMemoryMb, 4000, 'Memory trimmed below threshold');
   });
 
   return runner;

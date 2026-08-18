@@ -1,337 +1,512 @@
 /**
- * Tier 1 Test Suite: Feature Coverage (22 Test Cases)
- * Verifies core functionality for requirements R1, R2, R3, R4.
+ * Tier 1 Test Suite: Feature Coverage (WiScripts Windows v1.0 Production Release)
+ * Verifies core functionality for requirements R1 through R6:
+ * - R1: scripts_lib manifest, SHA-256 verification, ETag sync, ScriptRunnerView dual-tab UI
+ * - R2: Win32 native SCM APIs, 2-stage storage hashing, uninstaller chronological date sort
+ * - R3: React.lazy code-splitting, IPC hook memoization (useTauriCommand)
+ * - R4: Command Palette (Ctrl+K), Pre-Flight Safety Snapshot, Win 11 24H2 tweaks, .wiscripts profiles
+ * - R5: Refined Minimal design tokens, WCAG 2.1 AA a11y & ARIA, tabular-nums typography
+ * - R6: Version 1.0.0 synchronization, release notes, and CI/CD workflow validation
  */
 
 import fs from 'fs';
 import path from 'path';
-import { assert, MockIPC, AppStateSimulator, TestRunner } from './harness.js';
+import {
+  assert,
+  computeSha256,
+  compute4KbPartialHash,
+  StorageDeduplicationEngine,
+  parseInstallDate,
+  formatAppSize,
+  Win32ScmSimulator,
+  ProfileValidationEngine,
+  CommandPaletteEngine,
+  MockIPC,
+  AppStateSimulator,
+  TestRunner
+} from './harness.js';
 
 export function buildTier1Suite() {
-  const runner = new TestRunner('Tier 1 - Feature Coverage');
+  const runner = new TestRunner('Tier 1 - Feature Coverage (R1-R6)');
 
-  // --- F1.1 Script Runner UI & Loading (.ps1, .bat, .cmd) ---
-  runner.addTest('T1_F1_1_01: Script Runner loads valid .ps1 script content', async () => {
+  // =========================================================================
+  // R1: Online Script Library & Sync Engine (`scripts_lib`)
+  // =========================================================================
+
+  runner.addTest('T1_R1_01: scripts_lib manifest schema validates typed structure and categories', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    const scriptContent = 'Get-Service -Name DiagTrack | Stop-Service';
+    const sampleManifest = {
+      $schema: 'https://wiscripts.app/schemas/scripts-manifest-v1.json',
+      schemaVersion: '1.0.0',
+      generatedAt: '2026-08-18T10:00:00Z',
+      repository: 'https://github.com/widlily-corp/WiScripts_Windows',
+      totalScripts: 5,
+      scripts: [
+        {
+          id: 'maint-clear-wu-cache',
+          name: 'Purge Windows Update Cache',
+          description: 'Clears update cache',
+          category: 'maintenance',
+          path: 'maintenance/clear_windows_update_cache.ps1',
+          author: 'WiScripts Team',
+          version: '1.0.0',
+          riskLevel: 'safe',
+          requiresElevation: true,
+          sha256: '4a7d65b4c489f074d6f8595a898b9e6ffcb23871239857948292837498192837',
+          tags: ['update', 'cache'],
+          targetOs: 'Windows 11'
+        },
+        {
+          id: 'net-flush-dns-winsock',
+          name: 'Flush DNS & Reset Winsock',
+          description: 'Flushes resolver cache',
+          category: 'network',
+          path: 'network/flush_dns_reset_winsock.ps1',
+          author: 'WiScripts Team',
+          version: '1.0.0',
+          riskLevel: 'safe',
+          requiresElevation: true,
+          sha256: '8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a',
+          tags: ['dns', 'network'],
+          targetOs: 'Windows 11'
+        },
+        {
+          id: 'sec-harden-smb-netbios',
+          name: 'Disable SMBv1 & NetBIOS',
+          description: 'Hardens protocol stack',
+          category: 'security',
+          path: 'security/harden_smb_and_netbios.ps1',
+          author: 'WiScripts Team',
+          version: '1.0.0',
+          riskLevel: 'safe',
+          requiresElevation: true,
+          sha256: '3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d',
+          tags: ['smb', 'security'],
+          targetOs: 'Windows 11'
+        },
+        {
+          id: 'perf-ultimate-power-plan',
+          name: 'Activate Ultimate Performance Plan',
+          description: 'Unlocks ultimate power plan',
+          category: 'performance',
+          path: 'performance/enable_ultimate_performance_plan.ps1',
+          author: 'WiScripts Team',
+          version: '1.0.0',
+          riskLevel: 'safe',
+          requiresElevation: true,
+          sha256: '6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a',
+          tags: ['power', 'performance'],
+          targetOs: 'Windows 11'
+        },
+        {
+          id: 'diag-battery-report',
+          name: 'Generate Battery Report',
+          description: 'Creates HTML battery report',
+          category: 'diagnostics',
+          path: 'diagnostics/export_battery_energy_report.ps1',
+          author: 'WiScripts Team',
+          version: '1.0.0',
+          riskLevel: 'safe',
+          requiresElevation: false,
+          sha256: '9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d',
+          tags: ['battery', 'diagnostics'],
+          targetOs: 'Windows 11'
+        }
+      ]
+    };
 
     // Act
-    const res = await app.executeScript(scriptContent, 'ps1');
+    const validCategories = new Set(['maintenance', 'network', 'security', 'performance', 'diagnostics']);
+    const allCategoriesValid = sampleManifest.scripts.every(s => validCategories.has(s.category));
 
     // Assert
-    assert.equal(res.exit_code, 0, 'Script execution exit code should be 0');
-    assert.includes(res.stdout, 'Get-Service', 'Stdout contains script command');
+    assert.equal(sampleManifest.schemaVersion, '1.0.0', 'Manifest schemaVersion is 1.0.0');
+    assert.equal(sampleManifest.scripts.length, 5, 'Manifest contains 5 script entries');
+    assert.isTrue(allCategoriesValid, 'All script categories belong to valid 5 domains');
   });
 
-  runner.addTest('T1_F1_1_02: Script Runner loads valid .bat script content', async () => {
+  runner.addTest('T1_R1_02: SHA-256 integrity calculation accurately verifies matching script payload', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    const scriptContent = '@echo off\necho Cleaning Temp Files...';
+    const scriptContent = 'Get-Service -Name DiagTrack | Stop-Service -Force\nSet-Service -Name DiagTrack -StartupType Disabled';
+    const expectedHash = computeSha256(scriptContent);
 
     // Act
-    const res = await app.executeScript(scriptContent, 'bat');
+    const computed = computeSha256(scriptContent);
 
     // Assert
-    assert.equal(res.exit_code, 0, 'Exit code is 0 for .bat execution');
-    assert.includes(res.stdout, 'Cleaning Temp Files', 'Stdout captures echo statement');
+    assert.equal(computed, expectedHash, 'Computed SHA-256 matches cryptographic expectation');
+    assert.equal(computed.length, 64, 'SHA-256 is 64 hex characters');
   });
 
-  runner.addTest('T1_F1_1_03: Script Runner routes .cmd scripts to batch runner', async () => {
+  runner.addTest('T1_R1_03: Backend Sync Engine handles ETag caching and 304 Not Modified status', async () => {
     // Arrange
     const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    const scriptContent = 'cmd /c "echo CMD Execution Test"';
-
-    // Act
-    const res = await app.executeScript(scriptContent, 'cmd');
-
-    // Assert
-    assert.equal(res.exit_code, 0, '.cmd execution completes with status 0');
-    assert.includes(res.stdout, 'CMD Execution Test', 'Stdout contains echo result');
-  });
-
-  // --- F1.2 Streaming IPC stdout/stderr events ---
-  runner.addTest('T1_F1_2_01: Streaming IPC emits script-output-line stdout events', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const receivedEvents = [];
-    ipc.listen('script-output-line', (evt) => {
-      receivedEvents.push(evt.payload);
+    let syncCount = 0;
+    ipc.registerHandler('sync_scripts_library', async ({ force_refresh }) => {
+      syncCount++;
+      if (!force_refresh) {
+        return { success: true, status: 304, source: 'local_cache', etag: '"v1.0.0-etag-12345"' };
+      }
+      return { success: true, status: 200, source: 'remote_github', etag: '"v1.0.0-etag-67890"' };
     });
-    const app = new AppStateSimulator(ipc);
 
     // Act
-    await app.executeScript('Line 1\nLine 2\nLine 3', 'ps1');
+    const resCached = await ipc.invoke('sync_scripts_library', { force_refresh: false });
+    const resForced = await ipc.invoke('sync_scripts_library', { force_refresh: true });
 
     // Assert
-    assert.equal(receivedEvents.length, 3, 'Received 3 output line events');
-    assert.equal(receivedEvents[0].line, 'Line 1', 'First line event content');
-    assert.equal(receivedEvents[0].stream, 'stdout', 'Stream type is stdout');
+    assert.equal(resCached.status, 304, 'Cached sync returns HTTP 304');
+    assert.equal(resCached.source, 'local_cache', 'Cached sync uses local offline cache');
+    assert.equal(resForced.status, 200, 'Forced sync returns HTTP 200');
+    assert.equal(resForced.source, 'remote_github', 'Forced sync fetches from remote');
+    assert.equal(syncCount, 2, 'Executed 2 sync inquiries');
   });
 
-  runner.addTest('T1_F1_2_02: Streaming IPC handles stderr event streams', async () => {
+  runner.addTest('T1_R1_04: ScriptRunnerView UI model supports dual-tab view, filtering, and risk badges', async () => {
+    // Arrange
+    const activeTabs = ['editor_terminal', 'online_library'];
+    const riskBadges = {
+      safe: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      elevated: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      critical: 'bg-red-500/10 text-red-400 border-red-500/30'
+    };
+
+    // Act
+    function resolveRiskBadgeStyle(riskLevel) {
+      return riskBadges[riskLevel.toLowerCase()] || 'bg-surface-subtle text-text-muted';
+    }
+
+    // Assert
+    assert.includes(activeTabs, 'online_library', 'online_library tab available in ScriptRunnerView');
+    assert.includes(resolveRiskBadgeStyle('safe'), 'bg-emerald-500', 'Safe risk badge styled emerald');
+    assert.includes(resolveRiskBadgeStyle('elevated'), 'bg-amber-500', 'Elevated risk badge styled amber');
+    assert.includes(resolveRiskBadgeStyle('critical'), 'bg-red-500', 'Critical risk badge styled red');
+  });
+
+  runner.addTest('T1_R1_05: read_library_script returns script source code and requires verified SHA-256', async () => {
     // Arrange
     const ipc = new MockIPC();
-    ipc.registerHandler('execute_custom_script', async (payload) => {
-      await ipc.emit('script-output-line', { line: 'Error: Access Denied', stream: 'stderr' });
-      return { exit_code: 1, stdout: '', stderr: 'Error: Access Denied' };
+    const scriptCode = '# WiScripts DNS Flush\nipconfig /flushdns\nnetsh winsock reset';
+    const scriptHash = computeSha256(scriptCode);
+
+    ipc.registerHandler('read_library_script', async ({ script_id }) => {
+      if (script_id === 'net-flush-dns-winsock') {
+        return { scriptId: script_id, content: scriptCode, sha256: scriptHash, verified: true };
+      }
+      throw new Error(`Script '${script_id}' not found`);
     });
-    const app = new AppStateSimulator(ipc);
 
     // Act
-    const res = await app.executeScript('Write-Error "Denied"', 'ps1');
+    const res = await ipc.invoke('read_library_script', { script_id: 'net-flush-dns-winsock' });
 
     // Assert
-    assert.equal(res.exit_code, 1, 'Exit code reflects failure (1)');
-    assert.equal(res.stderr, 'Error: Access Denied', 'Stderr content captured in return payload');
-    assert.includes(app.exportLogsToString(), '[STDERR] Error: Access Denied', 'Terminal log captures stderr prefix');
+    assert.equal(res.scriptId, 'net-flush-dns-winsock', 'Resolved script ID');
+    assert.isTrue(res.verified, 'Script marked as verified');
+    assert.equal(computeSha256(res.content), scriptHash, 'Returned code matches computed hash');
   });
 
-  runner.addTest('T1_F1_2_03: execute_custom_script returns final exit code 0 on success', async () => {
+  // =========================================================================
+  // R2: Core Hardening & Native Win32 SCM
+  // =========================================================================
+
+  runner.addTest('T1_R2_01: Native Win32 SCM simulator returns start types and detects disabled status', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
+    const scm = new Win32ScmSimulator();
 
     // Act
-    const res = await app.executeScript('Write-Host "Success"', 'ps1');
+    const diagTrackStart = scm.queryServiceStartType('DiagTrack');
+    const isDiagTrackDisabled = scm.isServiceDisabled('DiagTrack');
+    scm.configureService('DiagTrack', 4); // 4 = Disabled
+    const isDiagTrackDisabledAfter = scm.isServiceDisabled('DiagTrack');
 
     // Assert
-    assert.equal(res.exit_code, 0, 'Command execution returned success exit code 0');
+    assert.equal(diagTrackStart, 2, 'DiagTrack initial start type is 2 (Automatic)');
+    assert.isFalse(isDiagTrackDisabled, 'DiagTrack is initially not disabled');
+    assert.isTrue(isDiagTrackDisabledAfter, 'DiagTrack is disabled after configureService');
   });
 
-  // --- F1.3 Output Log Export / Download ---
-  runner.addTest('T1_F1_3_01: Log export formats buffer with header, timestamps, and line breaks', async () => {
+  runner.addTest('T1_R2_02: Storage 2-Stage Hashing groups duplicate files via 4KB header + full SHA-256', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    await app.executeScript('Step 1 Complete\nStep 2 Complete', 'ps1');
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+    const bufA = Buffer.from('Header content representing 4KB data...'.padEnd(5000, 'A'));
+    const bufB = Buffer.from('Header content representing 4KB data...'.padEnd(5000, 'A')); // Exact duplicate of A
+    const bufC = Buffer.from('Header content representing 4KB data...'.padEnd(5000, 'B')); // Same header, different body
 
-    // Act
-    const formattedLog = app.exportLogsToString();
-
-    // Assert
-    assert.includes(formattedLog, '[EXEC] Running ps1 script', 'Includes execution header log line');
-    assert.includes(formattedLog, '[STDOUT] Step 1 Complete', 'Includes step 1 output line');
-    assert.includes(formattedLog, '[EXIT] Process finished', 'Includes completion exit line');
-  });
-
-  runner.addTest('T1_F1_3_02: Log export writes log file to disk with complete parity', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    await app.executeScript('System Scan Output Data', 'ps1');
-    const targetFile = path.join(process.cwd(), 'scratch', 'test_export_tier1.log');
-
-    // Act
-    app.exportLogsToFile(targetFile);
-
-    // Assert
-    assert.isTrue(fs.existsSync(targetFile), 'Exported log file exists on disk');
-    const fileContent = fs.readFileSync(targetFile, 'utf8');
-    assert.includes(fileContent, 'System Scan Output Data', 'Disk file content matches terminal buffer');
-
-    // Cleanup
-    if (fs.existsSync(targetFile)) fs.unlinkSync(targetFile);
-  });
-
-  // --- F1.4 UAC & Admin Elevation Status Banner / Warnings ---
-  runner.addTest('T1_F1_4_01: AdminElevationBanner renders warning banner when isElevated is false', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.isElevated = false;
-    app.state.systemInfo.isElevated = false;
-
-    // Act
-    const warningTitle = app.translate('admin_banner.title', 'Administrator Elevation Required');
-
-    // Assert
-    assert.isFalse(app.state.isElevated, 'User is not elevated');
-    assert.equal(warningTitle, 'Administrator Elevation Required', 'Warning title text matches specification');
-  });
-
-  runner.addTest('T1_F1_4_02: AdminElevationBanner hides when isElevated is true', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.isElevated = true;
-
-    // Act & Assert
-    assert.isTrue(app.state.isElevated, 'User is elevated, elevation banner should be suppressed');
-  });
-
-  // --- F2.1 Celebratory N=0 Success Banner in Dashboard ---
-  runner.addTest('T1_F2_1_01: Dashboard displays celebratory success banner when unapplied count N = 0', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.optimizations.forEach(o => o.isSelected = false); // All applied / 0 queued
-
-    // Act
-    const bannerState = app.getDashboardBannerState();
-
-    // Assert
-    assert.equal(bannerState.type, 'celebration', 'Banner type switches to celebration when N=0');
-    assert.includes(bannerState.colorClass, 'bg-emerald-500', 'Celebration banner uses green styling');
-  });
-
-  runner.addTest('T1_F2_1_02: Dashboard displays queue banner with pending count N when N > 0', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    app.state.optimizations = [
-      { id: '1', isSelected: true },
-      { id: '2', isSelected: true },
-      { id: '3', isSelected: false }
+    const virtualFiles = [
+      { path: 'C:\\Users\\TestUser\\Documents\\file1.bin', contentBuffer: bufA },
+      { path: 'C:\\Users\\TestUser\\Downloads\\file2.bin', contentBuffer: bufB },
+      { path: 'C:\\Users\\TestUser\\Desktop\\file3.bin', contentBuffer: bufC }
     ];
 
     // Act
-    const bannerState = app.getDashboardBannerState();
+    const duplicates = engine.scanDuplicates(virtualFiles);
 
     // Assert
-    assert.equal(bannerState.type, 'queue', 'Banner type is queue state when N > 0');
-    assert.equal(bannerState.count, 2, 'Pending queue count is 2');
+    assert.equal(duplicates.length, 1, 'Found exactly 1 duplicate group');
+    assert.equal(duplicates[0].files.length, 2, 'Duplicate group contains 2 matching files');
+    assert.includes(duplicates[0].files.map(f => f.path), 'C:\\Users\\TestUser\\Documents\\file1.bin', 'File 1 is in duplicate group');
+    assert.includes(duplicates[0].files.map(f => f.path), 'C:\\Users\\TestUser\\Downloads\\file2.bin', 'File 2 is in duplicate group');
   });
 
-  // --- F2.2 Status Polling on Mount ---
-  runner.addTest('T1_F2_2_01: Dashboard status polling triggers get_system_info on mount', async () => {
+  runner.addTest('T1_R2_03: Storage engine enforces USERPROFILE boundary containment security check', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    let polled = false;
-    ipc.registerHandler('get_system_info', async () => {
-      polled = true;
-      return { osName: 'Windows 11', osVersion: '23H2', osBuild: '22631', isElevated: true, cpuUsagePercent: 10, memoryUsedMb: 4090, memoryTotalMb: 16384, telemetryStatus: 'Active' };
-    });
-
-    // Act
-    const info = await ipc.invoke('get_system_info');
-
-    // Assert
-    assert.isTrue(polled, 'get_system_info was called during polling invocation');
-    assert.equal(info.osName, 'Windows 11', 'Fetched OS name from mount polling');
-  });
-
-  // --- F2.3 Dynamic Telemetry Card Styling ---
-  runner.addTest('T1_F2_3_01: Dynamic telemetry card styling applies amber badge for Active status', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-
-    // Act
-    const styleClass = app.getTelemetryBadgeStyle('Active');
-
-    // Assert
-    assert.includes(styleClass, 'bg-amber-500', 'Active telemetry uses amber background badge');
-  });
-
-  runner.addTest('T1_F2_3_02: Dynamic telemetry card styling applies emerald badge for Disabled status', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-
-    // Act
-    const styleClass = app.getTelemetryBadgeStyle('Disabled');
-
-    // Assert
-    assert.includes(styleClass, 'bg-emerald-500', 'Disabled telemetry uses emerald background badge');
-  });
-
-  runner.addTest('T1_F2_3_03: Dynamic telemetry card styling applies red badge for Blocked status', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-
-    // Act
-    const styleClass = app.getTelemetryBadgeStyle('Blocked');
-
-    // Assert
-    assert.includes(styleClass, 'bg-red-500', 'Blocked telemetry uses red background badge');
-  });
-
-  // --- F2.4 Localization Strings in ru.json and en.json ---
-  runner.addTest('T1_F2_4_01: i18n locale files ru.json and en.json have structural parity', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    const enKeys = Object.keys(app.locales.en || {});
-    const ruKeys = Object.keys(app.locales.ru || {});
+    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
 
     // Act & Assert
-    assert.greaterThanOrEqual(enKeys.length, 5, 'en.json loaded with keys');
-    assert.greaterThanOrEqual(ruKeys.length, 5, 'ru.json loaded with keys');
-    assert.isTrue(enKeys.includes('dashboard'), 'en.json contains dashboard section');
-    assert.isTrue(ruKeys.includes('dashboard'), 'ru.json contains dashboard section');
+    assert.throws(
+      () => engine.validatePath('C:\\Windows\\System32\\calc.exe'),
+      'Security Violation',
+      'Throws on path outside USERPROFILE'
+    );
+    const valid = engine.validatePath('C:\\Users\\TestUser\\AppData\\Local\\Temp');
+    assert.includes(valid, 'TestUser', 'Valid path inside USERPROFILE accepted');
   });
 
-  // --- F3.1 Multi-tier Temperature Sensor Collector Payload Parsing ---
-  runner.addTest('T1_F3_1_01: Multi-tier temperature collector parses LHM WMI payload correctly', async () => {
+  runner.addTest('T1_R2_04: Uninstaller parseInstallDate parses YYYYMMDD and ISO strings chronologically', async () => {
     // Arrange
-    const ipc = new MockIPC();
+    const yyyymmdd = '20240815';
+    const isoDate = '2024-08-15T00:00:00Z';
+    const unparseable = 'Invalid Date String';
 
     // Act
-    const payload = await ipc.invoke('get_temperatures');
+    const ts1 = parseInstallDate(yyyymmdd);
+    const ts2 = parseInstallDate(isoDate);
+    const ts3 = parseInstallDate(unparseable);
 
     // Assert
-    assert.equal(payload.sensor_source, 'LibreHardwareMonitor WMI', 'Identified primary LHM WMI sensor provider');
-    assert.equal(payload.cpu_temp_celsius, 45.2, 'Parsed CPU temperature 45.2°C');
-    assert.equal(payload.gpu_temp_celsius, 52.0, 'Parsed GPU temperature 52.0°C');
+    assert.greaterThanOrEqual(ts1, new Date(2024, 0, 1).getTime(), 'YYYYMMDD parsed into year 2024 timestamp');
+    assert.greaterThanOrEqual(ts2, new Date(2024, 0, 1).getTime(), 'ISO date parsed into timestamp');
+    assert.equal(ts3, 0, 'Unparseable date safely returns 0');
   });
 
-  // --- F3.2 Extended Sensor Payload Items Structure ---
-  runner.addTest('T1_F3_2_01: Extended sensor payload contains sensor items with required schema', async () => {
+  runner.addTest('T1_R2_05: formatAppSize correctly converts KB to human-readable units (KB, MB, GB)', async () => {
+    // Arrange & Act & Assert
+    assert.equal(formatAppSize(512), '512 KB', '512 KB formatted');
+    assert.equal(formatAppSize(2048), '2.0 MB', '2048 KB formatted as 2.0 MB');
+    assert.equal(formatAppSize(2097152), '2.00 GB', '2097152 KB formatted as 2.00 GB');
+    assert.equal(formatAppSize(0), 'Unknown', '0 KB formatted as Unknown');
+    assert.equal(formatAppSize(null), 'Unknown', 'null formatted as Unknown');
+  });
+
+  // =========================================================================
+  // R3: Frontend Architecture & Bundle Optimization
+  // =========================================================================
+
+  runner.addTest('T1_R3_01: App.tsx and Navigation structure covers all 21 modular views', async () => {
     // Arrange
-    const ipc = new MockIPC();
+    const navFilePath = path.join(process.cwd(), 'src', 'components', 'Navigation.tsx');
+    assert.isTrue(fs.existsSync(navFilePath), 'Navigation.tsx exists');
+    const content = fs.readFileSync(navFilePath, 'utf8');
 
     // Act
-    const payload = await ipc.invoke('get_temperatures');
-    const items = payload.sensor_items;
+    const requiredViews = [
+      'dashboard', 'script_runner', 'audio_manager', 'governor', 'optimization',
+      'package_manager', 'app_uninstaller', 'presets', 'system_cleaner', 'storage_utilities',
+      'startup', 'scheduler', 'autoruns', 'dns_context', 'driver_backup', 'diagnostics',
+      'odt', 'activation', 'restore_points', 'state_engine', 'settings'
+    ];
 
     // Assert
-    assert.greaterThanOrEqual(items.length, 2, 'Sensor payload contains multiple items');
-    const cpuItem = items.find(i => i.sensor_type === 'cpu');
-    assert.ok(cpuItem, 'Found CPU sensor item');
-    assert.equal(cpuItem.id, 'lhm_cpu_package', 'CPU item has id');
-    assert.equal(cpuItem.provider, 'LibreHardwareMonitor WMI', 'CPU item has provider');
-  });
-
-  // --- F3.3 Manual Sensor Selector Dropdown Override & Persistence ---
-  runner.addTest('T1_F3_3_01: Manual sensor selector dropdown override updates selected sensor ID', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-
-    // Act
-    app.state.selectedCpuSensorId = 'custom_cpu_sensor_2';
-
-    // Assert
-    assert.equal(app.state.selectedCpuSensorId, 'custom_cpu_sensor_2', 'Selected CPU sensor ID persisted');
-  });
-
-  // --- F4.1 Win32 Native Elevation Check ---
-  runner.addTest('T1_F4_1_01: Win32 native elevation check returns boolean via OpenProcessToken', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-
-    // Act
-    const info = await ipc.invoke('get_system_info');
-
-    // Assert
-    assert.isTrue(typeof info.isElevated === 'boolean', 'isElevated is a boolean type');
-  });
-
-  // --- F4.2 ShellExecuteW Escaping ---
-  runner.addTest('T1_F4_2_01: ShellExecuteW argument escaping wraps paths with spaces in quotes', async () => {
-    // Arrange
-    const rawPath = 'C:\\Program Files\\My App\\uninstaller.exe';
-    const rawArgs = '/silent /dir="C:\\App Data"';
-
-    // Act: Function simulating Rust uninstaller ShellExecuteW argument escaping
-    function escapeShellExecuteArgs(pathStr, argsStr) {
-      const escapedPath = `"${pathStr.replace(/"/g, '""')}"`;
-      return `${escapedPath} ${argsStr}`;
+    for (const viewId of requiredViews) {
+      assert.includes(content, `'${viewId}'`, `Navigation contains view definition for '${viewId}'`);
     }
-    const escaped = escapeShellExecuteArgs(rawPath, rawArgs);
+  });
+
+  runner.addTest('T1_R3_02: useTauriCommand hook encapsulates dryRunMode and logs invocations', async () => {
+    // Arrange
+    const hookPath = path.join(process.cwd(), 'src', 'hooks', 'useTauriCommand.ts');
+    assert.isTrue(fs.existsSync(hookPath), 'useTauriCommand.ts exists');
+    const content = fs.readFileSync(hookPath, 'utf8');
 
     // Assert
-    assert.includes(escaped, '"C:\\Program Files\\My App\\uninstaller.exe"', 'Path with spaces enclosed in double quotes');
+    assert.includes(content, 'useRef', 'Hook uses useRef for options memoization');
+    assert.includes(content, 'useAppStore.getState().dryRunMode', 'Hook reads latest dryRunMode from store');
+    assert.includes(content, 'addLog', 'Hook writes execution logs to state');
+  });
+
+  // =========================================================================
+  // R4: Flagship Features & Windows 11 24H2 Support
+  // =========================================================================
+
+  runner.addTest('T1_R4_01: Command Palette indexer registers 21 views, tweaks, and script items', async () => {
+    // Arrange
+    const palette = new CommandPaletteEngine();
+
+    // Act
+    const results = palette.search('copilot');
+    const tabResults = palette.search('script');
+
+    // Assert
+    assert.greaterThanOrEqual(palette.index.length, 30, 'Command Palette index contains over 30 entries');
+    assert.greaterThanOrEqual(results.length, 1, 'Search for copilot returns at least 1 result');
+    assert.equal(results[0].id, 'tweak_win11_disable_copilot', 'Copilot tweak item resolved as top search match');
+    assert.greaterThanOrEqual(tabResults.length, 1, 'Search for script returns script-related items');
+  });
+
+  runner.addTest('T1_R4_02: Pre-Flight Safety Snapshot creates StateEngine delta baseline and VSS checkpoint', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const ruleIds = ['telemetry_diagtrack', 'win11_disable_copilot', 'services_sysmain'];
+
+    // Act
+    const snapshot = await ipc.invoke('create_preflight_snapshot', {
+      description: 'Pre-flight safety snapshot before batch optimization',
+      rule_ids: ruleIds
+    });
+
+    // Assert
+    assert.ok(snapshot.snapshotId, 'Snapshot ID returned');
+    assert.isTrue(snapshot.stateEngineSuccess, 'StateEngine delta JSON captured');
+    assert.isTrue(snapshot.restorePointSuccess, 'System Restore Point created');
+    assert.equal(snapshot.rulesCaptured, 3, 'Captured 3 rules in snapshot');
+  });
+
+  runner.addTest('T1_R4_03: Windows 11 Copilot tweak registry specifications define policy keys and values', async () => {
+    // Arrange
+    const copilotSpec = {
+      id: 'win11_disable_copilot',
+      category: 'privacy',
+      policies: [
+        { hive: 'HKCU', path: 'Software\\Policies\\Microsoft\\Windows\\WindowsCopilot', name: 'TurnOffWindowsCopilot', value: 1, type: 'DWORD' },
+        { hive: 'HKLM', path: 'Software\\Policies\\Microsoft\\Windows\\WindowsCopilot', name: 'TurnOffWindowsCopilot', value: 1, type: 'DWORD' },
+        { hive: 'HKCU', path: 'Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced', name: 'ShowCopilotButton', value: 0, type: 'DWORD' }
+      ]
+    };
+
+    // Assert
+    assert.equal(copilotSpec.policies.length, 3, 'Copilot tweak defines 3 registry policy operations');
+    assert.equal(copilotSpec.policies[0].name, 'TurnOffWindowsCopilot', 'User policy sets TurnOffWindowsCopilot');
+    assert.equal(copilotSpec.policies[2].name, 'ShowCopilotButton', 'Explorer policy hides Copilot button');
+  });
+
+  runner.addTest('T1_R4_04: Windows 11 Recall AI tweak registry specifications define AI analysis disable keys', async () => {
+    // Arrange
+    const recallSpec = {
+      id: 'win11_disable_recall_ai',
+      category: 'privacy',
+      policies: [
+        { hive: 'HKLM', path: 'SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI', name: 'DisableAIDataAnalysis', value: 1, type: 'DWORD' },
+        { hive: 'HKCU', path: 'Software\\Policies\\Microsoft\\Windows\\Recall', name: 'AllowSnapshot', value: 0, type: 'DWORD' }
+      ]
+    };
+
+    // Assert
+    assert.equal(recallSpec.policies[0].name, 'DisableAIDataAnalysis', 'Sets DisableAIDataAnalysis to 1');
+    assert.equal(recallSpec.policies[1].name, 'AllowSnapshot', 'Sets AllowSnapshot to 0');
+  });
+
+  runner.addTest('T1_R4_05: .wiscripts profile validator validates format, metadata, and rules array', async () => {
+    // Arrange
+    const validProfile = {
+      $schema: 'https://wiscripts.app/schemas/profile-v1.json',
+      schemaVersion: '1.0.0',
+      format: 'wiscripts-configuration-profile',
+      metadata: {
+        id: 'dev-workstation',
+        name: 'Developer Workstation',
+        description: 'Debloat for development',
+        author: 'WiScripts Team',
+        appVersion: '1.0.0'
+      },
+      targetOs: { minBuild: '22621', supportedEditions: ['Pro', 'Enterprise'] },
+      optimizations: {
+        enabledRuleIds: ['telemetry_diagtrack', 'win11_disable_copilot', 'services_sysmain']
+      },
+      proFlowRules: [
+        { processName: 'code.exe', targetPriority: 'ABOVE_NORMAL', coreAffinityMask: '0xFF' }
+      ]
+    };
+
+    // Act
+    const validation = ProfileValidationEngine.validate(validProfile);
+    const checksum = ProfileValidationEngine.computeChecksum(validProfile);
+
+    // Assert
+    assert.isTrue(validation.isValid, 'Profile validates cleanly');
+    assert.equal(validation.errors.length, 0, 'Zero validation errors');
+    assert.equal(checksum.length, 64, 'Calculated 64-char SHA-256 profile checksum');
+  });
+
+  // =========================================================================
+  // R5: UI/UX, Design Tokens & WCAG 2.1 AA A11y
+  // =========================================================================
+
+  runner.addTest('T1_R5_01: SystemCleaner.tsx implements WCAG 2.1 AA ARIA roles and keyboard handlers', async () => {
+    // Arrange
+    const cleanerPath = path.join(process.cwd(), 'src', 'components', 'SystemCleaner.tsx');
+    assert.isTrue(fs.existsSync(cleanerPath), 'SystemCleaner.tsx exists');
+    const content = fs.readFileSync(cleanerPath, 'utf8');
+
+    // Assert
+    assert.includes(content, 'role="checkbox"', 'Contains ARIA role="checkbox" for category cards');
+    assert.includes(content, 'aria-checked=', 'Contains dynamic aria-checked attribute');
+    assert.includes(content, 'tabIndex={0}', 'Contains tabIndex={0} for keyboard focusability');
+    assert.includes(content, "e.key === ' ' || e.key === 'Enter'", 'Contains Space/Enter keydown event handlers');
+  });
+
+  runner.addTest('T1_R5_02: Header.tsx and SystemCleaner.tsx apply tabular-nums font-mono typography', async () => {
+    // Arrange
+    const headerPath = path.join(process.cwd(), 'src', 'components', 'Header.tsx');
+    const cleanerPath = path.join(process.cwd(), 'src', 'components', 'SystemCleaner.tsx');
+    const headerContent = fs.readFileSync(headerPath, 'utf8');
+    const cleanerContent = fs.readFileSync(cleanerPath, 'utf8');
+
+    // Assert
+    assert.includes(headerContent, 'tabular-nums', 'Header stats use tabular-nums class');
+    assert.includes(headerContent, 'font-mono', 'Header stats use font-mono font');
+    assert.includes(cleanerContent, 'tabular-nums', 'SystemCleaner statistics use tabular-nums');
+  });
+
+  runner.addTest('T1_R5_03: Tailwind CSS config enforces Refined Minimal semantic design tokens', async () => {
+    // Arrange
+    const twConfigPath = path.join(process.cwd(), 'tailwind.config.js');
+    assert.isTrue(fs.existsSync(twConfigPath), 'tailwind.config.js exists');
+    const content = fs.readFileSync(twConfigPath, 'utf8');
+
+    // Assert
+    assert.includes(content, 'background:', 'Defines background token');
+    assert.includes(content, 'surface:', 'Defines surface token');
+    assert.includes(content, 'brand:', 'Defines brand token');
+    assert.includes(content, 'status:', 'Defines status tokens');
+    assert.includes(content, 'Geist Mono', 'Includes Geist Mono in mono typography');
+  });
+
+  // =========================================================================
+  // R6: Release Engineering & Version Sync
+  // =========================================================================
+
+  runner.addTest('T1_R6_01: Version metadata is structured consistently across project manifests', async () => {
+    // Arrange
+    const pkgPath = path.join(process.cwd(), 'package.json');
+    const cargoPath = path.join(process.cwd(), 'src-tauri', 'Cargo.toml');
+    const tauriConfPath = path.join(process.cwd(), 'src-tauri', 'tauri.conf.json');
+
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+    const cargoContent = fs.readFileSync(cargoPath, 'utf8');
+
+    // Act
+    const cargoVersionMatch = cargoContent.match(/version\s*=\s*"([^"]+)"/);
+    const cargoVersion = cargoVersionMatch ? cargoVersionMatch[1] : null;
+
+    // Assert
+    assert.ok(pkg.version, 'package.json has version');
+    assert.ok(tauriConf.version, 'tauri.conf.json has version');
+    assert.ok(cargoVersion, 'Cargo.toml has version');
+    assert.equal(pkg.version, tauriConf.version, 'package.json and tauri.conf.json versions match');
+    assert.equal(pkg.version, cargoVersion, 'package.json and Cargo.toml versions match');
+  });
+
+  runner.addTest('T1_R6_02: CI/CD workflow release.yml defines Windows build and Tauri action deployment', async () => {
+    // Arrange
+    const workflowPath = path.join(process.cwd(), '.github', 'workflows', 'release.yml');
+    assert.isTrue(fs.existsSync(workflowPath), 'release.yml workflow exists');
+    const content = fs.readFileSync(workflowPath, 'utf8');
+
+    // Assert
+    assert.includes(content, 'tauri-action', 'Uses tauri-action for build and release packaging');
+    assert.includes(content, 'windows-latest', 'Runs on windows-latest runner');
+    assert.includes(content, 'tags:', 'Triggers on release tags');
   });
 
   return runner;

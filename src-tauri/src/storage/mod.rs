@@ -200,10 +200,12 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
     }
 
     // Filter candidate files that match in both size AND 4KB partial hash
-    let full_hash_candidates: Vec<(u64, PathBuf)> = partial_map
+    let full_hash_candidates: Vec<(u64, String, PathBuf)> = partial_map
         .into_iter()
         .filter(|(_, files)| files.len() > 1)
-        .flat_map(|((sz, _), files)| files.into_iter().map(move |p| (sz, p)))
+        .flat_map(|((sz, partial_hash), files)| {
+            files.into_iter().map(move |p| (sz, partial_hash.clone(), p))
+        })
         .collect();
 
     log::info!(
@@ -211,12 +213,20 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
         full_hash_candidates.len()
     );
 
-    // Phase 2: Compute full SHA-256 in parallel for files matching size AND partial hash
+    // Phase 2: Compute full SHA-256 in parallel for files matching size AND partial hash.
+    // Small-file optimization: For files <= 4096 bytes, directly reuse the 4KB header hash
+    // without re-reading the file from disk.
     let hashed_files: Vec<(u64, String, PathBuf)> = full_hash_candidates
         .into_par_iter()
-        .filter_map(|(sz, path)| match compute_file_hash(&path) {
-            Ok(hash) => Some((sz, hash, path)),
-            Err(_) => None,
+        .filter_map(|(sz, partial_hash, path)| {
+            if sz <= 4096 {
+                Some((sz, partial_hash, path))
+            } else {
+                match compute_file_hash(&path) {
+                    Ok(hash) => Some((sz, hash, path)),
+                    Err(_) => None,
+                }
+            }
         })
         .collect();
 
@@ -559,5 +569,41 @@ mod tests {
         let full_small = compute_file_hash(temp_small.path()).unwrap();
 
         assert_eq!(partial_small, full_small);
+    }
+
+    #[test]
+    fn test_2stage_storage_hasher_small_file_reuse_and_large_file_collision() {
+        let dir = tempdir().expect("failed to create temp dir");
+
+        // Small files (<= 4096 bytes)
+        let small1_path = dir.path().join("small1.bin");
+        let small2_path = dir.path().join("small2.bin");
+        let small_content = vec![0x42u8; 512];
+        std::fs::write(&small1_path, &small_content).unwrap();
+        std::fs::write(&small2_path, &small_content).unwrap();
+
+        // Large files with identical 4KB header but different bodies (> 4096 bytes)
+        let large1_path = dir.path().join("large1.bin");
+        let large2_path = dir.path().join("large2.bin");
+        let mut large_content1 = vec![0xAAu8; 8192];
+        let mut large_content2 = vec![0xAAu8; 8192];
+        // Modify bytes after 4096 in large2
+        large_content2[5000] = 0xBB;
+        std::fs::write(&large1_path, &large_content1).unwrap();
+        std::fs::write(&large2_path, &large_content2).unwrap();
+
+        // 1. Verify small file partial hash == full hash
+        let small1_part = compute_partial_file_hash(&small1_path).unwrap();
+        let small1_full = compute_file_hash(&small1_path).unwrap();
+        assert_eq!(small1_part, small1_full, "For files <= 4096 bytes, partial hash must match full hash");
+
+        // 2. Verify large files have same partial hash (first 4KB match) but different full hashes
+        let large1_part = compute_partial_file_hash(&large1_path).unwrap();
+        let large2_part = compute_partial_file_hash(&large2_path).unwrap();
+        assert_eq!(large1_part, large2_part, "4KB headers match, so partial hashes must match");
+
+        let large1_full = compute_file_hash(&large1_path).unwrap();
+        let large2_full = compute_file_hash(&large2_path).unwrap();
+        assert_ne!(large1_full, large2_full, "Full hashes must differ due to differing trailing bytes");
     }
 }

@@ -1,17 +1,21 @@
 /**
- * E2E Master Test Suite Runner for WiScripts_Windows v0.9.9
- * Executes Tier 1, Tier 2, Tier 3, and Tier 4 test suites.
+ * WiScripts Windows v1.0 Production Release — Comprehensive E2E Master Test Runner
+ * Executes Tier 1 (Feature Coverage), Tier 2 (Boundary & Edge), Tier 3 (Cross-Feature Interactions),
+ * and Tier 4 (Real-World Scenarios) test suites with full diagnostics and exit code reporting.
  */
 
+import path from 'path';
+import { pathToFileURL } from 'url';
 import { buildTier1Suite } from './tier1_feature_coverage.test.js';
 import { buildTier2Suite } from './tier2_boundary_edge.test.js';
 import { buildTier3Suite } from './tier3_cross_feature.test.js';
 import { buildTier4Suite } from './tier4_real_world.test.js';
 
-async function runAllE2ETests() {
+export async function runAllE2ETests() {
   console.log(`================================================================`);
-  console.log(` WiScripts_Windows v0.9.9 — Comprehensive E2E Test Runner`);
+  console.log(` WiScripts Windows v1.0.0 — Comprehensive E2E Test Runner`);
   console.log(` Date: ${new Date().toISOString()}`);
+  console.log(` Architecture: Rust Tauri v2 + React 18 + TypeScript + Refined Minimal`);
   console.log(`================================================================\n`);
 
   const suites = [
@@ -39,11 +43,11 @@ async function runAllE2ETests() {
   const overallDuration = Date.now() - overallStart;
 
   console.log(`================================================================`);
-  console.log(` OVERALL E2E TEST SUITE RESULTS`);
+  console.log(` OVERALL E2E TEST SUITE RESULTS (v1.0.0 PRODUCTION RELEASE)`);
   console.log(`================================================================`);
   for (const res of suiteResults) {
     const status = res.failed === 0 ? '✓ PASS' : '✗ FAIL';
-    console.log(`  [${status}] ${res.suiteName.padEnd(38)} : ${res.passed}/${res.total} passed`);
+    console.log(`  [${status}] ${res.suiteName.padEnd(42)} : ${res.passed}/${res.total} passed`);
   }
   console.log(`----------------------------------------------------------------`);
   console.log(` TOTAL TEST CASES  : ${grandTotal}`);
@@ -57,11 +61,14 @@ async function runAllE2ETests() {
     process.exit(1);
   } else {
     console.log(`SUCCESS: All ${grandTotal} E2E tests passed cleanly with exit code 0!`);
-    process.exit(0);
+    return { grandTotal, grandPassed, grandFailed, overallDuration };
   }
 }
 
-runAllE2ETests().catch((err) => {
-  console.error('Fatal Test Runner Error:', err);
-  process.exit(1);
-});
+// Auto-run if executed directly
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  runAllE2ETests().catch((err) => {
+    console.error('Fatal Test Runner Error:', err);
+    process.exit(1);
+  });
+}

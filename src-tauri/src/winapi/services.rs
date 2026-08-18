@@ -219,6 +219,149 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+pub fn query_service_start_type(service_name: &str) -> Result<u32, String> {
+    let name_u16 = to_u16_vec(service_name);
+
+    unsafe {
+        let scm_handle = OpenSCManagerW(
+            PCWSTR::null(),
+            PCWSTR::null(),
+            windows::Win32::System::Services::SC_MANAGER_CONNECT,
+        )
+        .map_err(|e| {
+            format!(
+                "OpenSCManagerW failed for service '{}': {:?}",
+                service_name, e
+            )
+        })?;
+
+        let svc_handle = match OpenServiceW(
+            scm_handle,
+            PCWSTR(name_u16.as_ptr()),
+            SERVICE_QUERY_CONFIG,
+        ) {
+            Ok(h) => h,
+            Err(e) => {
+                let _ = CloseServiceHandle(scm_handle);
+                return Err(format!(
+                    "OpenServiceW failed for service '{}': {:?}",
+                    service_name, e
+                ));
+            }
+        };
+
+        let mut bytes_needed = 0u32;
+        let _ = QueryServiceConfigW(svc_handle, None, 0, &mut bytes_needed);
+        if bytes_needed == 0 {
+            let _ = CloseServiceHandle(svc_handle);
+            let _ = CloseServiceHandle(scm_handle);
+            return Err(format!(
+                "QueryServiceConfigW returned 0 bytes needed for '{}'",
+                service_name
+            ));
+        }
+
+        let mut config_buf = vec![0u64; (bytes_needed as usize).div_ceil(8)];
+        let config_ptr =
+            config_buf.as_mut_ptr() as *mut windows::Win32::System::Services::QUERY_SERVICE_CONFIGW;
+
+        let query_res = QueryServiceConfigW(
+            svc_handle,
+            Some(config_ptr),
+            bytes_needed,
+            &mut bytes_needed,
+        );
+
+        let _ = CloseServiceHandle(svc_handle);
+        let _ = CloseServiceHandle(scm_handle);
+
+        if let Err(e) = query_res {
+            return Err(format!(
+                "QueryServiceConfigW failed for service '{}': {:?}",
+                service_name, e
+            ));
+        }
+
+        let start_type = (*config_ptr).dwStartType.0;
+        Ok(start_type)
+    }
+}
+
+#[cfg(windows)]
+pub fn is_service_disabled(service_name: &str) -> Result<bool, String> {
+    match query_service_start_type(service_name) {
+        Ok(start_type) => Ok(start_type == 4),
+        Err(e) => {
+            if e.contains("1060") || e.contains("0x80070424") || e.to_lowercase().contains("does not exist") {
+                Ok(true)
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn query_service_status(service_name: &str) -> Result<u32, String> {
+    let name_u16 = to_u16_vec(service_name);
+
+    unsafe {
+        let scm_handle = OpenSCManagerW(
+            PCWSTR::null(),
+            PCWSTR::null(),
+            windows::Win32::System::Services::SC_MANAGER_CONNECT,
+        )
+        .map_err(|e| {
+            format!(
+                "OpenSCManagerW failed for service '{}': {:?}",
+                service_name, e
+            )
+        })?;
+
+        let svc_handle = match OpenServiceW(
+            scm_handle,
+            PCWSTR(name_u16.as_ptr()),
+            SERVICE_QUERY_STATUS,
+        ) {
+            Ok(h) => h,
+            Err(e) => {
+                let _ = CloseServiceHandle(scm_handle);
+                return Err(format!(
+                    "OpenServiceW failed for service '{}': {:?}",
+                    service_name, e
+                ));
+            }
+        };
+
+        let mut status_process = SERVICE_STATUS_PROCESS::default();
+        let mut bytes_needed = 0u32;
+        let status_slice = std::slice::from_raw_parts_mut(
+            (&mut status_process as *mut SERVICE_STATUS_PROCESS) as *mut u8,
+            std::mem::size_of::<SERVICE_STATUS_PROCESS>(),
+        );
+
+        let status_res = QueryServiceStatusEx(
+            svc_handle,
+            SC_STATUS_PROCESS_INFO,
+            Some(status_slice),
+            &mut bytes_needed,
+        );
+
+        let _ = CloseServiceHandle(svc_handle);
+        let _ = CloseServiceHandle(scm_handle);
+
+        if let Err(e) = status_res {
+            return Err(format!(
+                "QueryServiceStatusEx failed for service '{}': {:?}",
+                service_name, e
+            ));
+        }
+
+        Ok(status_process.dwCurrentState.0)
+    }
+}
+
 #[cfg(not(windows))]
 pub fn configure_service(_service_name: &str, _start_type: u32) -> Result<(), String> {
     Err("WinAPI Service operations are only supported on Windows".to_string())
@@ -226,5 +369,20 @@ pub fn configure_service(_service_name: &str, _start_type: u32) -> Result<(), St
 
 #[cfg(not(windows))]
 pub fn stop_service(_service_name: &str) -> Result<(), String> {
+    Err("WinAPI Service operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn query_service_start_type(_service_name: &str) -> Result<u32, String> {
+    Err("WinAPI Service operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn is_service_disabled(_service_name: &str) -> Result<bool, String> {
+    Err("WinAPI Service operations are only supported on Windows".to_string())
+}
+
+#[cfg(not(windows))]
+pub fn query_service_status(_service_name: &str) -> Result<u32, String> {
     Err("WinAPI Service operations are only supported on Windows".to_string())
 }

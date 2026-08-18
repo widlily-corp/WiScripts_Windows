@@ -1,29 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from './store/useAppStore';
 import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
-import { Dashboard } from './components/Dashboard';
-import { ScriptRunnerView } from './components/ScriptRunnerView';
-import { AudioView } from './components/AudioView';
-import { GovernorView } from './views/GovernorView';
-import { OptimizationView } from './components/OptimizationView';
-import { PackageManagerView } from './components/PackageManagerView';
-import { UninstallerView } from './views/UninstallerView';
-import { PresetsView } from './components/PresetsView';
-import { SystemCleaner } from './components/SystemCleaner';
-import { StorageUtilities } from './components/StorageUtilities';
-import { DnsContextMenuView } from './components/DnsContextMenuView';
-import { DriverBackupView } from './components/DriverBackupView';
-import { OdtView } from './components/OdtView';
-import { MasView } from './components/MasView';
-import { DiagnosticsView } from './components/DiagnosticsView';
-import { SettingsView } from './components/SettingsView';
-import { RestorePointsView } from './components/RestorePointsView';
-import { StateEngineView } from './views/StateEngineView';
-import { StartupView } from './components/StartupView';
-import { SchedulerView } from './components/SchedulerView';
-import { AutorunsView } from './views/AutorunsView';
+import { ViewSkeleton } from './components/ViewSkeleton';
 import { SafetyConfirmationModal } from './components/SafetyConfirmationModal';
 import { ExecutionProgressModal } from './components/ExecutionProgressModal';
 import { ReleaseNotesModal } from './components/ReleaseNotesModal';
@@ -32,9 +12,73 @@ import { ToastContainer } from './components/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { SystemInfo } from './types';
 
+// Route-level code-splitting: Lazy-load heavy views to minimize initial bundle footprint
+const Dashboard = lazy(() =>
+  import('./components/Dashboard').then((m) => ({ default: m.Dashboard }))
+);
+const ScriptRunnerView = lazy(() =>
+  import('./components/ScriptRunnerView').then((m) => ({ default: m.ScriptRunnerView }))
+);
+const AudioView = lazy(() =>
+  import('./components/AudioView').then((m) => ({ default: m.AudioView }))
+);
+const GovernorView = lazy(() =>
+  import('./views/GovernorView').then((m) => ({ default: m.GovernorView }))
+);
+const OptimizationView = lazy(() =>
+  import('./components/OptimizationView').then((m) => ({ default: m.OptimizationView }))
+);
+const PackageManagerView = lazy(() =>
+  import('./components/PackageManagerView').then((m) => ({ default: m.PackageManagerView }))
+);
+const UninstallerView = lazy(() =>
+  import('./views/UninstallerView').then((m) => ({ default: m.UninstallerView }))
+);
+const PresetsView = lazy(() =>
+  import('./components/PresetsView').then((m) => ({ default: m.PresetsView }))
+);
+const SystemCleaner = lazy(() =>
+  import('./components/SystemCleaner').then((m) => ({ default: m.SystemCleaner }))
+);
+const StorageUtilities = lazy(() =>
+  import('./components/StorageUtilities').then((m) => ({ default: m.StorageUtilities }))
+);
+const StartupView = lazy(() =>
+  import('./components/StartupView').then((m) => ({ default: m.StartupView }))
+);
+const SchedulerView = lazy(() =>
+  import('./components/SchedulerView').then((m) => ({ default: m.SchedulerView }))
+);
+const AutorunsView = lazy(() =>
+  import('./views/AutorunsView').then((m) => ({ default: m.AutorunsView }))
+);
+const DnsContextMenuView = lazy(() =>
+  import('./components/DnsContextMenuView').then((m) => ({ default: m.DnsContextMenuView }))
+);
+const DriverBackupView = lazy(() =>
+  import('./components/DriverBackupView').then((m) => ({ default: m.DriverBackupView }))
+);
+const DiagnosticsView = lazy(() =>
+  import('./components/DiagnosticsView').then((m) => ({ default: m.DiagnosticsView }))
+);
+const OdtView = lazy(() =>
+  import('./components/OdtView').then((m) => ({ default: m.OdtView }))
+);
+const MasView = lazy(() =>
+  import('./components/MasView').then((m) => ({ default: m.MasView }))
+);
+const RestorePointsView = lazy(() =>
+  import('./components/RestorePointsView').then((m) => ({ default: m.RestorePointsView }))
+);
+const StateEngineView = lazy(() =>
+  import('./views/StateEngineView').then((m) => ({ default: m.StateEngineView }))
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+
 export function App() {
   const activeTab = useAppStore((s) => s.activeTab);
-  const isExecuting = useAppStore((s) => s.isExecuting);
   const odtConfig = useAppStore((s) => s.odtConfig);
   const setGeneratedXml = useAppStore((s) => s.setGeneratedXml);
   const addLog = useAppStore((s) => s.addLog);
@@ -91,27 +135,29 @@ export function App() {
 
         <main className="flex-1 overflow-auto">
           <ErrorBoundary>
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'script_runner' && <ScriptRunnerView />}
-            {activeTab === 'audio_manager' && <AudioView />}
-            {activeTab === 'governor' && <GovernorView />}
-            {activeTab === 'optimization' && <OptimizationView />}
-            {activeTab === 'package_manager' && <PackageManagerView />}
-            {activeTab === 'app_uninstaller' && <UninstallerView />}
-            {activeTab === 'presets' && <PresetsView />}
-            {activeTab === 'system_cleaner' && <SystemCleaner />}
-            {activeTab === 'storage_utilities' && <StorageUtilities />}
-            {activeTab === 'startup' && <StartupView />}
-            {activeTab === 'scheduler' && <SchedulerView />}
-            {activeTab === 'autoruns' && <AutorunsView />}
-            {activeTab === 'dns_context' && <DnsContextMenuView />}
-            {activeTab === 'driver_backup' && <DriverBackupView />}
-            {activeTab === 'diagnostics' && <DiagnosticsView />}
-            {activeTab === 'odt' && <OdtView />}
-            {activeTab === 'activation' && <MasView />}
-            {activeTab === 'restore_points' && <RestorePointsView />}
-            {activeTab === 'state_engine' && <StateEngineView />}
-            {activeTab === 'settings' && <SettingsView />}
+            <Suspense fallback={<ViewSkeleton />}>
+              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'script_runner' && <ScriptRunnerView />}
+              {activeTab === 'audio_manager' && <AudioView />}
+              {activeTab === 'governor' && <GovernorView />}
+              {activeTab === 'optimization' && <OptimizationView />}
+              {activeTab === 'package_manager' && <PackageManagerView />}
+              {activeTab === 'app_uninstaller' && <UninstallerView />}
+              {activeTab === 'presets' && <PresetsView />}
+              {activeTab === 'system_cleaner' && <SystemCleaner />}
+              {activeTab === 'storage_utilities' && <StorageUtilities />}
+              {activeTab === 'startup' && <StartupView />}
+              {activeTab === 'scheduler' && <SchedulerView />}
+              {activeTab === 'autoruns' && <AutorunsView />}
+              {activeTab === 'dns_context' && <DnsContextMenuView />}
+              {activeTab === 'driver_backup' && <DriverBackupView />}
+              {activeTab === 'diagnostics' && <DiagnosticsView />}
+              {activeTab === 'odt' && <OdtView />}
+              {activeTab === 'activation' && <MasView />}
+              {activeTab === 'restore_points' && <RestorePointsView />}
+              {activeTab === 'state_engine' && <StateEngineView />}
+              {activeTab === 'settings' && <SettingsView />}
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
@@ -123,4 +169,3 @@ export function App() {
     </div>
   );
 }
-

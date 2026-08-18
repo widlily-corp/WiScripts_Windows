@@ -2,12 +2,19 @@ import { useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 
-interface UseTauriCommandOptions<TResult> {
+export interface UseTauriCommandOptions<TResult> {
   onSuccess?: (data: TResult) => void;
   onError?: (error: string) => void;
 }
 
-export function useTauriCommand<TResult = unknown, TArgs extends Record<string, unknown> = Record<string, unknown>>(
+/**
+ * Custom Tauri IPC hook optimized with useRef memoization and non-reactive store access.
+ * Eliminates redundant component re-renders when global settings (like dryRunMode) change.
+ */
+export function useTauriCommand<
+  TResult = unknown,
+  TArgs extends Record<string, unknown> = Record<string, unknown>
+>(
   commandName: string,
   options: UseTauriCommandOptions<TResult> = {}
 ) {
@@ -15,18 +22,23 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const dryRunMode = useAppStore((s) => s.dryRunMode);
-  const addLog = useAppStore((s) => s.addLog);
-
+  // Memoize options and handlers with useRef to prevent execution callback invalidation
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const commandNameRef = useRef(commandName);
+  commandNameRef.current = commandName;
 
   const execute = useCallback(
     async (args?: TArgs): Promise<TResult | null> => {
       setIsLoading(true);
       setError(null);
 
+      // Query reactive settings directly via getState() to prevent hook re-subscriptions
       const currentDryRun = useAppStore.getState().dryRunMode;
+      const addLog = useAppStore.getState().addLog;
+      const activeCommand = commandNameRef.current;
+
       const payload = {
         ...(args || {}),
         dryRun: currentDryRun,
@@ -34,16 +46,16 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
 
       addLog({
         level: 'cmd',
-        message: `Invoking IPC command: ${commandName} (dryRun: ${currentDryRun})`,
+        message: `Invoking IPC command: ${activeCommand} (dryRun: ${currentDryRun})`,
         commandExecuted: JSON.stringify(payload),
       });
 
       try {
-        const result = await invoke<TResult>(commandName, payload);
+        const result = await invoke<TResult>(activeCommand, payload);
         setData(result);
         addLog({
           level: 'info',
-          message: `IPC command ${commandName} completed successfully.`,
+          message: `IPC command ${activeCommand} completed successfully.`,
         });
         optionsRef.current.onSuccess?.(result);
         return result;
@@ -52,7 +64,7 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
         setError(errMessage);
         addLog({
           level: 'error',
-          message: `IPC command ${commandName} failed: ${errMessage}`,
+          message: `IPC command ${activeCommand} failed: ${errMessage}`,
         });
         optionsRef.current.onError?.(errMessage);
         return null;
@@ -60,7 +72,7 @@ export function useTauriCommand<TResult = unknown, TArgs extends Record<string, 
         setIsLoading(false);
       }
     },
-    [commandName, dryRunMode, addLog]
+    [] // Stable reference across all component render cycles
   );
 
   return { data, isLoading, error, execute };

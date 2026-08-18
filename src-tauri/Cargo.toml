@@ -1,6 +1,6 @@
 [package]
 name = "wiscripts_windows"
-version = "0.9.9"
+version = "1.0.0"
 description = "WiScripts Windows Desktop Application"
 authors = ["WiScripts Team"]
 edition = "2021"

@@ -1,7 +1,7 @@
 # WiScripts Windows — Technical Architecture Specification
 
 **Document Version:** 1.0.0  
-**Target Release:** WiScripts Windows v0.9.9 / v1.0.0-RC  
+**Target Release:** WiScripts Windows v1.0.0 (Production Release)  
 **Author:** Principal System Architect & Elite Product Designer  
 **Classification:** Core System Architecture
 

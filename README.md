@@ -1,6 +1,6 @@
 # WiScripts Windows 🚀
 
-[![Release](https://img.shields.io/badge/release-v0.9.9-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
+[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-v2.0-orange.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://react.dev/)
@@ -11,9 +11,19 @@
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Features (v1.0.0 Production Release)
 
-### 📜 Script Runner & Streaming Engine (v0.9.9)
+### 🌐 Online Script Library & GitHub Sync (`scripts_lib`) (v1.0)
+- **Community & Verified Catalog:** Direct integration with `scripts_lib/` repository containing 15+ curated PowerShell automation scripts.
+- **Smart Synchronization Engine:** Low-overhead HTTP client with `ETag / If-None-Match` caching and SHA-256 integrity verification.
+- **Dual-Tab Script Runner:** Switch seamlessly between "Editor & Terminal" and "Online Library" with instant search, category filters, and risk badges.
+- **1-Click Actions & Safe Preview:** Inspect verified script source code, load directly into the editor, or run immediately with live streaming output.
+
+### ⚡ Command Palette (`Ctrl + K`) & Pre-Flight Safety (v1.0)
+- **Global Command Palette:** Instant fuzzy search across all 21 modules, 70+ tweaks, online scripts, and installed applications.
+- **Automated Pre-Flight Safety Snapshots:** Automatic creation of VSS System Restore Points and StateEngine transactional snapshots before batch optimizations.
+- **Windows 11 24H2 Ready:** Advanced tweaks for disabling Windows Copilot, Recall AI Snapshots, and Start Menu telemetry.
+- **Native Win32 SCM Engine:** Microsecond service querying via native Win32 Service Control Manager APIs without PowerShell process overhead.
 - **PowerShell & CMD Execution:** Execute custom `.ps1`, `.bat`, and `.cmd` scripts in elevated administrator context.
 - **Real-Time Live Streaming:** Low-latency IPC streaming of `stdout` and `stderr` directly to an interactive terminal viewer.
 - **Isolated Temp Execution:** Automated script sanitization and execution in `%LOCALAPPDATA%\WiScripts\TempScripts\` with automatic drop cleanup.

@@ -75,7 +75,7 @@ export function Navigation() {
           <div>
             <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
             <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              {t('nav.app_version', { version: appVersion || '0.9.9' })}
+              {t('nav.app_version', { version: appVersion || '1.0.0' })}
             </span>
           </div>
         </div>

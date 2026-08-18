@@ -36,7 +36,7 @@ export interface UpdaterSlice {
 }
 
 export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = (set, get) => ({
-  appVersion: '1.0.0',
+  appVersion: '1.1.0',
   setAppVersion: (ver) => set({ appVersion: ver }),
   fetchAppVersion: async () => {
     try {

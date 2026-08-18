@@ -53,6 +53,54 @@ pub fn compute_sha256(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Verifies script payload against expected SHA-256 hash.
+/// Supports both exact binary match and cross-platform newline / UTF-8 BOM normalization.
+pub fn verify_script_hash(bytes: &[u8], expected_hash: &str) -> bool {
+    let expected = expected_hash.trim();
+    if expected.is_empty() {
+        return false;
+    }
+
+    // 1. Exact raw binary match
+    let direct_hash = compute_sha256(bytes);
+    if direct_hash.eq_ignore_ascii_case(expected) {
+        return true;
+    }
+
+    // 2. Cross-platform text normalization (LF / CRLF / BOM variations)
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let clean_text = text.strip_prefix('\u{feff}').unwrap_or(text);
+
+        // Normalized LF (Unix / Git Blob standard)
+        let lf_text = clean_text.replace("\r\n", "\n").replace('\r', "\n");
+        if compute_sha256(lf_text.as_bytes()).eq_ignore_ascii_case(expected) {
+            return true;
+        }
+
+        // Normalized CRLF (Windows standard)
+        let crlf_text = lf_text.replace('\n', "\r\n");
+        if compute_sha256(crlf_text.as_bytes()).eq_ignore_ascii_case(expected) {
+            return true;
+        }
+
+        // UTF-8 BOM + CRLF
+        let mut bom_crlf = vec![0xEF, 0xBB, 0xBF];
+        bom_crlf.extend_from_slice(crlf_text.as_bytes());
+        if compute_sha256(&bom_crlf).eq_ignore_ascii_case(expected) {
+            return true;
+        }
+
+        // UTF-8 BOM + LF
+        let mut bom_lf = vec![0xEF, 0xBB, 0xBF];
+        bom_lf.extend_from_slice(lf_text.as_bytes());
+        if compute_sha256(&bom_lf).eq_ignore_ascii_case(expected) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Strictly validates and normalizes a relative script path from a manifest.
 /// Rejects:
 /// - Empty or whitespace-only paths
@@ -453,16 +501,14 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
 
         if cached_script_path.exists() {
             if let Ok(bytes) = fs::read(&cached_script_path) {
-                let hash = compute_sha256(&bytes);
-                if hash.eq_ignore_ascii_case(&script.sha256) {
+                if verify_script_hash(&bytes, &script.sha256) {
                     needs_download = false;
                 } else {
                     log::warn!(
-                        "[SyncEngine] Script '{}' hash mismatch in cache (got {}, expected {}). Re-fetching.",
-                        script.id,
-                        hash,
-                        script.sha256
+                        "[SyncEngine] Script '{}' hash mismatch in cache. Re-fetching.",
+                        script.id
                     );
+                    let _ = fs::remove_file(&cached_script_path);
                 }
             }
         }
@@ -475,8 +521,7 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
                 let local_path = local_dir.join(&rel_path);
                 if local_path.exists() {
                     if let Ok(bytes) = fs::read(&local_path) {
-                        let hash = compute_sha256(&bytes);
-                        if hash.eq_ignore_ascii_case(&script.sha256) {
+                        if verify_script_hash(&bytes, &script.sha256) {
                             script_bytes = Some(bytes);
                         }
                     }
@@ -498,10 +543,10 @@ pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest,
                 match client.get(&script_url).send().await {
                     Ok(resp) if resp.status().is_success() => {
                         if let Ok(bytes) = resp.bytes().await {
-                            let hash = compute_sha256(&bytes);
-                            if hash.eq_ignore_ascii_case(&script.sha256) {
+                            if verify_script_hash(&bytes, &script.sha256) {
                                 script_bytes = Some(bytes.to_vec());
                             } else {
+                                let hash = compute_sha256(&bytes);
                                 log::error!(
                                     "[SyncEngine] Downloaded script '{}' failed SHA-256 verification (got {}, expected {})",
                                     script.id,
@@ -566,19 +611,17 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
     let cached_path = cache_dir.join("scripts").join(&rel_path);
 
     if cached_path.exists() {
-        let bytes = fs::read(&cached_path)
-            .map_err(|e| AppError::Io(format!("Failed to read cached script file: {}", e)))?;
-        let hash = compute_sha256(&bytes);
-        if hash.eq_ignore_ascii_case(&entry.sha256) {
-            return String::from_utf8(bytes)
-                .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
-        } else {
-            log::warn!(
-                "[SyncEngine] Cached script '{}' hash mismatch (got {}, expected {}). Re-syncing.",
-                script_id,
-                hash,
-                entry.sha256
-            );
+        if let Ok(bytes) = fs::read(&cached_path) {
+            if verify_script_hash(&bytes, &entry.sha256) {
+                return String::from_utf8(bytes)
+                    .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
+            } else {
+                log::warn!(
+                    "[SyncEngine] Cached script '{}' hash mismatch. Pruning stale cache and re-syncing.",
+                    script_id
+                );
+                let _ = fs::remove_file(&cached_path);
+            }
         }
     }
 
@@ -586,17 +629,16 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
     if let Some(local_dir) = get_local_project_scripts_dir() {
         let local_script_path = local_dir.join(&rel_path);
         if local_script_path.exists() {
-            let bytes = fs::read(&local_script_path)
-                .map_err(|e| AppError::Io(format!("Failed to read local script file: {}", e)))?;
-            let hash = compute_sha256(&bytes);
-            if hash.eq_ignore_ascii_case(&entry.sha256) {
-                // Cache it
-                if let Some(parent) = cached_path.parent() {
-                    let _ = fs::create_dir_all(parent);
+            if let Ok(bytes) = fs::read(&local_script_path) {
+                if verify_script_hash(&bytes, &entry.sha256) {
+                    // Cache it
+                    if let Some(parent) = cached_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    let _ = fs::write(&cached_path, &bytes);
+                    return String::from_utf8(bytes)
+                        .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
                 }
-                let _ = fs::write(&cached_path, &bytes);
-                return String::from_utf8(bytes)
-                    .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
             }
         }
     }
@@ -606,11 +648,11 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
     if cached_path.exists() {
         let bytes = fs::read(&cached_path)
             .map_err(|e| AppError::Io(format!("Failed to read cached script file after sync: {}", e)))?;
-        let hash = compute_sha256(&bytes);
-        if hash.eq_ignore_ascii_case(&entry.sha256) {
+        if verify_script_hash(&bytes, &entry.sha256) {
             return String::from_utf8(bytes)
                 .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
         }
+        let hash = compute_sha256(&bytes);
         return Err(AppError::Execution(format!(
             "SHA-256 integrity verification failed for script '{}' (expected {}, got {})",
             script_id, entry.sha256, hash

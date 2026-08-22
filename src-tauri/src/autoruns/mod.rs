@@ -971,7 +971,7 @@ mod tests {
     fn test_toggle_autorun_entry_valid() {
         let res = toggle_autorun_entry("reg_hkcu_run_discord".to_string(), false);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), false);
+        assert!(!res.unwrap());
     }
 
     #[test]

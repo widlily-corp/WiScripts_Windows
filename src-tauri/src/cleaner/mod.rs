@@ -327,6 +327,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .share_mode(0)
             .open(&locked_file_path)
             .expect("Failed to create locked file");

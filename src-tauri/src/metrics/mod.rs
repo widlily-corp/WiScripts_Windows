@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn test_collect_temperatures_does_not_panic() {
         let payload = collect_temperatures().expect("Temperature collection should not fail");
-        assert!(payload.sensor_source.len() > 0);
+        assert!(!payload.sensor_source.is_empty());
     }
 
     #[test]

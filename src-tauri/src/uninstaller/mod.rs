@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     fn test_format_shellexecute_args() {
-        let args = vec![
+        let args = [
             "/S".to_string(),
             "/dir=C:\\Program Files\\App".to_string(),
             "/name=\"My App\"".to_string(),

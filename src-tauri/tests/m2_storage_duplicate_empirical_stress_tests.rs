@@ -114,7 +114,7 @@ fn test_exact_boundary_transition_4096_vs_4097_bytes() {
 #[test]
 fn test_storage_duplicate_grouping_and_savings_sort_order() {
     // Test duplicate group sorting logic: savings = size * (count - 1) descending
-    let mut groups = vec![
+    let mut groups = [
         DuplicateGroup {
             hash: "hash_small_many".to_string(),
             size_bytes: 100,

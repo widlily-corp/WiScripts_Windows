@@ -474,7 +474,7 @@ fn test_sha256_oracle_all_27_scripts_byte_for_byte_integrity() {
 
         // 1. Verify path sanity
         let rel_path = sanitize_script_relative_path(&script.path)
-            .expect(&format!("Invalid path in manifest: {}", script.path));
+            .unwrap_or_else(|_| panic!("Invalid path in manifest: {}", script.path));
 
         let physical_path = root.join(&rel_path);
         assert!(
@@ -485,7 +485,7 @@ fn test_sha256_oracle_all_27_scripts_byte_for_byte_integrity() {
 
         // 2. Read physical bytes and compute SHA-256
         let bytes = fs::read(&physical_path)
-            .expect(&format!("Failed to read script file: {:?}", physical_path));
+            .unwrap_or_else(|_| panic!("Failed to read script file: {:?}", physical_path));
         assert!(
             !bytes.is_empty(),
             "Script file must not be 0-bytes: {:?}",
@@ -510,7 +510,7 @@ fn test_sha256_oracle_all_27_scripts_byte_for_byte_integrity() {
 
         // 4. Verify UTF-8 string decodability
         let content_str = String::from_utf8(bytes.clone())
-            .expect(&format!("Script '{}' is not valid UTF-8", script.id));
+            .unwrap_or_else(|_| panic!("Script '{}' is not valid UTF-8", script.id));
 
         // 5. Verify PowerShell encoding safety: No non-ASCII chars inside `<# ... #>` block comments
         // (to prevent PowerShell 5.1 CP1251 parser bug on non-English Windows)

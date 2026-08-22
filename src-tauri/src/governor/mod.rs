@@ -666,6 +666,6 @@ mod tests {
         assert!(trim_res.is_ok());
 
         let status = get_governor_status().unwrap();
-        assert!(status.managed_processes.len() > 0);
+        assert!(!status.managed_processes.is_empty());
     }
 }

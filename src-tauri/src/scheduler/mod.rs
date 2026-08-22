@@ -404,7 +404,7 @@ mod tests {
         let tasks = get_scheduled_tasks(&runner).expect("Dry run should return mock tasks");
         assert_eq!(tasks.len(), 4);
         assert_eq!(tasks[0].task_name, "Consolidator");
-        assert_eq!(tasks[1].enabled, false);
+        assert!(!tasks[1].enabled);
     }
 
     #[test]

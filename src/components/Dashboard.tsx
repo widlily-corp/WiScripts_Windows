@@ -58,7 +58,7 @@ export function Dashboard() {
   const cpuSensors = sensorItems.filter((s) => s.sensorType === 'cpu');
   const gpuSensors = sensorItems.filter((s) => s.sensorType === 'gpu');
   const availableCpuSensors = cpuSensors.length > 0 ? cpuSensors : sensorItems;
-  const availableGpuSensors = gpuSensors.length > 0 ? gpuSensors : sensorItems;
+  const availableGpuSensors = gpuSensors;
 
   useEffect(() => {
     fetchOptimizationsStatus();

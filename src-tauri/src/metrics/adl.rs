@@ -134,6 +134,37 @@ pub fn deduplicate_adl_adapters(adapters: &[ADLAdapterInfo]) -> Vec<ADLAdapterIn
     result
 }
 
+pub const ADL_PMLOG_MAX_SENSORS: usize = 256;
+pub const ADL_PMLOG_TEMPERATURE_EDGE: usize = 1;
+pub const ADL_PMLOG_TEMPERATURE_MEM: usize = 2;
+pub const ADL_PMLOG_TEMPERATURE_HOTSPOT: usize = 7;
+pub const ADL_PMLOG_TEMPERATURE_SOC: usize = 8;
+pub const ADL_PMLOG_TEMPERATURE_GFX: usize = 28;
+pub const ADL_PMLOG_TEMPERATURE_CPU_PACKAGE: usize = 32;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ADLSingleSensorData {
+    pub supported: i32,
+    pub value: i32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct ADLPMLogDataOutput {
+    pub size: i32,
+    pub sensors: [ADLSingleSensorData; ADL_PMLOG_MAX_SENSORS],
+}
+
+impl Default for ADLPMLogDataOutput {
+    fn default() -> Self {
+        Self {
+            size: std::mem::size_of::<ADLPMLogDataOutput>() as i32,
+            sensors: [ADLSingleSensorData::default(); ADL_PMLOG_MAX_SENSORS],
+        }
+    }
+}
+
 type AdlMainControlCreate = unsafe extern "C" fn(
     unsafe extern "C" fn(i32) -> *mut c_void,
     i32,
@@ -144,10 +175,22 @@ type AdlAdapterAdapterInfoGet = unsafe extern "C" fn(*mut ADLAdapterInfo, i32) -
 type AdlOverdrive5TemperatureGet = unsafe extern "C" fn(i32, i32, *mut ADLTemperature) -> i32;
 type AdlOverdrive6TemperatureGet = unsafe extern "C" fn(i32, *mut i32) -> i32;
 
+type Adl2MainControlCreate = unsafe extern "C" fn(
+    unsafe extern "C" fn(i32) -> *mut c_void,
+    i32,
+    *mut *mut c_void,
+) -> i32;
+type Adl2MainControlDestroy = unsafe extern "C" fn(*mut c_void) -> i32;
+type Adl2AdapterNumberOfAdaptersGet = unsafe extern "C" fn(*mut c_void, *mut i32) -> i32;
+type Adl2AdapterAdapterInfoGet = unsafe extern "C" fn(*mut c_void, *mut ADLAdapterInfo, i32) -> i32;
+type Adl2NewQueryPMLogDataGet = unsafe extern "C" fn(*mut c_void, i32, *mut ADLPMLogDataOutput) -> i32;
+
 static ADL_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Queries AMD GPU temperatures dynamically via AMD Display Library (ADL).
 /// Supports both 64-bit (`atiadlxx.dll`) and 32-bit (`atiadlxy.dll`).
+/// Includes modern ADL2 PMLog API for AMD APUs (e.g. Radeon 780M/680M/Vega) and discrete RDNA GPUs,
+/// with Overdrive 5/6 fallback for legacy Radeon adapters.
 pub fn query_adl_sensors() -> Vec<TemperatureSensorInfo> {
     let _lock = match ADL_MUTEX.lock() {
         Ok(guard) => guard,
@@ -168,6 +211,112 @@ pub fn query_adl_sensors() -> Vec<TemperatureSensorInfo> {
 
         if let Ok(lib) = lib {
             unsafe {
+                // Tier 1: Modern ADL2 Context & Performance Metrics Logging (PMLog)
+                let adl2_create: Result<libloading::Symbol<Adl2MainControlCreate>, _> =
+                    lib.get(b"ADL2_Main_Control_Create\0");
+                let adl2_destroy: Result<libloading::Symbol<Adl2MainControlDestroy>, _> =
+                    lib.get(b"ADL2_Main_Control_Destroy\0");
+                let adl2_num_adapters: Result<libloading::Symbol<Adl2AdapterNumberOfAdaptersGet>, _> =
+                    lib.get(b"ADL2_Adapter_NumberOfAdapters_Get\0");
+                let adl2_adapter_info: Result<libloading::Symbol<Adl2AdapterAdapterInfoGet>, _> =
+                    lib.get(b"ADL2_Adapter_AdapterInfo_Get\0");
+                let adl2_pmlog: Result<libloading::Symbol<Adl2NewQueryPMLogDataGet>, _> =
+                    lib.get(b"ADL2_New_QueryPMLogData_Get\0");
+
+                let mut pmlog_queried_indices = std::collections::HashSet::new();
+
+                if let (Ok(create), Ok(destroy), Ok(num_get), Ok(info_get)) =
+                    (adl2_create, adl2_destroy, adl2_num_adapters, adl2_adapter_info)
+                {
+                    let mut ctx: *mut c_void = std::ptr::null_mut();
+                    if create(adl_malloc_callback, 1, &mut ctx) == ADL_OK && !ctx.is_null() {
+                        let mut num_adapters: i32 = 0;
+                        if num_get(ctx, &mut num_adapters) == ADL_OK && num_adapters > 0 {
+                            let total_size = (num_adapters as usize * std::mem::size_of::<ADLAdapterInfo>()) as i32;
+                            let mut raw_adapters = vec![ADLAdapterInfo::default(); num_adapters as usize];
+                            if info_get(ctx, raw_adapters.as_mut_ptr(), total_size) == ADL_OK {
+                                let deduped = deduplicate_adl_adapters(&raw_adapters);
+
+                                for (idx, adapter) in deduped.iter().enumerate() {
+                                    let parsed_name = parse_c_string_bytes(&adapter.adapter_name);
+                                    let gpu_name = if !parsed_name.is_empty() {
+                                        parsed_name
+                                    } else {
+                                        format!("AMD Radeon GPU #{}", idx)
+                                    };
+
+                                    if let Ok(ref pmlog) = adl2_pmlog {
+                                        let mut pmlog_out = ADLPMLogDataOutput::default();
+                                        if pmlog(ctx, adapter.adapter_index, &mut pmlog_out) == ADL_OK {
+                                            let mut found_gpu = false;
+
+                                            // 1. GFX Temperature (sensor 28 for APU & modern RDNA)
+                                            let gfx_sensor = pmlog_out.sensors[ADL_PMLOG_TEMPERATURE_GFX];
+                                            if gfx_sensor.supported != 0 && is_valid_temperature(gfx_sensor.value as f32) {
+                                                sensors.push(TemperatureSensorInfo {
+                                                    id: format!("adl_gpu_{}_gfx", idx),
+                                                    name: gpu_name.clone(),
+                                                    label: format!("{} (Core)", gpu_name),
+                                                    temperature_celsius: gfx_sensor.value as f32,
+                                                    sensor_type: "gpu".to_string(),
+                                                    provider: "AMD ADL DLL".to_string(),
+                                                });
+                                                found_gpu = true;
+                                            }
+
+                                            // 2. Edge Temperature (sensor 1 for discrete GPUs)
+                                            let edge_sensor = pmlog_out.sensors[ADL_PMLOG_TEMPERATURE_EDGE];
+                                            if !found_gpu && edge_sensor.supported != 0 && edge_sensor.value < 200 && is_valid_temperature(edge_sensor.value as f32) {
+                                                sensors.push(TemperatureSensorInfo {
+                                                    id: format!("adl_gpu_{}_edge", idx),
+                                                    name: gpu_name.clone(),
+                                                    label: format!("{} (Core)", gpu_name),
+                                                    temperature_celsius: edge_sensor.value as f32,
+                                                    sensor_type: "gpu".to_string(),
+                                                    provider: "AMD ADL DLL".to_string(),
+                                                });
+                                                found_gpu = true;
+                                            }
+
+                                            // 3. Hotspot Temperature (sensor 7)
+                                            let hotspot_sensor = pmlog_out.sensors[ADL_PMLOG_TEMPERATURE_HOTSPOT];
+                                            if hotspot_sensor.supported != 0 && hotspot_sensor.value < 200 && is_valid_temperature(hotspot_sensor.value as f32) {
+                                                sensors.push(TemperatureSensorInfo {
+                                                    id: format!("adl_gpu_{}_hotspot", idx),
+                                                    name: format!("{} Hotspot", gpu_name),
+                                                    label: format!("{} (Hotspot)", gpu_name),
+                                                    temperature_celsius: hotspot_sensor.value as f32,
+                                                    sensor_type: "gpu".to_string(),
+                                                    provider: "AMD ADL DLL".to_string(),
+                                                });
+                                            }
+
+                                            // 4. CPU Package Temperature from APU PMLog (sensor 32)
+                                            let cpu_pkg_sensor = pmlog_out.sensors[ADL_PMLOG_TEMPERATURE_CPU_PACKAGE];
+                                            if cpu_pkg_sensor.supported != 0 && is_valid_temperature(cpu_pkg_sensor.value as f32) {
+                                                sensors.push(TemperatureSensorInfo {
+                                                    id: format!("adl_cpu_package_{}", idx),
+                                                    name: "AMD CPU Package".to_string(),
+                                                    label: format!("AMD CPU Package ({:.1}°C)", cpu_pkg_sensor.value as f32),
+                                                    temperature_celsius: cpu_pkg_sensor.value as f32,
+                                                    sensor_type: "cpu".to_string(),
+                                                    provider: "AMD ADL DLL".to_string(),
+                                                });
+                                            }
+
+                                            if found_gpu {
+                                                pmlog_queried_indices.insert(adapter.adapter_index);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        let _ = destroy(ctx);
+                    }
+                }
+
+                // Tier 2: Classic ADL Overdrive 5/6 (fallback for older discrete cards)
                 let adl_create: Result<libloading::Symbol<AdlMainControlCreate>, _> =
                     lib.get(b"ADL_Main_Control_Create\0");
                 let adl_destroy: Result<libloading::Symbol<AdlMainControlDestroy>, _> =
@@ -195,6 +344,10 @@ pub fn query_adl_sensors() -> Vec<TemperatureSensorInfo> {
                                     lib.get(b"ADL_Overdrive6_Temperature_Get\0");
 
                                 for (idx, adapter) in deduped.iter().enumerate() {
+                                    if pmlog_queried_indices.contains(&adapter.adapter_index) {
+                                        continue;
+                                    }
+
                                     let mut temp_val = None;
 
                                     // Try Overdrive 5 first

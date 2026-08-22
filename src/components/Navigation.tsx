@@ -24,6 +24,8 @@ import {
   Power,
   Clock,
   History,
+  Zap,
+  Layers,
 } from 'lucide-react';
 
 interface NavItem {
@@ -37,6 +39,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'script_runner', labelKey: 'nav.items.script_runner', icon: Terminal },
   { id: 'audio_manager', labelKey: 'nav.items.audio_manager', icon: Volume2 },
   { id: 'governor', labelKey: 'nav.items.governor', icon: Cpu },
+  { id: 'gaming_latency', labelKey: 'nav.items.gaming_latency', icon: Zap },
+  { id: 'smart_ram', labelKey: 'nav.items.smart_ram', icon: Layers },
+  { id: 'network_shield', labelKey: 'nav.items.network_shield', icon: ShieldCheck },
+  { id: 'hardware_health', labelKey: 'nav.items.hardware_health', icon: Cpu },
   { id: 'optimization', labelKey: 'nav.items.optimization', icon: Sliders },
   { id: 'package_manager', labelKey: 'nav.items.package_manager', icon: Package },
   { id: 'app_uninstaller', labelKey: 'nav.items.app_uninstaller', icon: Trash2 },

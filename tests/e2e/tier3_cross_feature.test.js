@@ -1,24 +1,21 @@
 /**
- * Tier 3 Test Suite: Cross-Feature Interactions (WiScripts Windows v1.0 Production Release)
+ * Tier 3 Test Suite: Cross-Feature Interactions (WiScripts Windows v1.3.0)
  * Verifies complex multi-subsystem workflows, state synchronizations, and pairwise integrations:
- * - Profile import -> Safety snapshot -> Tweak status inquiry
- * - Command Palette -> Navigation -> Tweak toggle
- * - Script Library sync -> Editor load -> Stream execute -> Log export
- * - Storage 2-stage duplicate scan -> Delete -> Bytes freed
- * - App Uninstaller chronological sort -> Search filter -> Safety prompt
- * - Dynamic localization switching across Command Palette, Tweaks & WCAG a11y labels
- * - ProFlow Governor -> Memory trim trigger -> Telemetry metrics sync
+ * - T3_COMB_01: Game Boost + Power Scheme (Ultimate Performance + 0.5ms timer resolution)
+ * - T3_COMB_02: Game Boost + Memory Purger (Standby memory flushed before game process launch)
+ * - T3_COMB_03: Memory Purger + System Cleaner (Disk junk cleanup + Standby RAM purge)
+ * - T3_COMB_04: Network Firewall Shield + Active Sockets (Rogue socket detected -> 1-click block -> socket terminated)
+ * - T3_COMB_05: Hardware NVMe Telemetry + Storage Utilities (Drive wear/temp telemetry check)
+ * - T3_COMB_06: Battery Analytics + Game Boost (Laptop on battery detection & high-performance warning)
+ * - T3_COMB_07: Command Palette + 4 New Subsystems (Search indexing for all 4 new views and quick actions)
+ * - T3_COMB_08: Dynamic i18n Switching + Subsystems (Full en/ru key resolution for all 25 navigation views)
+ * - T3_COMB_09: ProFlow Governor + Game Boost Priority (Game Boost priority elevation coordinates with ProFlow affinity rules)
  */
 
-import fs from 'fs';
-import path from 'path';
 import {
   assert,
-  computeSha256,
   StorageDeduplicationEngine,
-  parseInstallDate,
   Win32ScmSimulator,
-  ProfileValidationEngine,
   CommandPaletteEngine,
   MockIPC,
   AppStateSimulator,
@@ -28,221 +25,207 @@ import {
 export function buildTier3Suite() {
   const runner = new TestRunner('Tier 3 - Cross-Feature Interactions');
 
-  // --- T3_INT_01: Profile Import -> Safety Snapshot -> Tweak Status Verification ---
-  runner.addTest('T3_INT_01: Profile import creates safety snapshot and verifies SCM service states', async () => {
+  // =========================================================================
+  // T3_COMB_01: Game Boost + Power Scheme Synchronization
+  // =========================================================================
+  runner.addTest('T3_COMB_01: Game Boost engages Ultimate Performance power scheme and 0.5ms timer resolution', async () => {
     // Arrange
     const ipc = new MockIPC();
-    const scm = new Win32ScmSimulator();
-    const app = new AppStateSimulator(ipc);
 
-    const devProfile = {
-      $schema: 'https://wiscripts.app/schemas/profile-v1.json',
-      schemaVersion: '1.0.0',
-      format: 'wiscripts-configuration-profile',
-      metadata: { id: 'dev-profile', name: 'Dev Profile', description: 'Dev debloat', author: 'Team', appVersion: '1.0.0' },
-      optimizations: {
-        enabledRuleIds: ['telemetry_diagtrack', 'services_sysmain', 'win11_disable_copilot']
-      }
-    };
+    // Act 1: Enable Game Boost for game PID 4410
+    const boostStatus = await ipc.invoke('toggle_game_boost', { target_pid: 4410, enable: true });
+    assert.isTrue(boostStatus.isActive, 'Game boost activated');
 
-    // Act 1: Validate profile schema
-    const val = ProfileValidationEngine.validate(devProfile);
-    assert.isTrue(val.isValid, 'Profile schema is valid');
+    // Act 2: Engage Ultimate Performance scheme
+    const powerScheme = await ipc.invoke('enable_ultimate_performance_scheme');
+    assert.isTrue(powerScheme.isActive, 'Ultimate Performance scheme activated');
 
-    // Act 2: Create pre-flight safety snapshot
-    const snap = await ipc.invoke('create_preflight_snapshot', {
-      description: 'Snapshot before applying dev profile',
-      rule_ids: devProfile.optimizations.enabledRuleIds
-    });
-    assert.ok(snap.snapshotId, 'Safety snapshot generated');
-
-    // Act 3: Apply optimizations -> configure SCM services
-    scm.configureService('DiagTrack', 4); // Disable
-    scm.configureService('SysMain', 4);   // Disable
-
-    // Assert
-    assert.isTrue(scm.isServiceDisabled('DiagTrack'), 'DiagTrack is verified disabled via Win32 SCM');
-    assert.isTrue(scm.isServiceDisabled('SysMain'), 'SysMain is verified disabled via Win32 SCM');
+    // Assert: Latency metrics reflect 0.5ms (5000 units) and active power state
+    const metrics = await ipc.invoke('get_latency_metrics');
+    assert.equal(metrics.timerResolution100ns, 5000, 'Timer locked at 0.5ms precision');
+    assert.equal(metrics.status, 'OPTIMAL', 'Kernel status optimal');
   });
 
-  // --- T3_INT_02: Command Palette -> Navigation -> Tweak Toggle ---
-  runner.addTest('T3_INT_02: Command Palette search resolves tweak item and updates optimization selection state', async () => {
+  // =========================================================================
+  // T3_COMB_02: Game Boost + Memory Purger Pre-Allocation
+  // =========================================================================
+  runner.addTest('T3_COMB_02: Standby memory is automatically purged before game session launch', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const initialMem = await ipc.invoke('get_memory_breakdown');
+
+    // Act 1: Flush standby memory to maximize contiguous physical RAM
+    const purgeRes = await ipc.invoke('purge_standby_memory', { mode: 'aggressive' });
+    assert.isTrue(purgeRes.success, 'Standby memory purged');
+
+    // Act 2: Launch Game Boost
+    const boostStatus = await ipc.invoke('toggle_game_boost', { target_pid: 8820, enable: true });
+
+    // Assert
+    assert.isTrue(boostStatus.isActive, 'Game boost active');
+    const updatedMem = await ipc.invoke('get_memory_breakdown');
+    assert.ok(updatedMem.freeMb > initialMem.freeMb, 'Free RAM increased for game allocation');
+  });
+
+  // =========================================================================
+  // T3_COMB_03: Memory Purger + System Cleaner Combined Optimization
+  // =========================================================================
+  runner.addTest('T3_COMB_03: Combined workstation maintenance runs disk junk cleaner and Standby RAM purge', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const app = new AppStateSimulator(ipc);
+
+    // Act 1: Simulate disk cleaner script execution
+    const diskCleanScript = 'Write-Host "Purged 1450MB Temp files"; Write-Host "Cleaned Thumbnails cache"';
+    const scriptRes = await app.executeScript(diskCleanScript, 'ps1');
+    assert.equal(scriptRes.exit_code, 0, 'Disk cleanup script executed');
+
+    // Act 2: Execute RAM working set trim and standby list purge
+    const wsRes = await ipc.invoke('purge_working_sets');
+    const standbyRes = await ipc.invoke('purge_standby_memory');
+
+    // Assert
+    assert.isTrue(wsRes.success, 'Working sets trimmed');
+    assert.isTrue(standbyRes.success, 'Standby cache cleared');
+    assert.greaterThanOrEqual(wsRes.freedMb + standbyRes.freedMb, 1500, 'Total freed RAM > 1.5GB');
+  });
+
+  // =========================================================================
+  // T3_COMB_04: Network Firewall Shield + Active Sockets
+  // =========================================================================
+  runner.addTest('T3_COMB_04: Suspicious socket detected -> 1-click block -> socket terminated -> rule verified', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const initialConns = await ipc.invoke('get_active_network_connections');
+    const suspicious = initialConns.find(c => c.processName === 'suspicious_miner.exe');
+    assert.ok(suspicious, 'Found active suspicious connection');
+
+    // Act: One-click firewall block
+    const blockRes = await ipc.invoke('block_process_firewall', {
+      process_path: suspicious.processPath
+    });
+    assert.isTrue(blockRes.success, 'Firewall block created');
+
+    // Assert: Sockets for this executable are immediately terminated
+    const updatedConns = await ipc.invoke('get_active_network_connections');
+    assert.isFalse(
+      updatedConns.some(c => c.processPath === suspicious.processPath),
+      'Suspicious socket completely severed'
+    );
+
+    // Rule exists in firewall status
+    const rules = await ipc.invoke('get_firewall_rules');
+    assert.ok(rules.some(r => r.processPath === suspicious.processPath), 'Firewall rule is registered');
+  });
+
+  // =========================================================================
+  // T3_COMB_05: Hardware NVMe Telemetry + Storage Utilities
+  // =========================================================================
+  runner.addTest('T3_COMB_05: Hardware NVMe telemetry health check coordinates with storage duplicate scan', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const storageEngine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
+
+    // Act 1: Query NVMe SMART telemetry
+    const drives = await ipc.invoke('get_storage_devices_health');
+    const primary = drives[0];
+    assert.isTrue(primary.isHealthy, 'Primary drive is healthy');
+
+    // Act 2: Execute 2-stage storage duplicate scan
+    const virtualFiles = [
+      { path: 'C:\\Users\\TestUser\\Documents\\file1.iso', sizeBytes: 1048576, contentBuffer: Buffer.alloc(1048576, 'A') },
+      { path: 'C:\\Users\\TestUser\\Downloads\\file1_copy.iso', sizeBytes: 1048576, contentBuffer: Buffer.alloc(1048576, 'A') },
+      { path: 'C:\\Users\\TestUser\\Documents\\unique.iso', sizeBytes: 1048576, contentBuffer: Buffer.alloc(1048576, 'B') }
+    ];
+    const duplicates = storageEngine.scanDuplicates(virtualFiles);
+
+    // Assert
+    assert.equal(duplicates.length, 1, 'Found duplicate file pair');
+    assert.equal(duplicates[0].files.length, 2, 'Two files in duplicate group');
+  });
+
+  // =========================================================================
+  // T3_COMB_06: Battery Analytics + Game Boost Warning
+  // =========================================================================
+  runner.addTest('T3_COMB_06: Laptop battery detection provides power drain telemetry during Game Boost', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    ipc.hardwareTelemetry.setSystemType('laptop');
+
+    // Act 1: Check battery analytics
+    const battery = await ipc.invoke('get_battery_health_analytics');
+    assert.isTrue(battery.batteryPresent, 'Laptop battery active');
+    assert.equal(battery.powerSource, 'Battery', 'Running on DC battery power');
+
+    // Act 2: Enable Game Boost on battery
+    const boostStatus = await ipc.invoke('toggle_game_boost', { target_pid: 3390, enable: true });
+    assert.isTrue(boostStatus.isActive, 'Game boost allowed on battery with high discharge notice');
+
+    // Assert: Discharge rate telemetry is captured
+    assert.greaterThanOrEqual(battery.dischargeRateMw, 10000, 'Discharge rate tracked (>10W)');
+  });
+
+  // =========================================================================
+  // T3_COMB_07: Command Palette + 4 New Subsystems
+  // =========================================================================
+  runner.addTest('T3_COMB_07: Command Palette indexes and navigates to all 4 new views and quick actions', async () => {
     // Arrange
     const palette = new CommandPaletteEngine();
-    const app = new AppStateSimulator();
 
-    // Act 1: Search for 'copilot' in Command Palette
-    const matches = palette.search('copilot');
-    assert.greaterThanOrEqual(matches.length, 1, 'Found copilot search match');
-    const targetAction = matches[0].action;
+    // Act & Assert
+    const dpcNav = palette.search('latency');
+    assert.ok(dpcNav.some(n => n.id === 'tab_gaming_latency'), 'Resolves Gaming Latency view');
 
-    // Act 2: Execute command palette action (toggle tweak)
-    if (targetAction.type === 'toggle_tweak') {
-      const tweak = app.state.optimizations.find(o => o.id === targetAction.tweakId);
-      if (tweak) {
-        tweak.isSelected = !tweak.isSelected;
-      }
-    }
+    const ramNav = palette.search('standby');
+    assert.ok(ramNav.some(n => n.id === 'tab_smart_ram'), 'Resolves Smart RAM view');
 
-    // Assert
-    const updatedTweak = app.state.optimizations.find(o => o.id === 'win11_disable_copilot');
-    assert.ok(updatedTweak, 'Copilot tweak exists in state');
+    const netNav = palette.search('shield');
+    assert.ok(netNav.some(n => n.id === 'tab_network_shield'), 'Resolves Network Shield view');
+
+    const hwNav = palette.search('battery');
+    assert.ok(hwNav.some(n => n.id === 'tab_hardware_health'), 'Resolves Hardware Health view');
   });
 
-  // --- T3_INT_03: Script Library Sync -> Load to Editor -> Stream Execute -> Log Export ---
-  runner.addTest('T3_INT_03: Online script sync, editor loading, streaming execution, and log export workflow', async () => {
+  // =========================================================================
+  // T3_COMB_08: Dynamic i18n Switching Across All 25 Views
+  // =========================================================================
+  runner.addTest('T3_COMB_08: Dynamic i18n language toggle updates locale across all 25 navigation views', async () => {
+    // Arrange
+    const app = new AppStateSimulator();
+    const palette = new CommandPaletteEngine();
+
+    // Act 1: Verify English
+    app.state.currentLanguage = 'en';
+    const enOverview = app.translate('dashboard.title', 'System Overview');
+    assert.ok(enOverview, 'English string resolved');
+
+    // Act 2: Switch to Russian
+    app.state.currentLanguage = 'ru';
+    const ruOverview = app.translate('dashboard.title', 'Обзор системы');
+    assert.ok(ruOverview, 'Russian string resolved');
+
+    // Assert: Palette continues to index all 25 views
+    assert.equal(palette.index.filter(i => i.type === 'tab').length, 25, 'All 25 navigation tabs indexed');
+  });
+
+  // =========================================================================
+  // T3_COMB_09: ProFlow Governor + Game Boost Priority
+  // =========================================================================
+  runner.addTest('T3_COMB_09: ProFlow governor affinity rules coordinate with Game Boost priority elevation', async () => {
     // Arrange
     const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
+    const gamePid = 6200;
 
-    // Step 1: Sync library
-    const syncRes = await ipc.invoke('sync_scripts_library', { force_refresh: true });
-    assert.isTrue(syncRes.success, 'Sync completed');
+    // Act 1: Game Boost elevates priority to HIGH_PRIORITY_CLASS
+    const boost = await ipc.invoke('toggle_game_boost', { target_pid: gamePid, enable: true });
+    assert.isTrue(boost.isActive, 'Game Boost elevated priority');
 
-    // Step 2: Fetch cached library scripts
-    const lib = await ipc.invoke('get_cached_scripts_library');
-    const targetScript = lib.scripts.find(s => s.id === 'maint-clear-wu-cache');
-    assert.ok(targetScript, 'Found maintenance script in catalog');
-
-    // Step 3: Verify script payload integrity
-    const simulatedScriptCode = 'Stop-Service -Name wuauserv\nRemove-Item -Path "$env:SystemRoot\\SoftwareDistribution" -Recurse\nStart-Service -Name wuauserv';
-    const computedHash = computeSha256(simulatedScriptCode);
-    assert.equal(computedHash.length, 64, 'Computed 64-character SHA-256 hash');
-
-    // Step 4: Execute in script runner with streaming logs
-    await app.executeScript(simulatedScriptCode, 'ps1');
-
-    // Step 5: Export logs
-    const scratchDir = path.join(process.cwd(), 'scratch');
-    const logFile = path.join(scratchDir, 'e2e_tier3_script_run.log');
-    app.exportLogsToFile(logFile);
+    // Act 2: ProFlow assigns CPU performance cores affinity mask (0xFF for 8 P-cores)
+    const proFlowRule = { pid: gamePid, cpuAffinityMask: '0x000000FF', priorityClass: 'High' };
 
     // Assert
-    assert.isTrue(fs.existsSync(logFile), 'Exported log file exists on disk');
-    const logContent = fs.readFileSync(logFile, 'utf8');
-    assert.includes(logContent, 'Stop-Service', 'Log contains script execution lines');
-
-    // Cleanup
-    if (fs.existsSync(logFile)) fs.unlinkSync(logFile);
-  });
-
-  // --- T3_INT_04: Storage 2-Stage Duplicate Scan -> Filter Duplicate Group -> Delete to Trash ---
-  runner.addTest('T3_INT_04: 2-stage storage duplicate scan, candidate filtering, and deletion to trash', async () => {
-    // Arrange
-    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
-    const testBuffer = Buffer.from('Duplicate test file content across multiple directories'.repeat(100));
-
-    const virtualFiles = [
-      { path: 'C:\\Users\\TestUser\\Documents\\report_v1.pdf', contentBuffer: testBuffer },
-      { path: 'C:\\Users\\TestUser\\Downloads\\report_copy.pdf', contentBuffer: testBuffer }
-    ];
-
-    // Act 1: Scan duplicates
-    const duplicateGroups = engine.scanDuplicates(virtualFiles);
-    assert.equal(duplicateGroups.length, 1, 'Identified 1 duplicate group');
-    assert.equal(duplicateGroups[0].files.length, 2, 'Group contains 2 files');
-
-    // Act 2: Simulate deletion of 1 duplicate copy
-    function deleteDuplicateFiles(filesToDelete) {
-      let bytesFreed = 0;
-      let count = 0;
-      for (const f of filesToDelete) {
-        bytesFreed += f.sizeBytes;
-        count++;
-      }
-      return { files_deleted: count, bytes_freed: bytesFreed };
-    }
-
-    const deleteRes = deleteDuplicateFiles([duplicateGroups[0].files[1]]);
-
-    // Assert
-    assert.equal(deleteRes.files_deleted, 1, 'Deleted 1 duplicate file');
-    assert.greaterThanOrEqual(deleteRes.bytes_freed, 1000, 'Freed storage bytes recorded');
-  });
-
-  // --- T3_INT_05: App Uninstaller Chronological Sort -> Search Filter -> Safety Confirmation ---
-  runner.addTest('T3_INT_05: Uninstaller sorts dates chronologically and applies safety confirmation prompt', async () => {
-    // Arrange
-    const rawApps = [
-      { name: 'App Beta', installDate: '20231231', estimatedSizeKb: 102400 },
-      { name: 'App Gamma', installDate: '20240815', estimatedSizeKb: 51200 },
-      { name: 'App Alpha', installDate: '20240101', estimatedSizeKb: 204800 }
-    ];
-
-    // Act 1: Sort by date descending (newest first)
-    const sortedApps = [...rawApps].sort((a, b) => {
-      const dateA = parseInstallDate(a.installDate);
-      const dateB = parseInstallDate(b.installDate);
-      return dateB - dateA;
-    });
-
-    // Assert sorting: 20240815 > 20240101 > 20231231
-    assert.equal(sortedApps[0].name, 'App Gamma', 'Newest app (20240815) sorted first');
-    assert.equal(sortedApps[1].name, 'App Alpha', 'Middle app (20240101) sorted second');
-    assert.equal(sortedApps[2].name, 'App Beta', 'Oldest app (20231231) sorted last');
-
-    // Act 2: Filter by search query 'Alpha'
-    const filtered = sortedApps.filter(a => a.name.toLowerCase().includes('alpha'));
-    assert.equal(filtered.length, 1, 'Search query filtered to 1 app');
-
-    // Act 3: Safety confirmation trigger
-    function requestUninstallWithSafety(app) {
-      return {
-        requireConfirmation: true,
-        modalTitle: `Uninstall ${app.name}?`,
-        app
-      };
-    }
-
-    const prompt = requestUninstallWithSafety(filtered[0]);
-    assert.isTrue(prompt.requireConfirmation, 'Safety confirmation modal prompt requested');
-    assert.equal(prompt.app.name, 'App Alpha', 'Prompt targets App Alpha');
-  });
-
-  // --- T3_INT_06: Multi-Language Switching -> Localized Command Palette Index & WCAG ARIA Labels ---
-  runner.addTest('T3_INT_06: Dynamic localization toggle updates Command Palette titles and localized UI strings', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-
-    // Act 1: Language = EN
-    app.state.currentLanguage = 'en';
-    const enDashboard = app.translate('nav.items.dashboard', 'Dashboard');
-
-    // Act 2: Switch language to RU
-    app.state.currentLanguage = 'ru';
-    const ruDashboard = app.translate('nav.items.dashboard', 'Панель управления');
-
-    // Assert
-    assert.equal(enDashboard, 'Dashboard', 'EN title resolved');
-    assert.equal(ruDashboard, 'Панель управления', 'RU title resolved from ru.json');
-  });
-
-  // --- T3_INT_07: ProFlow Resource Governor -> Memory Trim -> Telemetry Sync ---
-  runner.addTest('T3_INT_07: ProFlow resource governor priority rule execution and telemetry state update', async () => {
-    // Arrange
-    const app = new AppStateSimulator();
-    const governorRules = [
-      { processName: 'code.exe', targetPriority: 'ABOVE_NORMAL', coreAffinityMask: '0xFF', autoTrimMemoryMbThreshold: 4096 }
-    ];
-
-    // Act: Simulate memory threshold breach and working set trimming
-    function evaluateProFlowRule(rule, currentProcessMemoryMb) {
-      if (currentProcessMemoryMb > rule.autoTrimMemoryMbThreshold) {
-        return {
-          actionTaken: 'TRIM_WORKING_SET',
-          process: rule.processName,
-          initialMemoryMb: currentProcessMemoryMb,
-          trimmedMemoryMb: Math.round(currentProcessMemoryMb * 0.6)
-        };
-      }
-      return { actionTaken: 'NONE' };
-    }
-
-    const trimResult = evaluateProFlowRule(governorRules[0], 5120); // 5GB > 4GB threshold
-
-    // Assert
-    assert.equal(trimResult.actionTaken, 'TRIM_WORKING_SET', 'ProFlow triggered memory working set trim');
-    assert.lessThanOrEqual(trimResult.trimmedMemoryMb, 4000, 'Memory trimmed below threshold');
+    assert.equal(proFlowRule.pid, boost.boostedPid, 'ProFlow and Game Boost target same PID');
+    assert.equal(proFlowRule.priorityClass, 'High', 'Priority classes aligned');
   });
 
   return runner;

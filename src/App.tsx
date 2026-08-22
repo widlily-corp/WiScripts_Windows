@@ -26,6 +26,18 @@ const AudioView = lazy(() =>
 const GovernorView = lazy(() =>
   import('./views/GovernorView').then((m) => ({ default: m.GovernorView }))
 );
+const GamingLatencyView = lazy(() =>
+  import('./views/GamingLatencyView').then((m) => ({ default: m.GamingLatencyView }))
+);
+const SmartRamView = lazy(() =>
+  import('./views/SmartRamView').then((m) => ({ default: m.SmartRamView }))
+);
+const NetworkShieldView = lazy(() =>
+  import('./views/NetworkShieldView').then((m) => ({ default: m.NetworkShieldView }))
+);
+const HardwareHealthView = lazy(() =>
+  import('./views/HardwareHealthView').then((m) => ({ default: m.HardwareHealthView }))
+);
 const OptimizationView = lazy(() =>
   import('./components/OptimizationView').then((m) => ({ default: m.OptimizationView }))
 );
@@ -169,6 +181,10 @@ export function App() {
               {activeTab === 'script_runner' && <ScriptRunnerView />}
               {activeTab === 'audio_manager' && <AudioView />}
               {activeTab === 'governor' && <GovernorView />}
+              {activeTab === 'gaming_latency' && <GamingLatencyView />}
+              {activeTab === 'smart_ram' && <SmartRamView />}
+              {activeTab === 'network_shield' && <NetworkShieldView />}
+              {activeTab === 'hardware_health' && <HardwareHealthView />}
               {activeTab === 'optimization' && <OptimizationView />}
               {activeTab === 'package_manager' && <PackageManagerView />}
               {activeTab === 'app_uninstaller' && <UninstallerView />}

@@ -33,6 +33,10 @@
       "script_runner": "Исполнитель скриптов",
       "audio_manager": "Звуковые устройства",
       "governor": "Диспетчер ресурсов (ProFlow)",
+      "gaming_latency": "Игровые задержки и DPC",
+      "smart_ram": "Очистка памяти Smart RAM",
+      "network_shield": "Сетевой экран и трафик",
+      "hardware_health": "Здоровье SSD и питание",
       "optimization": "Оптимизация",
       "package_manager": "Пакетный менеджер",
       "app_uninstaller": "Удаление программ",
@@ -1301,5 +1305,184 @@
     "unknown_error": "Неизвестная ошибка приложения",
     "report_button": "Сообщить об ошибке на GitHub",
     "reload_button": "Перезагрузить приложение"
+  },
+  "gamingLatency": {
+    "title": "Анализатор игровых задержек и DPC",
+    "subtitle": "Анализ задержек DPC/ISR в реальном времени, настройка системного таймера и режим Game Boost",
+    "status": {
+      "optimal": "Оптимально (< 500 мкс)",
+      "moderate": "Умеренно (500-1000 мкс)",
+      "high": "Высокие задержки (> 1000 мкс)"
+    },
+    "metrics": {
+      "current_dpc": "Текущая задержка DPC",
+      "max_dpc": "Максимальный пик",
+      "avg_dpc": "Средняя задержка",
+      "dpc_rate": "Частота DPC",
+      "isr_rate": "Частота ISR",
+      "timer_resolution": "Разрешение таймера",
+      "kernel_status": "Статус ядра",
+      "rate_per_sec": "{{count}} /сек"
+    },
+    "sparkline": {
+      "title": "График задержек DPC/ISR в реальном времени",
+      "threshold": "Критический порог 1000 мкс"
+    },
+    "timer_resolution_card": {
+      "title": "Разрешение системного таймера",
+      "description": "Уменьшение интервала таймера ядра NT снижает задержку ввода и повышает плавность в играх.",
+      "current": "Текущее: {{resolution}} мс",
+      "min_max": "Диапазон: {{min}} мс - {{max}} мс",
+      "force_05ms": "Установить 0.500 мс",
+      "force_10ms": "Установить 1.000 мс",
+      "restore_default": "По умолчанию (15.6 мс)",
+      "custom": "Пользовательское"
+    },
+    "game_boost": {
+      "title": "Движок Game Boost",
+      "description": "Автоматически повышает приоритет игры, переключает таймер на 0.5 мс и приостанавливает фоновые службы.",
+      "enable": "Включить Game Boost",
+      "disable": "Отключить Game Boost",
+      "status_active": "Ускорение активно",
+      "status_inactive": "Ускорение неактивно",
+      "target_process": "Целевой процесс",
+      "target_pid": "Целевой PID (необязательно)",
+      "auto_detect": "Автоопределение активной игры",
+      "suspended_services": "Приостановленные службы ({{count}})",
+      "no_suspended_services": "Нет приостановленных служб."
+    },
+    "toast": {
+      "timer_success": "Разрешение таймера изменено на {{resolution}} мс",
+      "boost_activated": "Режим Game Boost активирован для {{process}}",
+      "boost_deactivated": "Режим Game Boost отключен. Службы восстановлены."
+    }
+  },
+  "smartRam": {
+    "title": "Очистка памяти Smart RAM и Standby List",
+    "subtitle": "Низкоуровневая очистка кэша памяти ядра Win32/NT и оптимизация рабочих наборов процессов",
+    "distribution": {
+      "title": "Распределение физической памяти",
+      "total": "Всего: {{total}} ГБ",
+      "in_use": "Используется",
+      "standby": "Кэш Standby",
+      "modified": "Изменено",
+      "free": "Свободно",
+      "paged_pool": "Выгружаемый пул: {{mb}} МБ",
+      "non_paged_pool": "Невыгружаемый пул: {{mb}} МБ",
+      "system_cache": "Системный кэш: {{mb}} МБ"
+    },
+    "actions": {
+      "purge_standby_title": "Очистить кэш Standby",
+      "purge_standby_desc": "Освобождает кэшированные страницы памяти ядра (NtSetSystemInformation), мгновенно возвращая свободную память.",
+      "purge_standby_btn": "Очистить список Standby",
+      "purge_working_sets_title": "Сбросить рабочие наборы",
+      "purge_working_sets_desc": "Сбрасывает неиспользуемые страницы памяти запущенных процессов в список Standby.",
+      "purge_working_sets_btn": "Очистить рабочие наборы",
+      "purge_all_title": "Полная очистка памяти",
+      "purge_all_desc": "Выполняет последовательную глубокую очистку (Рабочие наборы + Standby) в безопасном режиме.",
+      "purge_all_btn": "Выполнить полную очистку"
+    },
+    "auto_trimmer": {
+      "title": "Фоновый авто-оптимизатор",
+      "description": "Автоматически очищает кэш Standby и рабочие наборы при превышении заданного порога загрузки ОЗУ.",
+      "enable_toggle": "Включить фоновый авто-оптимизатор",
+      "threshold_label": "Порог срабатывания: {{percent}}%",
+      "interval_label": "Интервал проверки: {{seconds}}с",
+      "purge_standby_option": "Очищать кэш Standby",
+      "purge_working_sets_option": "Очищать рабочие наборы",
+      "excluded_processes": "Защищенные / Исключенные процессы",
+      "excluded_placeholder": "напр. game.exe, obs64.exe",
+      "add_exclusion": "Добавить процесс",
+      "save_config": "Сохранить настройки"
+    },
+    "history": {
+      "title": "История очистки памяти",
+      "last_freed": "Освобождено {{mb}} МБ (оптимизировано {{count}} процессов)",
+      "no_recent": "В этой сессии очистка еще не выполнялась."
+    }
+  },
+  "networkShield": {
+    "title": "Сетевой экран и монитор трафика",
+    "subtitle": "Мониторинг сокетов TCP/UDP в реальном времени с блокировкой процессов в Брандмауэре Windows в 1 клик",
+    "stats": {
+      "active_sockets": "Активные сокеты",
+      "tcp_established": "TCP Установлено",
+      "tcp_listening": "TCP Прослушивание",
+      "udp_listeners": "UDP Эндпоинты",
+      "firewall_rules": "Правила Брандмауэра WiScripts"
+    },
+    "filters": {
+      "search_placeholder": "Фильтр по процессу, IP-адресу или порту...",
+      "all": "Все протоколы",
+      "tcp": "TCP",
+      "udp": "UDP",
+      "state_all": "Все состояния",
+      "show_blocked_only": "Только заблокированные"
+    },
+    "table": {
+      "process": "Процесс и PID",
+      "protocol": "Протокол",
+      "local_endpoint": "Локальный адрес",
+      "remote_endpoint": "Удаленный адрес",
+      "state": "Состояние",
+      "actions": "Действия",
+      "block_btn": "Заблокировать",
+      "unblock_btn": "Разблокировать",
+      "blocked_badge": "Заблокирован",
+      "no_connections": "Нет активных соединений, соответствующих выбранным фильтрам."
+    },
+    "modal": {
+      "title": "Блокировка процесса в Брандмауэре Windows",
+      "confirm_text": "Вы действительно хотите заблокировать весь входящий и исходящий трафик для:",
+      "rule_name_label": "Имя правила",
+      "block_confirm": "Заблокировать трафик",
+      "rules_drawer_title": "Активные правила Брандмауэра WiScripts",
+      "no_rules": "Правила блокировки еще не созданы."
+    }
+  },
+  "hardwareHealth": {
+    "title": "Здоровье SSD/NVMe и аналитика питания",
+    "subtitle": "Телеметрия SMART физических накопителей, износ аккумулятора и управление схемами питания Windows",
+    "storage": {
+      "title": "Здоровье накопителей SMART",
+      "select_drive": "Выбрать накопитель",
+      "drive_label": "Диск {{index}}: {{model}} ({{bus}})",
+      "health_optimal": "Оптимальное состояние",
+      "health_warning": "Предупреждение",
+      "temperature": "Температура",
+      "tbw_written": "Всего записано (TBW)",
+      "tbw_read": "Всего прочитано",
+      "power_on_hours": "Время работы",
+      "power_cycles": "Циклы включения",
+      "unsafe_shutdowns": "Небезопасные отключения",
+      "spare_capacity": "Резервная емкость",
+      "critical_warnings": "Критические предупреждения",
+      "smart_status": "Статус SMART",
+      "hours_unit": "{{hours}} ч",
+      "no_drives": "Физические накопители не обнаружены."
+    },
+    "battery": {
+      "title": "Аналитика аккумулятора и питания",
+      "desktop_ac": "Настольный ПК / Питание от сети",
+      "desktop_ac_desc": "Система работает от сети постоянного тока. Аналитика батареи отключена.",
+      "charge_level": "Уровень заряда",
+      "charging": "Зарядка",
+      "discharging": "Разрядка",
+      "ac_connected": "Сеть AC",
+      "discharge_rate": "Скорость разрядки",
+      "wear_level": "Уровень износа",
+      "cycle_count": "Циклы батареи",
+      "capacity_ratio": "Емкость: {{current}} / {{design}} мВт·ч",
+      "remaining_time": "Осталось: {{minutes}} мин",
+      "power_profile": "Состояние питания"
+    },
+    "power_schemes": {
+      "title": "Схемы управления питанием Windows",
+      "active_badge": "Активно",
+      "set_active": "Сделать активной",
+      "ultimate_title": "Схема Максимальной производительности Windows",
+      "ultimate_desc": "Устраняет микрозадержки и троттлинг ядер процессора для максимальной отзывчивости системы.",
+      "enable_ultimate_btn": "Включить Максимальную производительность"
+    }
   }
 }

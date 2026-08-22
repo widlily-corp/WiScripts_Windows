@@ -1,7 +1,8 @@
 /**
- * WiScripts Windows v1.0 Production Release — Comprehensive E2E Master Test Runner
- * Executes Tier 1 (Feature Coverage), Tier 2 (Boundary & Edge), Tier 3 (Cross-Feature Interactions),
- * and Tier 4 (Real-World Scenarios) test suites with full diagnostics and exit code reporting.
+ * WiScripts Windows v1.3.0 — Comprehensive E2E Master Test Runner
+ * Executes Tier 1 (Feature Coverage R1-R5), Tier 2 (Boundary & Edge Cases),
+ * Tier 3 (Cross-Feature Interactions), and Tier 4 (Real-World Application Scenarios)
+ * test suites with full diagnostics and exit code reporting.
  */
 
 import path from 'path';
@@ -13,9 +14,10 @@ import { buildTier4Suite } from './tier4_real_world.test.js';
 
 export async function runAllE2ETests() {
   console.log(`================================================================`);
-  console.log(` WiScripts Windows v1.0.0 — Comprehensive E2E Test Runner`);
+  console.log(` WiScripts Windows v1.3.0 — Comprehensive E2E Test Runner`);
   console.log(` Date: ${new Date().toISOString()}`);
   console.log(` Architecture: Rust Tauri v2 + React 18 + TypeScript + Refined Minimal`);
+  console.log(` Subsystems: Gaming Latency, Smart RAM, Network Shield, Hardware Health`);
   console.log(`================================================================\n`);
 
   const suites = [
@@ -43,7 +45,7 @@ export async function runAllE2ETests() {
   const overallDuration = Date.now() - overallStart;
 
   console.log(`================================================================`);
-  console.log(` OVERALL E2E TEST SUITE RESULTS (v1.0.0 PRODUCTION RELEASE)`);
+  console.log(` OVERALL E2E TEST SUITE RESULTS (v1.3.0 SUBSYSTEMS RELEASE)`);
   console.log(`================================================================`);
   for (const res of suiteResults) {
     const status = res.failed === 0 ? '✓ PASS' : '✗ FAIL';

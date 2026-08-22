@@ -468,9 +468,9 @@ async function main() {
   const enKeys = Object.keys(enFlat);
   const ruKeys = Object.keys(ruFlat);
 
-  await runTest('(g.1) i18n Key Count Parity: Both en.json and ru.json contain exactly 1,173 keys', () => {
-    assert.strictEqual(enKeys.length, 1173, `EN locale must contain 1173 keys (got ${enKeys.length})`);
-    assert.strictEqual(ruKeys.length, 1173, `RU locale must contain 1173 keys (got ${ruKeys.length})`);
+  await runTest('(g.1) i18n Key Count Parity: Both en.json and ru.json contain identical key count (>= 1,173 keys)', () => {
+    assert.strictEqual(enKeys.length, ruKeys.length, `EN and RU key counts must match (${enKeys.length} vs ${ruKeys.length})`);
+    assert.strictEqual(enKeys.length >= 1173, true, `Locale must contain at least 1173 keys (got ${enKeys.length})`);
   });
 
   await runTest('(g.2) i18n 1:1 Key Symmetry: Zero missing keys in EN or RU', () => {

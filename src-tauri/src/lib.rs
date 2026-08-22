@@ -6,10 +6,14 @@ pub mod diagnostics;
 pub mod dns_context;
 pub mod driver_backup;
 pub mod error;
+pub mod gaming;
 pub mod governor;
+pub mod hardware_health;
 pub mod logger;
 pub mod mas;
+pub mod memory;
 pub mod metrics;
+pub mod network_shield;
 pub mod odt;
 pub mod optimization;
 pub mod packages;
@@ -108,6 +112,24 @@ pub fn run() {
             script_runner::sync::sync_scripts_library,
             script_runner::sync::get_cached_scripts_library,
             script_runner::sync::read_library_script,
+            gaming::get_latency_metrics,
+            gaming::set_timer_resolution,
+            gaming::toggle_game_boost,
+            gaming::get_game_boost_status,
+            memory::get_memory_breakdown,
+            memory::purge_standby_memory,
+            memory::purge_working_sets,
+            memory::configure_ram_auto_trimmer,
+            memory::get_ram_auto_trimmer_config,
+            network_shield::get_active_network_connections,
+            network_shield::get_firewall_rules,
+            network_shield::block_process_firewall,
+            network_shield::unblock_process_firewall,
+            hardware_health::get_storage_devices_health,
+            hardware_health::get_battery_health_analytics,
+            hardware_health::get_power_schemes,
+            hardware_health::set_active_power_scheme,
+            hardware_health::enable_ultimate_performance_scheme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

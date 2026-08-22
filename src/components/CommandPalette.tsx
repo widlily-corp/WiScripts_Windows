@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   Zap,
+  Layers,
   Play,
   FileText,
   CornerDownLeft,
@@ -59,6 +60,10 @@ const NAVIGATION_TABS: Array<{ id: TabType; title: string; keywords: string[]; i
   { id: 'script_runner', title: 'Script Runner & Online Library', keywords: ['scripts', 'powershell', 'online library', 'code', 'automation'], icon: Terminal },
   { id: 'audio_manager', title: 'Audio Manager & Volume Routing', keywords: ['sound', 'volume', 'mixer', 'endpoints', 'devices', 'speaker'], icon: Volume2 },
   { id: 'governor', title: 'Resource Governor & ProFlow Engine', keywords: ['cpu', 'affinity', 'priority', 'ram trim', 'process', 'performance'], icon: Cpu },
+  { id: 'gaming_latency', title: 'Gaming Low-Latency & DPC Latency Analyzer', keywords: ['dpc', 'latency', 'isr', 'timer resolution', 'game boost', 'gaming', '0.5ms'], icon: Zap },
+  { id: 'smart_ram', title: 'Smart RAM & Standby List Memory Purger', keywords: ['ram', 'memory', 'standby list', 'working set', 'purge cache', 'empty working sets', 'trim'], icon: Layers },
+  { id: 'network_shield', title: 'Live Network Traffic & Process Firewall Shield', keywords: ['network', 'firewall', 'sockets', 'block process', 'tcp', 'udp', 'traffic', 'shield'], icon: ShieldCheck },
+  { id: 'hardware_health', title: 'Hardware NVMe SMART & Battery/Power Analytics', keywords: ['nvme', 'smart', 'ssd health', 'tbw', 'battery', 'power scheme', 'ultimate performance'], icon: Cpu },
   { id: 'optimization', title: 'Optimization & System Tweaks', keywords: ['debloat', 'telemetry', 'privacy', 'tweaks', 'services', 'windows 11'], icon: Sliders },
   { id: 'package_manager', title: 'Package Manager (WinGet)', keywords: ['winget', 'software', 'install', 'update', 'apps', 'packages'], icon: Package },
   { id: 'app_uninstaller', title: 'App Uninstaller & Debloat', keywords: ['uninstall', 'uwp', 'clean apps', 'remove software', 'store apps'], icon: Trash2 },
@@ -129,7 +134,7 @@ export function CommandPalette() {
   const masterIndex = useMemo<CommandPaletteItem[]>(() => {
     const items: CommandPaletteItem[] = [];
 
-    // 1. Navigation Tabs (21 Views)
+    // 1. Navigation Tabs (25 Views)
     for (const tab of NAVIGATION_TABS) {
       items.push({
         id: `tab_${tab.id}`,
@@ -400,12 +405,12 @@ export function CommandPalette() {
         <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border-subtle bg-surface text-xs">
           {(
             [
-              { id: 'all', label: 'All Items' },
-              { id: 'tab', label: 'Views (21)' },
-              { id: 'tweak', label: 'Tweaks (70+)' },
-              { id: 'script', label: 'Scripts (15)' },
-              { id: 'action', label: 'Quick Actions' },
-            ] as const
+              { id: 'all' as const, label: 'All Items' },
+              { id: 'tab' as const, label: `Views (${NAVIGATION_TABS.length})` },
+              { id: 'tweak' as const, label: 'Tweaks (70+)' },
+              { id: 'script' as const, label: `Scripts (${SCRIPT_LIBRARY_ENTRIES.length})` },
+              { id: 'action' as const, label: 'Quick Actions' },
+            ]
           ).map((filter) => (
             <button
               key={filter.id}

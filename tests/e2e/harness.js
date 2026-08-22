@@ -1,7 +1,8 @@
 /**
- * WiScripts Windows v1.0 Production Release — Comprehensive E2E Test Harness
+ * WiScripts Windows v1.3.0 — Comprehensive E2E Test Harness
  * Authoritative test utilities, assertion engine, crypto validation,
- * SCM / Registry / Storage / Profile simulators, and Mock IPC infrastructure.
+ * SCM / Registry / Storage / Profile / Kernel / Memory / Network / Hardware simulators,
+ * and Mock IPC infrastructure for R1 through R5.
  */
 
 import fs from 'fs';
@@ -138,7 +139,7 @@ export function compute4KbPartialHash(buffer) {
   return computeSha256(slice);
 }
 
-// --- 3. 2-Stage Storage Hashing Engine (Matching Rust src-tauri/src/storage/mod.rs) ---
+// --- 3. 2-Stage Storage Hashing Engine ---
 export class StorageDeduplicationEngine {
   constructor(userProfileRoot = 'C:\\Users\\TestUser') {
     this.userProfileRoot = path.normalize(userProfileRoot).toLowerCase();
@@ -284,7 +285,8 @@ export class Win32ScmSimulator {
       ['XblAuthManager', { startType: 3, status: 'STOPPED' }],
       ['XblGameSave', { startType: 3, status: 'STOPPED' }],
       ['RemoteRegistry', { startType: 4, status: 'STOPPED' }],
-      ['SCardSvr', { startType: 3, status: 'STOPPED' }]
+      ['SCardSvr', { startType: 3, status: 'STOPPED' }],
+      ['Spooler', { startType: 2, status: 'RUNNING' }]
     ]);
   }
 
@@ -317,6 +319,15 @@ export class Win32ScmSimulator {
     }
     const svc = this.services.get(name);
     svc.status = 'STOPPED';
+    return true;
+  }
+
+  startService(name) {
+    if (!this.services.has(name)) {
+      throw new Error(`OpenServiceW failed: ERROR_SERVICE_DOES_NOT_EXIST (1060) for '${name}'`);
+    }
+    const svc = this.services.get(name);
+    svc.status = 'RUNNING';
     return true;
   }
 }
@@ -363,9 +374,13 @@ export class CommandPaletteEngine {
   }
 
   buildIndex() {
-    // 21 Navigation Tabs
+    // 25 Navigation Tabs (21 original + 4 major subsystems)
     const tabs = [
       { id: 'dashboard', title: 'Dashboard', category: 'Navigation', keywords: ['system', 'metrics', 'overview', 'telemetry'] },
+      { id: 'gaming_latency', title: 'Gaming Low-Latency & DPC Analyzer', category: 'Navigation', keywords: ['dpc', 'isr', 'latency', 'timer', 'game boost', 'gaming', 'fps'] },
+      { id: 'smart_ram', title: 'Smart RAM & Standby List Memory Purger', category: 'Navigation', keywords: ['ram', 'memory', 'standby list', 'purge', 'working set', 'auto-trim'] },
+      { id: 'network_shield', title: 'Live Network Traffic & Process Firewall Shield', category: 'Navigation', keywords: ['network', 'firewall', 'sockets', 'connections', 'block', 'traffic', 'shield'] },
+      { id: 'hardware_health', title: 'Hardware NVMe SMART & Battery/Power Analytics', category: 'Navigation', keywords: ['nvme', 'smart', 'storage', 'battery', 'power', 'wear', 'temperature'] },
       { id: 'script_runner', title: 'Script Runner & Library', category: 'Navigation', keywords: ['scripts', 'powershell', 'online library', 'code'] },
       { id: 'audio_manager', title: 'Audio Manager', category: 'Navigation', keywords: ['sound', 'volume', 'mixer', 'endpoints'] },
       { id: 'governor', title: 'Resource Governor & ProFlow', category: 'Navigation', keywords: ['cpu', 'affinity', 'priority', 'ram trim'] },
@@ -470,28 +485,579 @@ export class CommandPaletteEngine {
   }
 }
 
-// --- 8. Mock IPC Simulator for v1.0 Production Architecture ---
-export class MockIPC {
+// --- 8. Simulator Engines for R1–R5 Subsystems ---
+
+/**
+ * 8.1 KernelLatencySimulator (R1: Gaming Low-Latency & DPC Analyzer)
+ * Simulates DPC/ISR latency estimation, timer resolution adjustments (NtSetTimerResolution),
+ * and Game Boost process priority elevation with non-essential service suspension.
+ */
+export class KernelLatencySimulator {
   constructor() {
+    this.defaultResolution100ns = 156250; // 15.625ms (default Windows resolution)
+    this.minResolution100ns = 156250;     // 15.625ms (coarse platform max)
+    this.maxResolution100ns = 5000;       // 0.5ms (fine precision NtSetTimerResolution)
+    this.currentResolution100ns = 156250;
+    this.isBoostActive = false;
+    this.boostedPid = null;
+    this.targetProcessName = null;
+    this.suspendedServices = [];
+    this.toggleHistory = [];
+    this.driverTelemetry = [
+      { driverName: 'ndis.sys', latencyUs: 38 },
+      { driverName: 'nvlddmkm.sys', latencyUs: 74 },
+      { driverName: 'tcpip.sys', latencyUs: 18 },
+      { driverName: 'ntoskrnl.exe', latencyUs: 22 }
+    ];
+  }
+
+  setResolution(resolution100ns, isElevated = true) {
+    if (!isElevated) {
+      throw new Error('AccessDenied: Adjusting timer resolution requires elevation (SeProfileSingleProcessPrivilege)');
+    }
+    // Clamp between high precision (5000) and standard (156250)
+    const clamped = Math.max(this.maxResolution100ns, Math.min(this.minResolution100ns, resolution100ns));
+    this.currentResolution100ns = clamped;
+    return this.getTimerResolutionInfo();
+  }
+
+  getTimerResolutionInfo() {
+    return {
+      currentResolution100ns: this.currentResolution100ns,
+      minResolution100ns: this.minResolution100ns,
+      maxResolution100ns: this.maxResolution100ns,
+      isHighPrecision: this.currentResolution100ns <= 10000 // <= 1.0ms
+    };
+  }
+
+  getLatencyMetrics() {
+    const maxDriverLatency = Math.max(...this.driverTelemetry.map(d => d.latencyUs), 0);
+    const avgLatency = Math.round(this.driverTelemetry.reduce((acc, d) => acc + d.latencyUs, 0) / Math.max(1, this.driverTelemetry.length));
+    return {
+      currentLatencyUs: avgLatency,
+      maxLatencyUs: maxDriverLatency,
+      dpcCount: 482910,
+      isrCount: 194302,
+      driverLatencies: [...this.driverTelemetry],
+      timerResolution100ns: this.currentResolution100ns,
+      isKernelDriverLoaded: true,
+      status: avgLatency < 500 ? 'OPTIMAL' : 'DEGRADED'
+    };
+  }
+
+  toggleGameBoost(targetPid = null, enable = true, isElevated = true, scm = null) {
+    if (!isElevated) {
+      throw new Error('AccessDenied: Game Boost requires administrator privileges (SeProfileSingleProcessPrivilege)');
+    }
+
+    if (enable) {
+      if (targetPid !== null && targetPid <= 0) {
+        throw new Error(`InvalidProcessId: Target PID must be positive, got ${targetPid}`);
+      }
+      this.isBoostActive = true;
+      this.boostedPid = targetPid || 4108;
+      this.targetProcessName = targetPid === 999999 ? 'UnknownGame.exe' : (targetPid ? 'CyberGame2077.exe' : 'ActiveForegroundApp.exe');
+      this.currentResolution100ns = 5000; // 0.5ms precision
+      this.suspendedServices = ['DiagTrack', 'dmwappushservice', 'SysMain', 'Fax', 'WerSvc'];
+      if (scm) {
+        for (const s of this.suspendedServices) {
+          try { scm.stopService(s); } catch (_) {}
+        }
+      }
+    } else {
+      this.isBoostActive = false;
+      this.boostedPid = null;
+      this.targetProcessName = null;
+      this.currentResolution100ns = this.defaultResolution100ns;
+      this.suspendedServices = [];
+    }
+
+    this.toggleHistory.push({ timestamp: Date.now(), enable, pid: this.boostedPid });
+    return this.getGameBoostStatus();
+  }
+
+  getGameBoostStatus() {
+    return {
+      isActive: this.isBoostActive,
+      boostedPid: this.boostedPid,
+      targetProcessName: this.targetProcessName,
+      suspendedServices: [...this.suspendedServices],
+      timerResolutionAdjusted: this.currentResolution100ns === 5000,
+      currentResolution100ns: this.currentResolution100ns
+    };
+  }
+}
+
+/**
+ * 8.2 NativeMemoryPurgerSimulator (R2: Smart RAM & Standby List Purger)
+ * Simulates NT standby list purge (NtSetSystemInformation), working set trimming (EmptyWorkingSet),
+ * process exclusion whitelist, and background auto-trimmer threshold evaluator.
+ */
+export class NativeMemoryPurgerSimulator {
+  constructor(totalMb = 16384) {
+    this.totalMb = totalMb;
+    this.inUseMb = 9216;
+    this.standbyMb = 4096;
+    this.modifiedMb = 512;
+    this.freeMb = this.totalMb - (this.inUseMb + this.standbyMb + this.modifiedMb);
+    this.purgeHistory = [];
+    this.maxHistoryEntries = 1000;
+    this.systemWhitelistedPids = new Set([4, 400, 500, 600, 1000]);
+    this.systemWhitelistedNames = new Set(['csrss.exe', 'lsass.exe', 'smss.exe', 'services.exe', 'explorer.exe']);
+    this.autoTrimmerConfig = {
+      enabled: false,
+      thresholdPercent: 80,
+      checkIntervalSec: 60,
+      minFreedMbThreshold: 512,
+      excludedPids: [],
+      excludedProcessNames: ['chrome.exe', 'code.exe']
+    };
+  }
+
+  getMemoryBreakdown() {
+    const usedMb = this.inUseMb + this.modifiedMb;
+    const usagePercent = Math.round((usedMb / this.totalMb) * 100);
+    return {
+      totalMb: this.totalMb,
+      inUseMb: this.inUseMb,
+      standbyMb: this.standbyMb,
+      modifiedMb: this.modifiedMb,
+      freeMb: this.freeMb,
+      usagePercent
+    };
+  }
+
+  purgeStandby(mode = 'normal', isElevated = true) {
+    if (!isElevated) {
+      throw new Error('AccessDenied: Standby list purge requires SeProfileSingleProcessPrivilege');
+    }
+    const reclaimRatio = mode === 'aggressive' ? 1.0 : 0.92;
+    const freedMb = Math.round(this.standbyMb * reclaimRatio);
+    this.standbyMb -= freedMb;
+    this.freeMb += freedMb;
+
+    const record = {
+      timestamp: new Date().toISOString(),
+      type: 'standby_list',
+      mode,
+      freedMb,
+      durationMs: 14
+    };
+    this.addHistory(record);
+
+    return {
+      success: true,
+      freedMb,
+      remainingStandbyMb: this.standbyMb,
+      durationMs: 14
+    };
+  }
+
+  purgeWorkingSets(excludedPids = [], isElevated = true) {
+    if (!isElevated) {
+      throw new Error('AccessDenied: Working set purge requires SeIncreaseQuotaPrivilege');
+    }
+    const excludedSet = new Set([...this.systemWhitelistedPids, ...(excludedPids || [])]);
+    const totalProcesses = 64;
+    const trimmedCount = Math.max(1, totalProcesses - excludedSet.size);
+    const freedMb = Math.round(Math.min(this.inUseMb * 0.25, 3500));
+    
+    this.inUseMb -= freedMb;
+    this.freeMb += freedMb;
+
+    const record = {
+      timestamp: new Date().toISOString(),
+      type: 'working_sets',
+      freedMb,
+      processesTrimmed: trimmedCount,
+      durationMs: 28
+    };
+    this.addHistory(record);
+
+    return {
+      success: true,
+      freedMb,
+      processesTrimmed: trimmedCount,
+      excludedCount: excludedSet.size,
+      durationMs: 28
+    };
+  }
+
+  configureAutoTrimmer(config) {
+    if (!config || typeof config !== 'object') {
+      throw new Error('InvalidAutoTrimmerConfig: Configuration object required');
+    }
+    let threshold = typeof config.thresholdPercent === 'number' ? config.thresholdPercent : this.autoTrimmerConfig.thresholdPercent;
+    // Boundary clamp between 0% and 100%
+    threshold = Math.max(0, Math.min(100, threshold));
+    this.autoTrimmerConfig = {
+      ...this.autoTrimmerConfig,
+      ...config,
+      thresholdPercent: threshold
+    };
+    return { ...this.autoTrimmerConfig };
+  }
+
+  getAutoTrimmerConfig() {
+    return { ...this.autoTrimmerConfig };
+  }
+
+  checkAndAutoTrim() {
+    const current = this.getMemoryBreakdown();
+    if (this.autoTrimmerConfig.enabled && current.usagePercent >= this.autoTrimmerConfig.thresholdPercent) {
+      const standbyRes = this.purgeStandby('normal', true);
+      const wsRes = this.purgeWorkingSets(this.autoTrimmerConfig.excludedPids, true);
+      const totalFreedMb = standbyRes.freedMb + wsRes.freedMb;
+      return { triggered: true, freedMb: totalFreedMb, currentUsagePercent: this.getMemoryBreakdown().usagePercent };
+    }
+    return { triggered: false, freedMb: 0, currentUsagePercent: current.usagePercent };
+  }
+
+  addHistory(record) {
+    if (this.purgeHistory.length >= this.maxHistoryEntries) {
+      this.purgeHistory.shift();
+    }
+    this.purgeHistory.push(record);
+  }
+}
+
+/**
+ * 8.3 NetworkFirewallSimulator (R3: Live Network Traffic & Process Firewall Shield)
+ * Simulates TCP/UDP socket telemetry (GetExtendedTcpTable/GetExtendedUdpTable), PID process mapping,
+ * bandwidth calculation, and Windows Defender Firewall inbound/outbound blocking rules.
+ */
+export class NetworkFirewallSimulator {
+  constructor() {
+    this.connections = [
+      {
+        protocol: 'TCP',
+        localAddress: '127.0.0.1',
+        localPort: 1420,
+        remoteAddress: '0.0.0.0',
+        remotePort: 0,
+        state: 'LISTEN',
+        pid: 4812,
+        processName: 'wiscripts-windows.exe',
+        processPath: 'C:\\Program Files\\WiScripts\\wiscripts-windows.exe',
+        uploadBps: 1024,
+        downloadBps: 2048
+      },
+      {
+        protocol: 'TCP',
+        localAddress: '192.168.1.105',
+        localPort: 52344,
+        remoteAddress: '140.82.121.4',
+        remotePort: 443,
+        state: 'ESTABLISHED',
+        pid: 9120,
+        processName: 'git.exe',
+        processPath: 'C:\\Program Files\\Git\\cmd\\git.exe',
+        uploadBps: 15420,
+        downloadBps: 124500
+      },
+      {
+        protocol: 'TCP',
+        localAddress: '192.168.1.105',
+        localPort: 54112,
+        remoteAddress: '198.51.100.44',
+        remotePort: 8080,
+        state: 'ESTABLISHED',
+        pid: 6644,
+        processName: 'suspicious_miner.exe',
+        processPath: 'C:\\Users\\TestUser\\AppData\\Local\\Temp\\suspicious_miner.exe',
+        uploadBps: 98000,
+        downloadBps: 45000
+      },
+      {
+        protocol: 'UDP',
+        localAddress: '0.0.0.0',
+        localPort: 5353,
+        remoteAddress: '0.0.0.0',
+        remotePort: 0,
+        state: 'LISTEN',
+        pid: 1240,
+        processName: 'svchost.exe',
+        processPath: 'C:\\Windows\\System32\\svchost.exe',
+        uploadBps: 0,
+        downloadBps: 0
+      },
+      {
+        protocol: 'TCP',
+        localAddress: '0.0.0.0',
+        localPort: 0,
+        remoteAddress: '0.0.0.0',
+        remotePort: 0,
+        state: 'LISTEN',
+        pid: 0,
+        processName: 'System Idle Process',
+        processPath: '',
+        uploadBps: 0,
+        downloadBps: 0
+      }
+    ];
+    this.firewallRules = new Map();
+  }
+
+  validatePath(procPath) {
+    if (!procPath || typeof procPath !== 'string' || procPath.trim() === '') {
+      throw new Error('InvalidPath: Process path cannot be empty');
+    }
+    if (procPath.includes('..') || procPath.includes('/../') || procPath.includes('\\..\\')) {
+      throw new Error(`PathTraversalDetected: Path '${procPath}' contains forbidden relative traversal sequences`);
+    }
+    return procPath;
+  }
+
+  getActiveConnections(filter = {}) {
+    let result = [...this.connections];
+    if (filter.protocol) {
+      result = result.filter(c => c.protocol.toUpperCase() === filter.protocol.toUpperCase());
+    }
+    if (filter.pid !== undefined && filter.pid !== null) {
+      result = result.filter(c => c.pid === filter.pid);
+    }
+    if (filter.search) {
+      const q = filter.search.toLowerCase();
+      result = result.filter(c => c.processName.toLowerCase().includes(q) || c.processPath.toLowerCase().includes(q) || String(c.remotePort).includes(q) || c.remoteAddress.includes(q));
+    }
+    return result;
+  }
+
+  blockProcess(processPath, ruleName = null, isElevated = true) {
+    this.validatePath(processPath);
+    if (!isElevated) {
+      throw new Error('AccessDenied: Modifying Windows Defender Firewall rules requires administrator privileges');
+    }
+    const procName = path.basename(processPath);
+    const resolvedRuleName = ruleName || `WiScripts_Block_${procName}`;
+
+    const rule = {
+      ruleName: resolvedRuleName,
+      processPath,
+      processName: procName,
+      direction: 'Both',
+      action: 'Block',
+      isEnabled: true,
+      createdAt: new Date().toISOString()
+    };
+    this.firewallRules.set(resolvedRuleName, rule);
+
+    // Terminate matching connections
+    this.connections = this.connections.filter(c => c.processPath.toLowerCase() !== processPath.toLowerCase());
+
+    return {
+      success: true,
+      ruleName: resolvedRuleName,
+      processPath,
+      processName: procName,
+      direction: 'Both',
+      action: 'Block'
+    };
+  }
+
+  unblockProcess(ruleNameOrPath, isElevated = true) {
+    if (!isElevated) {
+      throw new Error('AccessDenied: Modifying Windows Defender Firewall rules requires administrator privileges');
+    }
+    let removedCount = 0;
+    if (this.firewallRules.has(ruleNameOrPath)) {
+      this.firewallRules.delete(ruleNameOrPath);
+      removedCount = 1;
+    } else {
+      for (const [key, rule] of this.firewallRules.entries()) {
+        if (rule.processPath.toLowerCase() === ruleNameOrPath.toLowerCase() || rule.processName.toLowerCase() === ruleNameOrPath.toLowerCase()) {
+          this.firewallRules.delete(key);
+          removedCount++;
+        }
+      }
+    }
+    return {
+      success: true,
+      ruleName: ruleNameOrPath,
+      removedRulesCount: removedCount,
+      message: removedCount > 0 ? `Removed ${removedCount} firewall rule(s)` : 'No active rule found'
+    };
+  }
+
+  getFirewallRules() {
+    return Array.from(this.firewallRules.values());
+  }
+
+  getBlockedProcesses() {
+    return Array.from(new Set(Array.from(this.firewallRules.values()).map(r => r.processPath)));
+  }
+}
+
+/**
+ * 8.4 HardwareTelemetrySimulator (R4: Hardware NVMe SMART & Battery/Power Analytics)
+ * Simulates NVMe SMART health logs (IOCTL_STORAGE_QUERY_PROPERTY), temperature, TBW,
+ * laptop battery wear level, discharge rate, and Windows Ultimate Performance power scheme activation.
+ */
+export class HardwareTelemetrySimulator {
+  constructor() {
+    this.systemType = 'laptop'; // 'laptop' | 'desktop'
+    this.devices = [
+      {
+        deviceId: '\\\\.\\PhysicalDrive0',
+        model: 'Samsung SSD 990 PRO 2TB',
+        interfaceType: 'NVMe',
+        healthPercentage: 99,
+        temperatureC: 41,
+        totalBytesWrittenTb: 14.8,
+        spareCapacityPercent: 100,
+        powerOnHours: 1840,
+        criticalWarnings: 0,
+        firmwareVersion: '1B2QJXD7',
+        isHealthy: true
+      },
+      {
+        deviceId: '\\\\.\\PhysicalDrive1',
+        model: 'Crucial MX500 1TB',
+        interfaceType: 'SATA',
+        healthPercentage: 94,
+        temperatureC: 36,
+        totalBytesWrittenTb: 48.2,
+        spareCapacityPercent: 98,
+        powerOnHours: 8900,
+        criticalWarnings: 0,
+        firmwareVersion: 'M3CR046',
+        isHealthy: true
+      }
+    ];
+    this.battery = {
+      batteryPresent: true,
+      powerSource: 'Battery',
+      chargePercent: 88,
+      wearLevelPercent: 6.5,
+      designCapacityMwh: 70000,
+      fullChargeCapacityMwh: 65450,
+      cycleCount: 142,
+      dischargeRateMw: 14500,
+      estimatedRemainingMinutes: 270,
+      isCharging: false
+    };
+    this.powerSchemes = [
+      { guid: '381b4222-f694-41f0-9685-ff5bb260df2e', name: 'Balanced', description: 'Automatically balances performance with energy consumption.', isActive: true, isUltimatePerformance: false },
+      { guid: '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c', name: 'High Performance', description: 'Favors performance, but may use more energy.', isActive: false, isUltimatePerformance: false },
+      { guid: 'a1841308-3541-4fab-bc81-f71556f20b4a', name: 'Power Saver', description: 'Saves power by reducing computer performance.', isActive: false, isUltimatePerformance: false },
+      { guid: 'e9a42b02-d5df-448d-aa00-03f14749eb61', name: 'Ultimate Performance', description: 'Provides ultimate performance on higher end PCs.', isActive: false, isUltimatePerformance: true }
+    ];
+  }
+
+  setSystemType(type) {
+    this.systemType = type;
+    if (type === 'desktop') {
+      this.battery = {
+        batteryPresent: false,
+        powerSource: 'AC',
+        chargePercent: 100,
+        wearLevelPercent: 0,
+        designCapacityMwh: 0,
+        fullChargeCapacityMwh: 0,
+        cycleCount: 0,
+        dischargeRateMw: 0,
+        estimatedRemainingMinutes: 0,
+        isCharging: false
+      };
+    } else {
+      this.battery = {
+        batteryPresent: true,
+        powerSource: 'Battery',
+        chargePercent: 88,
+        wearLevelPercent: 6.5,
+        designCapacityMwh: 70000,
+        fullChargeCapacityMwh: 65450,
+        cycleCount: 142,
+        dischargeRateMw: 14500,
+        estimatedRemainingMinutes: 270,
+        isCharging: false
+      };
+    }
+  }
+
+  getStorageDevices() {
+    return this.devices.map(d => {
+      const isTempWarning = d.temperatureC < 0 || d.temperatureC > 80;
+      return {
+        ...d,
+        sensorWarning: isTempWarning ? 'Abnormal temperature detected' : null
+      };
+    });
+  }
+
+  getBatteryAnalytics() {
+    let calculatedWear = 0;
+    if (this.battery.batteryPresent && this.battery.designCapacityMwh > 0) {
+      calculatedWear = Number((((this.battery.designCapacityMwh - this.battery.fullChargeCapacityMwh) / this.battery.designCapacityMwh) * 100).toFixed(1));
+    }
+    return {
+      ...this.battery,
+      wearLevelPercent: calculatedWear
+    };
+  }
+
+  getPowerSchemes() {
+    return [...this.powerSchemes];
+  }
+
+  setActivePowerScheme(guid) {
+    const found = this.powerSchemes.find(p => p.guid.toLowerCase() === guid.toLowerCase());
+    if (!found) {
+      throw new Error(`PowerSchemeNotFound: GUID '${guid}' does not match any registered power scheme`);
+    }
+    for (const p of this.powerSchemes) {
+      p.isActive = (p.guid.toLowerCase() === guid.toLowerCase());
+    }
+    return true;
+  }
+
+  enableUltimatePerformance() {
+    const ultGuid = 'e9a42b02-d5df-448d-aa00-03f14749eb61';
+    let ult = this.powerSchemes.find(p => p.guid.toLowerCase() === ultGuid);
+    if (!ult) {
+      ult = {
+        guid: ultGuid,
+        name: 'Ultimate Performance',
+        description: 'Provides ultimate performance on higher end PCs.',
+        isActive: false,
+        isUltimatePerformance: true
+      };
+      this.powerSchemes.push(ult);
+    }
+    this.setActivePowerScheme(ultGuid);
+    return { ...ult, isActive: true };
+  }
+}
+
+// --- 9. Mock IPC Simulator for v1.3.0 Architecture ---
+export class MockIPC {
+  constructor(isElevated = true) {
+    this.isElevated = isElevated;
     this.handlers = new Map();
     this.eventListeners = new Map();
     this.emittedEvents = [];
     this.scm = new Win32ScmSimulator();
+    this.kernelLatency = new KernelLatencySimulator();
+    this.memoryPurger = new NativeMemoryPurgerSimulator();
+    this.networkFirewall = new NetworkFirewallSimulator();
+    this.hardwareTelemetry = new HardwareTelemetrySimulator();
     this.setupDefaultHandlers();
   }
 
   setupDefaultHandlers() {
+    // General System Info
     this.registerHandler('get_system_info', async () => ({
       osName: 'Windows 11 Pro',
       osVersion: '24H2',
       osBuild: '26100.1150',
-      isElevated: true,
+      isElevated: this.isElevated,
       cpuUsagePercent: 12,
       memoryUsedMb: 6144,
       memoryTotalMb: 16384,
       telemetryStatus: 'Active'
     }));
 
+    // Scripts Library
     this.registerHandler('sync_scripts_library', async ({ force_refresh }) => ({
       success: true,
       source: force_refresh ? 'remote_github' : 'local_cache',
@@ -537,7 +1103,7 @@ export class MockIPC {
       timestamp: new Date().toISOString(),
       stateEngineSuccess: true,
       restorePointSuccess: true,
-      rulesCaptured: rule_ids.length
+      rulesCaptured: rule_ids ? rule_ids.length : 0
     }));
 
     this.registerHandler('execute_custom_script', async ({ script_content, script_type, dry_run }) => {
@@ -549,6 +1115,114 @@ export class MockIPC {
         await this.emit('script-output-line', { line: line.trim(), stream: 'stdout' });
       }
       return { exit_code: 0, stdout: script_content, stderr: '' };
+    });
+
+    // Subsystem 1: Gaming Low-Latency & DPC Analyzer (R1)
+    this.registerHandler('get_latency_metrics', async () => {
+      return this.kernelLatency.getLatencyMetrics();
+    });
+
+    this.registerHandler('set_timer_resolution', async ({ resolution_100ns }) => {
+      return this.kernelLatency.setResolution(resolution_100ns, this.isElevated);
+    });
+
+    this.registerHandler('set_system_timer_resolution', async ({ resolution_100ns }) => {
+      return this.kernelLatency.setResolution(resolution_100ns, this.isElevated);
+    });
+
+    this.registerHandler('toggle_game_boost', async ({ target_pid, enable }) => {
+      return this.kernelLatency.toggleGameBoost(target_pid, enable, this.isElevated, this.scm);
+    });
+
+    this.registerHandler('get_game_boost_status', async () => {
+      return this.kernelLatency.getGameBoostStatus();
+    });
+
+    // Subsystem 2: Smart RAM & Standby List Purger (R2)
+    this.registerHandler('get_memory_breakdown', async () => {
+      return this.memoryPurger.getMemoryBreakdown();
+    });
+
+    this.registerHandler('purge_standby_memory', async ({ mode } = {}) => {
+      return this.memoryPurger.purgeStandby(mode || 'normal', this.isElevated);
+    });
+
+    this.registerHandler('purge_working_sets', async ({ excluded_pids } = {}) => {
+      return this.memoryPurger.purgeWorkingSets(excluded_pids || [], this.isElevated);
+    });
+
+    this.registerHandler('configure_ram_auto_trimmer', async ({ config }) => {
+      return this.memoryPurger.configureAutoTrimmer(config);
+    });
+
+    this.registerHandler('set_memory_purger_config', async ({ config }) => {
+      return this.memoryPurger.configureAutoTrimmer(config);
+    });
+
+    this.registerHandler('get_ram_auto_trimmer_config', async () => {
+      return this.memoryPurger.getAutoTrimmerConfig();
+    });
+
+    this.registerHandler('get_memory_purger_config', async () => {
+      return this.memoryPurger.getAutoTrimmerConfig();
+    });
+
+    // Subsystem 3: Live Network Traffic & Process Firewall Shield (R3)
+    this.registerHandler('get_active_network_connections', async (filter = {}) => {
+      return this.networkFirewall.getActiveConnections(filter);
+    });
+
+    this.registerHandler('get_firewall_rules', async () => {
+      return this.networkFirewall.getFirewallRules();
+    });
+
+    this.registerHandler('get_firewall_rules_status', async () => {
+      return this.networkFirewall.getFirewallRules();
+    });
+
+    this.registerHandler('block_process_firewall', async ({ process_path, rule_name }) => {
+      return this.networkFirewall.blockProcess(process_path, rule_name, this.isElevated);
+    });
+
+    this.registerHandler('unblock_process_firewall', async ({ rule_name }) => {
+      return this.networkFirewall.unblockProcess(rule_name, this.isElevated);
+    });
+
+    // Subsystem 4: Hardware NVMe SMART & Battery/Power Analytics (R4)
+    this.registerHandler('get_storage_devices_health', async () => {
+      return this.hardwareTelemetry.getStorageDevices();
+    });
+
+    this.registerHandler('get_nvme_smart_health', async () => {
+      return this.hardwareTelemetry.getStorageDevices();
+    });
+
+    this.registerHandler('get_battery_health_analytics', async () => {
+      return this.hardwareTelemetry.getBatteryAnalytics();
+    });
+
+    this.registerHandler('get_battery_power_analytics', async () => {
+      return this.hardwareTelemetry.getBatteryAnalytics();
+    });
+
+    this.registerHandler('get_power_schemes', async () => {
+      return this.hardwareTelemetry.getPowerSchemes();
+    });
+
+    this.registerHandler('get_power_profiles', async () => {
+      return this.hardwareTelemetry.getPowerSchemes();
+    });
+
+    this.registerHandler('set_active_power_scheme', async ({ scheme_guid }) => {
+      return this.hardwareTelemetry.setActivePowerScheme(scheme_guid);
+    });
+
+    this.registerHandler('enable_ultimate_performance_scheme', async () => {
+      return this.hardwareTelemetry.enableUltimatePerformance();
+    });
+
+    this.registerHandler('activate_ultimate_performance_power_plan', async () => {
+      return this.hardwareTelemetry.enableUltimatePerformance();
     });
   }
 
@@ -592,7 +1266,7 @@ export class MockIPC {
   }
 }
 
-// --- 9. Application State Simulator ---
+// --- 10. Application State Simulator ---
 export class AppStateSimulator {
   constructor(ipc = new MockIPC()) {
     this.ipc = ipc;
@@ -619,6 +1293,26 @@ export class AppStateSimulator {
         memoryUsedMb: 6144,
         memoryTotalMb: 16384,
         telemetryStatus: 'Active'
+      },
+      gaming: {
+        latencyMetrics: null,
+        isGameBoostActive: false,
+        boostedPid: null,
+        targetTimerResolution: 5000
+      },
+      memory: {
+        breakdown: null,
+        autoTrimmerEnabled: false,
+        thresholdPercent: 80
+      },
+      network: {
+        connections: [],
+        blockedRules: []
+      },
+      hardware: {
+        storageDevices: [],
+        batteryAnalytics: null,
+        activePowerScheme: '381b4222-f694-41f0-9685-ff5bb260df2e'
       },
       terminalLogs: [],
       currentLanguage: 'en'
@@ -688,7 +1382,7 @@ export class AppStateSimulator {
   }
 }
 
-// --- 10. Test Suite Execution Engine ---
+// --- 11. Test Suite Execution Engine ---
 export class TestRunner {
   constructor(suiteName) {
     this.suiteName = suiteName;

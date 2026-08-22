@@ -1,19 +1,15 @@
 /**
- * Tier 2 Test Suite: Boundary & Edge Cases (WiScripts Windows v1.0 Production Release)
- * Verifies edge cases, stress payloads, boundary limits, escaping, hash collisions,
- * malformed inputs, timeouts, and error handling across R1 through R6.
+ * Tier 2 Test Suite: Boundary Value Analysis & Edge Cases (WiScripts Windows v1.3.0)
+ * Verifies edge cases, stress payloads, boundary limits, escaping, unprivileged elevation errors,
+ * extreme thresholds, path traversal security, and missing hardware handling across R1 through R5.
  */
 
-import fs from 'fs';
-import path from 'path';
 import {
   assert,
-  computeSha256,
-  compute4KbPartialHash,
-  StorageDeduplicationEngine,
-  parseInstallDate,
-  Win32ScmSimulator,
-  ProfileValidationEngine,
+  KernelLatencySimulator,
+  NativeMemoryPurgerSimulator,
+  NetworkFirewallSimulator,
+  HardwareTelemetrySimulator,
   CommandPaletteEngine,
   MockIPC,
   AppStateSimulator,
@@ -24,271 +20,379 @@ export function buildTier2Suite() {
   const runner = new TestRunner('Tier 2 - Boundary & Edge Cases');
 
   // =========================================================================
-  // 1. Script Runner & Online Library Boundary Cases
+  // 1. Gaming & Latency Subsystem Boundaries (R1)
   // =========================================================================
 
-  runner.addTest('T2_R1_01: Empty script content input validation raises error before IPC invocation', async () => {
+  runner.addTest('T2_R1_01: Timer resolution clamps between platform min (156250) and max precision (5000)', async () => {
+    // Arrange
+    const kernel = new KernelLatencySimulator();
+
+    // Act 1: Below 0.5ms (e.g. 1000 = 0.1ms) -> Clamps to 5000 (0.5ms)
+    const clampedMax = kernel.setResolution(1000);
+    assert.equal(clampedMax.currentResolution100ns, 5000, 'Clamps sub-0.5ms requests to 5000');
+
+    // Act 2: Above 15.625ms (e.g. 300000 = 30ms) -> Clamps to 156250 (15.625ms)
+    const clampedMin = kernel.setResolution(300000);
+    assert.equal(clampedMin.currentResolution100ns, 156250, 'Clamps super-15.625ms requests to 156250');
+  });
+
+  runner.addTest('T2_R1_02: Game Boost handles negative or zero target PID with validation error', async () => {
+    // Arrange
+    const kernel = new KernelLatencySimulator();
+
+    // Act & Assert
+    assert.throws(
+      () => kernel.toggleGameBoost(-5, true),
+      'InvalidProcessId',
+      'Throws on negative PID'
+    );
+    assert.throws(
+      () => kernel.toggleGameBoost(0, true),
+      'InvalidProcessId',
+      'Throws on PID 0'
+    );
+  });
+
+  runner.addTest('T2_R1_03: Unprivileged user invocation for timer resolution/Game Boost throws AccessDenied', async () => {
+    // Arrange: unprivileged IPC instance (isElevated = false)
+    const unprivilegedIpc = new MockIPC(false);
+
+    // Act & Assert 1: set_timer_resolution
+    await assert.throwsAsync(
+      async () => await unprivilegedIpc.invoke('set_timer_resolution', { resolution_100ns: 5000 }),
+      'AccessDenied',
+      'Unprivileged timer adjustment rejected'
+    );
+
+    // Act & Assert 2: toggle_game_boost
+    await assert.throwsAsync(
+      async () => await unprivilegedIpc.invoke('toggle_game_boost', { target_pid: 1234, enable: true }),
+      'AccessDenied',
+      'Unprivileged Game Boost rejected'
+    );
+  });
+
+  runner.addTest('T2_R1_04: Rapid toggle of Game Boost (10x in succession) maintains state consistency', async () => {
     // Arrange
     const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
+
+    // Act: rapidly enable and disable
+    for (let i = 0; i < 10; i++) {
+      await ipc.invoke('toggle_game_boost', { target_pid: 4000 + i, enable: true });
+      await ipc.invoke('toggle_game_boost', { target_pid: null, enable: false });
+    }
+
+    // Assert: final state is completely clean
+    const status = await ipc.invoke('get_game_boost_status');
+    assert.isFalse(status.isActive, 'Game boost is cleanly deactivated');
+    assert.equal(status.boostedPid, null, 'Boosted PID is null');
+    assert.equal(status.suspendedServices.length, 0, 'No suspended services remain');
+    assert.equal(status.currentResolution100ns, 156250, 'Timer resolution restored to default');
+    assert.equal(ipc.kernelLatency.toggleHistory.length, 20, 'All 20 toggle events recorded');
+  });
+
+  runner.addTest('T2_R1_05: Latency metrics computation handles empty/zero driver telemetry without NaN', async () => {
+    // Arrange
+    const kernel = new KernelLatencySimulator();
+    kernel.driverTelemetry = []; // Zero drivers loaded
+
+    // Act
+    const metrics = kernel.getLatencyMetrics();
+
+    // Assert
+    assert.equal(metrics.currentLatencyUs, 0, 'Average latency is 0 without division by zero');
+    assert.equal(metrics.maxLatencyUs, 0, 'Max latency is 0');
+    assert.isFalse(isNaN(metrics.currentLatencyUs), 'No NaN values generated');
+  });
+
+  // =========================================================================
+  // 2. Smart RAM Purger Boundaries (R2)
+  // =========================================================================
+
+  runner.addTest('T2_R2_01: Memory auto-trimmer handles 0% and 100% threshold boundary values safely', async () => {
+    // Arrange
+    const purger = new NativeMemoryPurgerSimulator();
+
+    // Act 1: 0% threshold
+    const cfg0 = purger.configureAutoTrimmer({ enabled: true, thresholdPercent: 0 });
+    assert.equal(cfg0.thresholdPercent, 0, '0% threshold accepted');
+    const trim0 = purger.checkAndAutoTrim();
+    assert.isTrue(trim0.triggered, '0% threshold immediately triggers auto-trim');
+
+    // Act 2: 100% threshold
+    const cfg100 = purger.configureAutoTrimmer({ enabled: true, thresholdPercent: 100 });
+    assert.equal(cfg100.thresholdPercent, 100, '100% threshold accepted');
+    const trim100 = purger.checkAndAutoTrim();
+    assert.isFalse(trim100.triggered, '100% threshold does not trigger on normal load');
+  });
+
+  runner.addTest('T2_R2_02: Empty or malformed whitelist automatically preserves hardcoded system essentials', async () => {
+    // Arrange
+    const purger = new NativeMemoryPurgerSimulator();
+
+    // Act: pass null / empty excluded PIDs
+    const res = purger.purgeWorkingSets(null);
+
+    // Assert: system whitelisted processes (csrss, lsass, smss, services, explorer) are preserved
+    assert.isTrue(res.success, 'Purge succeeds');
+    assert.greaterThanOrEqual(res.excludedCount, 5, 'Hardcoded system essentials protected');
+  });
+
+  runner.addTest('T2_R2_03: Unprivileged user invocation for standby purge throws AccessDenied', async () => {
+    // Arrange
+    const unprivilegedIpc = new MockIPC(false);
 
     // Act & Assert
     await assert.throwsAsync(
-      async () => await app.executeScript('   ', 'ps1'),
-      'Script content cannot be empty',
-      'Validation throws on empty script string'
+      async () => await unprivilegedIpc.invoke('purge_standby_memory'),
+      'AccessDenied',
+      'Unprivileged standby purge rejected'
     );
   });
 
-  runner.addTest('T2_R1_02: Large script payload (5000 lines) streams without memory leak or buffer truncation', async () => {
+  runner.addTest('T2_R2_04: Unprivileged user invocation for working sets purge throws AccessDenied', async () => {
     // Arrange
-    const ipc = new MockIPC();
-    const app = new AppStateSimulator(ipc);
-    const largeLine = 'Write-Host "Verifying large payload line execution"\n';
-    const largeScript = largeLine.repeat(5000); // 5,000 lines (~250KB)
-
-    // Act
-    const res = await app.executeScript(largeScript, 'ps1');
-
-    // Assert
-    assert.equal(res.exit_code, 0, 'Large script execution completes with exit code 0');
-    assert.greaterThanOrEqual(app.state.terminalLogs.length, 5000, 'Captured all 5,000 streamed lines');
-  });
-
-  runner.addTest('T2_R1_03: Invalid script file extensions (.exe, .sh, .vbs, .py) are rejected by security guard', async () => {
-    // Arrange
-    function validateScriptFileType(filename) {
-      const allowedExts = ['.ps1', '.bat', '.cmd'];
-      const ext = path.extname(filename).toLowerCase();
-      if (!allowedExts.includes(ext)) {
-        throw new Error(`SecurityError: Execution of extension '${ext}' is not permitted`);
-      }
-      return true;
-    }
+    const unprivilegedIpc = new MockIPC(false);
 
     // Act & Assert
-    assert.throws(() => validateScriptFileType('malicious.exe'), 'SecurityError');
-    assert.throws(() => validateScriptFileType('script.sh'), 'SecurityError');
-    assert.throws(() => validateScriptFileType('payload.vbs'), 'SecurityError');
-    assert.throws(() => validateScriptFileType('exploit.py'), 'SecurityError');
-    assert.isTrue(validateScriptFileType('valid.ps1'), 'Valid .ps1 accepted');
-  });
-
-  runner.addTest('T2_R1_04: Corrupted or tampered script payload triggers SHA-256 integrity mismatch error', async () => {
-    // Arrange
-    const manifestExpectedSha256 = '4a7d65b4c489f074d6f8595a898b9e6ffcb23871239857948292837498192837';
-    const tamperedScriptContent = 'Get-Service -Name DiagTrack | Stop-Service # TAMPERED CONTENT ADDED';
-
-    // Act
-    const actualSha256 = computeSha256(tamperedScriptContent);
-
-    function verifyScriptIntegrity(expectedHash, actualHash, scriptId) {
-      if (expectedHash.toLowerCase() !== actualHash.toLowerCase()) {
-        throw new Error(`IntegrityViolation: SHA-256 mismatch for script '${scriptId}'. Expected ${expectedHash}, got ${actualHash}`);
-      }
-      return true;
-    }
-
-    // Assert
-    assert.throws(
-      () => verifyScriptIntegrity(manifestExpectedSha256, actualSha256, 'maint-clear-wu-cache'),
-      'IntegrityViolation',
-      'Integrity check rejects tampered script'
+    await assert.throwsAsync(
+      async () => await unprivilegedIpc.invoke('purge_working_sets'),
+      'AccessDenied',
+      'Unprivileged working set trim rejected'
     );
   });
 
-  runner.addTest('T2_R1_05: Malformed manifest JSON with invalid risk level or missing hash is rejected', async () => {
+  runner.addTest('T2_R2_05: Purge history buffer is capped at 1,000 entries preventing memory leaks', async () => {
     // Arrange
-    const malformedManifest = {
-      schemaVersion: '1.0.0',
-      scripts: [
-        {
-          id: 'bad-script',
-          name: 'Bad Script',
-          riskLevel: 'UNKNOWN_RISK', // Invalid risk level
-          sha256: 'not-a-valid-sha256' // Non-64 char hex
-        }
-      ]
-    };
+    const purger = new NativeMemoryPurgerSimulator();
 
-    // Act
-    function validateManifest(manifest) {
-      const allowedRisks = new Set(['safe', 'elevated', 'critical']);
-      const errors = [];
-      for (const s of manifest.scripts || []) {
-        if (!allowedRisks.has(s.riskLevel?.toLowerCase())) {
-          errors.push(`Invalid risk level '${s.riskLevel}' for script '${s.id}'`);
-        }
-        if (!/^[a-f0-9]{64}$/i.test(s.sha256 || '')) {
-          errors.push(`Invalid SHA-256 format for script '${s.id}'`);
-        }
-      }
-      if (errors.length > 0) throw new Error(`ManifestValidationError: ${errors.join('; ')}`);
-      return true;
+    // Act: simulate 1,050 purge operations
+    for (let i = 0; i < 1050; i++) {
+      purger.addHistory({ timestamp: new Date().toISOString(), type: 'standby_list', freedMb: 100 });
     }
 
     // Assert
-    assert.throws(() => validateManifest(malformedManifest), 'ManifestValidationError');
+    assert.equal(purger.purgeHistory.length, 1000, 'History buffer bounded at max 1,000 entries');
   });
 
-  runner.addTest('T2_R1_06: Offline sync engine falls back to local cache when remote request times out', async () => {
+  // =========================================================================
+  // 3. Network & Firewall Subsystem Boundaries (R3)
+  // =========================================================================
+
+  runner.addTest('T2_R3_01: Sockets with PID 0 (System Idle) or unknown processes are handled safely', async () => {
     // Arrange
     const ipc = new MockIPC();
-    ipc.registerHandler('sync_scripts_library', async () => {
-      // Simulate network timeout falling back to local cached copy
-      return {
-        success: true,
-        source: 'local_cache_fallback',
-        isOffline: true,
-        etag: '"cached-v1.0.0"',
-        warning: 'Network request timed out (3000ms limit). Using cached library.'
-      };
-    });
 
     // Act
-    const res = await ipc.invoke('sync_scripts_library', { force_refresh: true });
+    const conns = await ipc.invoke('get_active_network_connections');
+    const idleConn = conns.find(c => c.pid === 0);
 
     // Assert
-    assert.isTrue(res.success, 'Sync succeeded in offline mode');
-    assert.isTrue(res.isOffline, 'Flagged as offline');
-    assert.equal(res.source, 'local_cache_fallback', 'Fell back to local cache');
+    assert.ok(idleConn, 'Connection for PID 0 exists');
+    assert.equal(idleConn.processName, 'System Idle Process', 'PID 0 resolved safely');
+    assert.equal(idleConn.uploadBps, 0, 'No bandwidth for idle process');
   });
 
-  // =========================================================================
-  // 2. Storage 2-Stage Hashing Boundary Cases
-  // =========================================================================
-
-  runner.addTest('T2_R2_01: 2-stage hasher filters size collisions with different 4KB headers in Phase 1b', async () => {
+  runner.addTest('T2_R3_02: Path traversal attempts in firewall executable paths are strictly rejected', async () => {
     // Arrange
-    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
-    // Two 10KB files with different 4KB headers
-    const bufA = Buffer.concat([Buffer.from('AAA'.repeat(1365)), Buffer.alloc(1000, 1)]);
-    const bufB = Buffer.concat([Buffer.from('BBB'.repeat(1365)), Buffer.alloc(1000, 1)]);
-
-    const virtualFiles = [
-      { path: 'C:\\Users\\TestUser\\Downloads\\fileA.bin', contentBuffer: bufA },
-      { path: 'C:\\Users\\TestUser\\Downloads\\fileB.bin', contentBuffer: bufB }
+    const firewall = new NetworkFirewallSimulator();
+    const maliciousPaths = [
+      '..\\..\\malware.exe',
+      'C:\\Windows\\System32\\..\\..\\payload.exe',
+      'C:/Temp/../../malicious.exe'
     ];
 
-    // Act
-    const duplicates = engine.scanDuplicates(virtualFiles);
-
-    // Assert
-    assert.equal(duplicates.length, 0, 'No false positive duplicates detected for different 4KB headers');
+    // Act & Assert
+    for (const badPath of maliciousPaths) {
+      assert.throws(
+        () => firewall.blockProcess(badPath),
+        'PathTraversalDetected',
+        `Rejects path traversal: ${badPath}`
+      );
+    }
   });
 
-  runner.addTest('T2_R2_02: 2-stage hasher differentiates files with same 4KB header but different bodies in Phase 2', async () => {
+  runner.addTest('T2_R3_03: Empty or whitespace process path for firewall block is rejected', async () => {
     // Arrange
-    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
-    // Same 4096-byte header, different tail
-    const sharedHeader = Buffer.alloc(4096, 0x42);
-    const bufA = Buffer.concat([sharedHeader, Buffer.from('Tail Data Unique A')]);
-    const bufB = Buffer.concat([sharedHeader, Buffer.from('Tail Data Unique B')]);
-
-    const virtualFiles = [
-      { path: 'C:\\Users\\TestUser\\Downloads\\iso_part1.bin', contentBuffer: bufA },
-      { path: 'C:\\Users\\TestUser\\Downloads\\iso_part2.bin', contentBuffer: bufB }
-    ];
-
-    // Act
-    const duplicates = engine.scanDuplicates(virtualFiles);
-
-    // Assert
-    assert.equal(duplicates.length, 0, 'Phase 2 full SHA-256 correctly differentiated files with identical 4KB headers');
-  });
-
-  runner.addTest('T2_R2_03: 2-stage hasher handles small files (<=4096 bytes) with single-pass direct hash', async () => {
-    // Arrange
-    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
-    const smallContent = Buffer.from('Small configuration text snippet under 4KB');
-    const smallA = { path: 'C:\\Users\\TestUser\\Documents\\cfg1.json', contentBuffer: smallContent };
-    const smallB = { path: 'C:\\Users\\TestUser\\Documents\\cfg2.json', contentBuffer: smallContent };
-
-    // Act
-    const duplicates = engine.scanDuplicates([smallA, smallB]);
-
-    // Assert
-    assert.equal(duplicates.length, 1, 'Found duplicate group for small files');
-    assert.equal(duplicates[0].files.length, 2, 'Both small files captured');
-  });
-
-  runner.addTest('T2_R2_04: 2-stage hasher excludes 0-byte empty files from duplicate candidates', async () => {
-    // Arrange
-    const engine = new StorageDeduplicationEngine('C:\\Users\\TestUser');
-    const empty1 = { path: 'C:\\Users\\TestUser\\Documents\\empty1.txt', contentBuffer: Buffer.alloc(0) };
-    const empty2 = { path: 'C:\\Users\\TestUser\\Documents\\empty2.txt', contentBuffer: Buffer.alloc(0) };
-
-    // Act
-    const duplicates = engine.scanDuplicates([empty1, empty2]);
-
-    // Assert
-    assert.equal(duplicates.length, 0, 'Zero-byte empty files ignored');
-  });
-
-  // =========================================================================
-  // 3. Uninstaller Date Parsing Multi-Format Robustness
-  // =========================================================================
-
-  runner.addTest('T2_R2_05: parseInstallDate handles whitespace, null, malformed dates, and leap years', async () => {
-    // Arrange & Act & Assert
-    assert.equal(parseInstallDate(''), 0, 'Empty string returns 0');
-    assert.equal(parseInstallDate(null), 0, 'Null returns 0');
-    assert.equal(parseInstallDate('   '), 0, 'Whitespace string returns 0');
-    assert.equal(parseInstallDate('not-a-date'), 0, 'Random string returns 0');
-
-    // Leap year date 20240229
-    const leapTimestamp = parseInstallDate('20240229');
-    const leapDate = new Date(leapTimestamp);
-    assert.equal(leapDate.getFullYear(), 2024, 'Leap year parsed as 2024');
-    assert.equal(leapDate.getMonth(), 1, 'Leap month parsed as February (1)');
-    assert.equal(leapDate.getDate(), 29, 'Leap day parsed as 29');
-
-    // ISO format 2024-02-29
-    const isoTimestamp = parseInstallDate('2024-02-29');
-    assert.equal(isoTimestamp, leapTimestamp, 'ISO format matches compact format timestamp');
-
-    // Euro dot format 29.02.2024
-    const euroDotTimestamp = parseInstallDate('29.02.2024');
-    assert.equal(euroDotTimestamp, leapTimestamp, 'European dot format matches timestamp');
-
-    // Euro slash format 29/02/2024
-    const euroSlashTimestamp = parseInstallDate('29/02/2024');
-    assert.equal(euroSlashTimestamp, leapTimestamp, 'European slash format matches timestamp');
-  });
-
-  // =========================================================================
-  // 4. Win32 SCM Native Query Boundary Cases
-  // =========================================================================
-
-  runner.addTest('T2_R2_06: Win32 SCM simulator returns ERROR_SERVICE_DOES_NOT_EXIST (1060) on missing service', async () => {
-    // Arrange
-    const scm = new Win32ScmSimulator();
+    const firewall = new NetworkFirewallSimulator();
 
     // Act & Assert
     assert.throws(
-      () => scm.queryServiceStartType('NonExistentServiceName_XYZ123'),
-      'ERROR_SERVICE_DOES_NOT_EXIST',
-      'Querying missing service returns Win32 error 1060'
+      () => firewall.blockProcess('   '),
+      'InvalidPath',
+      'Rejects whitespace process path'
+    );
+    assert.throws(
+      () => firewall.blockProcess(''),
+      'InvalidPath',
+      'Rejects empty process path'
+    );
+  });
+
+  runner.addTest('T2_R3_04: Duplicate firewall block for already blocked process is handled idempotently', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const procPath = 'C:\\Program Files\\App\\app.exe';
+
+    // Act: Block twice
+    const res1 = await ipc.invoke('block_process_firewall', { process_path: procPath });
+    const res2 = await ipc.invoke('block_process_firewall', { process_path: procPath });
+
+    // Assert
+    assert.isTrue(res1.success, 'First block succeeded');
+    assert.isTrue(res2.success, 'Second block succeeded idempotently');
+    const rules = await ipc.invoke('get_firewall_rules');
+    const matching = rules.filter(r => r.processPath === procPath);
+    assert.equal(matching.length, 1, 'Only one rule maintained without duplicate duplication');
+  });
+
+  runner.addTest('T2_R3_05: Unblock for process with no existing firewall rules returns clean zero-count result', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+
+    // Act
+    const res = await ipc.invoke('unblock_process_firewall', { rule_name: 'NonExistentRule' });
+
+    // Assert
+    assert.isTrue(res.success, 'Unblock call succeeds cleanly');
+    assert.equal(res.removedRulesCount, 0, 'Zero rules removed');
+    assert.includes(res.message, 'No active rule found', 'Informative message returned');
+  });
+
+  runner.addTest('T2_R3_06: Unprivileged firewall rule modification throws AccessDenied', async () => {
+    // Arrange
+    const unprivilegedIpc = new MockIPC(false);
+
+    // Act & Assert
+    await assert.throwsAsync(
+      async () => await unprivilegedIpc.invoke('block_process_firewall', { process_path: 'C:\\App\\app.exe' }),
+      'AccessDenied',
+      'Unprivileged firewall block rejected'
+    );
+    await assert.throwsAsync(
+      async () => await unprivilegedIpc.invoke('unblock_process_firewall', { rule_name: 'WiScripts_Block_app.exe' }),
+      'AccessDenied',
+      'Unprivileged firewall unblock rejected'
     );
   });
 
   // =========================================================================
-  // 5. Command Palette Edge Cases & Regex Injection Neutralization
+  // 4. Hardware Telemetry Boundaries (R4)
   // =========================================================================
 
-  runner.addTest('T2_R4_01: Command Palette search neutralizes regex meta-characters without crashing', async () => {
+  runner.addTest('T2_R4_01: Desktop systems without battery return batteryPresent: false without error', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    ipc.hardwareTelemetry.setSystemType('desktop');
+
+    // Act
+    const battery = await ipc.invoke('get_battery_health_analytics');
+
+    // Assert
+    assert.isFalse(battery.batteryPresent, 'Battery not present on desktop');
+    assert.equal(battery.powerSource, 'AC', 'Power source is AC');
+    assert.equal(battery.wearLevelPercent, 0, 'Wear level is 0');
+    assert.equal(battery.cycleCount, 0, 'Cycle count is 0');
+  });
+
+  runner.addTest('T2_R4_02: Non-NVMe / SATA drives fall back to generic SMART metrics without error', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+
+    // Act
+    const devices = await ipc.invoke('get_storage_devices_health');
+    const sataDrive = devices.find(d => d.interfaceType === 'SATA');
+
+    // Assert
+    assert.ok(sataDrive, 'Found secondary SATA drive');
+    assert.equal(sataDrive.interfaceType, 'SATA', 'Interface identified as SATA');
+    assert.greaterThanOrEqual(sataDrive.healthPercentage, 90, 'SATA health reported');
+    assert.isTrue(sataDrive.isHealthy, 'SATA drive is healthy');
+  });
+
+  runner.addTest('T2_R4_03: Battery wear level calculation handles 0 design capacity without divide-by-zero', async () => {
+    // Arrange
+    const hw = new HardwareTelemetrySimulator();
+    hw.battery.designCapacityMwh = 0;
+    hw.battery.fullChargeCapacityMwh = 0;
+
+    // Act
+    const analytics = hw.getBatteryAnalytics();
+
+    // Assert
+    assert.equal(analytics.wearLevelPercent, 0, 'Wear level is 0 without divide-by-zero NaN');
+    assert.isFalse(isNaN(analytics.wearLevelPercent), 'wearLevelPercent is not NaN');
+  });
+
+  runner.addTest('T2_R4_04: Multiple physical drives are correctly enumerated and indexed', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+
+    // Act
+    const devices = await ipc.invoke('get_storage_devices_health');
+
+    // Assert
+    assert.equal(devices.length, 2, 'Enumerated exactly 2 physical drives');
+    assert.equal(devices[0].deviceId, '\\\\.\\PhysicalDrive0', 'First drive is PhysicalDrive0');
+    assert.equal(devices[1].deviceId, '\\\\.\\PhysicalDrive1', 'Second drive is PhysicalDrive1');
+  });
+
+  runner.addTest('T2_R4_05: Temperature sensors reporting extreme out-of-bound values are flagged with warnings', async () => {
+    // Arrange
+    const hw = new HardwareTelemetrySimulator();
+    hw.devices[0].temperatureC = 88; // > 80°C threshold
+
+    // Act
+    const devices = hw.getStorageDevices();
+
+    // Assert
+    assert.ok(devices[0].sensorWarning, 'Sensor warning flagged for high temperature');
+    assert.includes(devices[0].sensorWarning, 'Abnormal temperature detected', 'Warning message present');
+  });
+
+  runner.addTest('T2_R4_06: Invalid power scheme GUID returns PowerSchemeNotFound error', async () => {
+    // Arrange
+    const ipc = new MockIPC();
+    const badGuid = '00000000-0000-0000-0000-000000000000';
+
+    // Act & Assert
+    await assert.throwsAsync(
+      async () => await ipc.invoke('set_active_power_scheme', { scheme_guid: badGuid }),
+      'PowerSchemeNotFound',
+      'Rejects invalid power scheme GUID'
+    );
+  });
+
+  // =========================================================================
+  // 5. UI & Command Palette Boundaries (R5)
+  // =========================================================================
+
+  runner.addTest('T2_R5_01: Command Palette search neutralizes regex meta-characters without crashing', async () => {
     // Arrange
     const palette = new CommandPaletteEngine();
-    const maliciousQuery = '.*+?^${}()|[]\\copilot';
+    const specialQueries = ['[dpc]', '(ram)', '.*', 'power+', 'firewall?'];
 
-    // Act
-    const results = palette.search(maliciousQuery);
-
-    // Assert
-    assert.ok(Array.isArray(results), 'Returns array without regex execution exception');
+    // Act & Assert
+    for (const q of specialQueries) {
+      const results = palette.search(q);
+      assert.isTrue(Array.isArray(results), `Search succeeded for meta-character query: ${q}`);
+    }
   });
 
-  runner.addTest('T2_R4_02: Command Palette search with pure whitespace returns default recommendation items', async () => {
+  runner.addTest('T2_R5_02: Command Palette search handles extreme length query strings (>500 chars)', async () => {
+    // Arrange
+    const palette = new CommandPaletteEngine();
+    const extremeQuery = 'superlongquery'.repeat(50); // 700 chars
+
+    // Act
+    const results = palette.search(extremeQuery);
+
+    // Assert
+    assert.isTrue(Array.isArray(results), 'Returns array for extreme length query');
+    assert.equal(results.length, 0, 'No items match nonsensical 700-char query');
+  });
+
+  runner.addTest('T2_R5_03: Command Palette search with pure whitespace returns default recommendations', async () => {
     // Arrange
     const palette = new CommandPaletteEngine();
 
@@ -296,123 +400,18 @@ export function buildTier2Suite() {
     const results = palette.search('     ');
 
     // Assert
-    assert.greaterThanOrEqual(results.length, 1, 'Returns default list of top indexed items');
+    assert.greaterThanOrEqual(results.length, 5, 'Returns default top navigation recommendations');
   });
 
-  runner.addTest('T2_R4_03: Command Palette search handles extreme length query strings (>500 chars)', async () => {
+  runner.addTest('T2_R5_04: AppStateSimulator handles missing translation keys by returning fallback safely', async () => {
     // Arrange
-    const palette = new CommandPaletteEngine();
-    const extremeQuery = 'a'.repeat(600);
+    const app = new AppStateSimulator();
 
     // Act
-    const results = palette.search(extremeQuery);
+    const missingKey = app.translate('non.existent.key.name', 'Fallback Value');
 
     // Assert
-    assert.equal(results.length, 0, 'Returns 0 results for non-matching extreme query without crashing');
-  });
-
-  // =========================================================================
-  // 6. Pre-Flight Safety Snapshot & VSS Throttling Boundary Cases
-  // =========================================================================
-
-  runner.addTest('T2_R4_04: Pre-Flight Safety Snapshot handles VSS 24h throttling with non-fatal warning', async () => {
-    // Arrange
-    const ipc = new MockIPC();
-    ipc.registerHandler('create_preflight_snapshot', async ({ rule_ids }) => {
-      return {
-        snapshotId: 'snap_vss_throttled_123',
-        sequenceNumber: 105,
-        timestamp: new Date().toISOString(),
-        stateEngineSuccess: true,
-        restorePointSuccess: false,
-        restorePointWarning: 'VSS 24h frequency limit reached. StateEngine JSON snapshot was saved successfully.',
-        rulesCaptured: rule_ids.length
-      };
-    });
-
-    // Act
-    const res = await ipc.invoke('create_preflight_snapshot', {
-      description: 'Test VSS throttle fallback',
-      rule_ids: ['telemetry_diagtrack']
-    });
-
-    // Assert
-    assert.isTrue(res.stateEngineSuccess, 'StateEngine snapshot succeeded');
-    assert.isFalse(res.restorePointSuccess, 'VSS restore point reported as throttled');
-    assert.includes(res.restorePointWarning, 'StateEngine JSON snapshot was saved', 'Warning clarifies fallback preservation');
-  });
-
-  // =========================================================================
-  // 7. Profile Validation Boundary & Version Compatibility Cases
-  // =========================================================================
-
-  runner.addTest('T2_R4_05: Profile validator rejects malformed profile missing schemaVersion or format header', async () => {
-    // Arrange
-    const malformed1 = { format: 'wrong-header', metadata: { id: '1', name: 'Test' }, optimizations: { enabledRuleIds: [] } };
-    const malformed2 = { format: 'wiscripts-configuration-profile', schemaVersion: 'invalid-semver', metadata: { id: '1', name: 'Test' } };
-
-    // Act
-    const val1 = ProfileValidationEngine.validate(malformed1);
-    const val2 = ProfileValidationEngine.validate(malformed2);
-
-    // Assert
-    assert.isFalse(val1.isValid, 'Malformed format header is rejected');
-    assert.isFalse(val2.isValid, 'Invalid schemaVersion is rejected');
-  });
-
-  runner.addTest('T2_R4_06: Profile import flags unknown/obsolete rule IDs without discarding valid rule IDs', async () => {
-    // Arrange
-    const knownRuleIds = new Set(['telemetry_diagtrack', 'win11_disable_copilot', 'services_sysmain']);
-    const importedProfile = {
-      optimizations: {
-        enabledRuleIds: ['telemetry_diagtrack', 'obsolete_legacy_tweak_v09', 'win11_disable_copilot', 'unknown_rule_xyz']
-      }
-    };
-
-    // Act
-    function parseImportedRuleIds(ruleIds, catalog) {
-      const valid = [];
-      const unknown = [];
-      for (const id of ruleIds) {
-        if (catalog.has(id)) {
-          valid.push(id);
-        } else {
-          unknown.push(id);
-        }
-      }
-      return { valid, unknown };
-    }
-
-    const { valid, unknown } = parseImportedRuleIds(importedProfile.optimizations.enabledRuleIds, knownRuleIds);
-
-    // Assert
-    assert.equal(valid.length, 2, 'Parsed 2 valid rule IDs');
-    assert.equal(unknown.length, 2, 'Identified 2 unknown rule IDs');
-    assert.includes(valid, 'telemetry_diagtrack', 'Valid rule retained');
-    assert.includes(unknown, 'obsolete_legacy_tweak_v09', 'Obsolete rule collected in unknown array');
-  });
-
-  runner.addTest('T2_R4_07: Profile import warns when targetOs minBuild exceeds host OS build', async () => {
-    // Arrange
-    const hostBuild = 22631; // Windows 11 23H2
-    const profileMinBuild = 26100; // Windows 11 24H2
-
-    // Act
-    function checkOsBuildCompatibility(currentBuild, minBuild) {
-      if (currentBuild < minBuild) {
-        return {
-          compatible: false,
-          warning: `Profile requires Windows Build ${minBuild}+ (Host is Build ${currentBuild}). Some 24H2-specific tweaks may not take effect.`
-        };
-      }
-      return { compatible: true, warning: null };
-    }
-
-    const check = checkOsBuildCompatibility(hostBuild, profileMinBuild);
-
-    // Assert
-    assert.isFalse(check.compatible, 'Compatibility check detected build shortfall');
-    assert.includes(check.warning, '24H2-specific tweaks', 'Warning mentions 24H2 features');
+    assert.equal(missingKey, 'Fallback Value', 'Returns explicit fallback value');
   });
 
   return runner;

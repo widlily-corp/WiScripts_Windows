@@ -220,6 +220,57 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
 }
 
 #[cfg(windows)]
+pub fn start_service(service_name: &str) -> Result<(), String> {
+    let name_u16 = to_u16_vec(service_name);
+
+    unsafe {
+        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
+            .map_err(|e| {
+                format!(
+                    "OpenSCManagerW failed for service '{}': {:?}",
+                    service_name, e
+                )
+            })?;
+
+        let svc_handle = match OpenServiceW(
+            scm_handle,
+            PCWSTR(name_u16.as_ptr()),
+            windows::Win32::System::Services::SERVICE_START | SERVICE_QUERY_STATUS,
+        ) {
+            Ok(h) => h,
+            Err(e) => {
+                let _ = CloseServiceHandle(scm_handle);
+                let err_str = format!("{:?}", e);
+                if err_str.contains("1060") || err_str.contains("0x80070424") {
+                    return Ok(());
+                }
+                return Err(format!(
+                    "OpenServiceW failed for service '{}': {}",
+                    service_name, err_str
+                ));
+            }
+        };
+
+        let start_res = windows::Win32::System::Services::StartServiceW(svc_handle, None);
+        let _ = CloseServiceHandle(svc_handle);
+        let _ = CloseServiceHandle(scm_handle);
+
+        if let Err(e) = start_res {
+            let err_str = format!("{:?}", e);
+            // 1056 is ERROR_SERVICE_ALREADY_RUNNING
+            if !err_str.contains("1056") {
+                return Err(format!(
+                    "StartServiceW failed for service '{}': {}",
+                    service_name, err_str
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(windows)]
 pub fn query_service_start_type(service_name: &str) -> Result<u32, String> {
     let name_u16 = to_u16_vec(service_name);
 
@@ -386,3 +437,9 @@ pub fn is_service_disabled(_service_name: &str) -> Result<bool, String> {
 pub fn query_service_status(_service_name: &str) -> Result<u32, String> {
     Err("WinAPI Service operations are only supported on Windows".to_string())
 }
+
+#[cfg(not(windows))]
+pub fn start_service(_service_name: &str) -> Result<(), String> {
+    Err("WinAPI Service operations are only supported on Windows".to_string())
+}
+

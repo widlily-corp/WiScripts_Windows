@@ -8,6 +8,10 @@ import { createAudioSlice, AudioSlice } from './slices/audioSlice';
 import { createPackageManagerSlice, PackageManagerSlice } from './slices/packageManagerSlice';
 import { createSystemToolsSlice, SystemToolsSlice } from './slices/systemToolsSlice';
 import { createScriptRunnerSlice, ScriptRunnerSlice } from './slices/scriptRunnerSlice';
+import { createGamingSlice, GamingSlice } from './slices/gamingSlice';
+import { createSmartRamSlice, SmartRamSlice } from './slices/smartRamSlice';
+import { createNetworkShieldSlice, NetworkShieldSlice } from './slices/networkShieldSlice';
+import { createHardwareHealthSlice, HardwareHealthSlice } from './slices/hardwareHealthSlice';
 
 export type { PendingSafetyModal };
 
@@ -18,7 +22,11 @@ export type AppState = SystemSlice &
   AudioSlice &
   PackageManagerSlice &
   SystemToolsSlice &
-  ScriptRunnerSlice;
+  ScriptRunnerSlice &
+  GamingSlice &
+  SmartRamSlice &
+  NetworkShieldSlice &
+  HardwareHealthSlice;
 
 export const useAppStore = create<AppState>()(
   devtools(
@@ -32,6 +40,10 @@ export const useAppStore = create<AppState>()(
         ...createPackageManagerSlice(...a),
         ...createSystemToolsSlice(...a),
         ...createScriptRunnerSlice(...a),
+        ...createGamingSlice(...a),
+        ...createSmartRamSlice(...a),
+        ...createNetworkShieldSlice(...a),
+        ...createHardwareHealthSlice(...a),
       }),
       {
         name: 'wiscripts-app-store',

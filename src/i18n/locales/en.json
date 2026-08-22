@@ -33,6 +33,10 @@
       "script_runner": "Script Runner",
       "audio_manager": "Audio Devices & Volume",
       "governor": "Resource Governor",
+      "gaming_latency": "Gaming Latency & DPC",
+      "smart_ram": "Smart RAM Purger",
+      "network_shield": "Network Shield & Firewall",
+      "hardware_health": "Hardware NVMe & Power",
       "optimization": "Optimizations",
       "package_manager": "Package Manager",
       "app_uninstaller": "App Uninstaller",
@@ -1301,5 +1305,184 @@
     "unknown_error": "Unknown application error",
     "report_button": "Report Crash on GitHub",
     "reload_button": "Reload Application"
+  },
+  "gamingLatency": {
+    "title": "Gaming Low-Latency & DPC Latency Analyzer",
+    "subtitle": "Real-time kernel DPC/ISR jitter analysis, timer resolution control, and Game Boost orchestration",
+    "status": {
+      "optimal": "Optimal (< 500 µs)",
+      "moderate": "Moderate (500-1000 µs)",
+      "high": "High Jitter (> 1000 µs)"
+    },
+    "metrics": {
+      "current_dpc": "Current DPC Latency",
+      "max_dpc": "Max Spike",
+      "avg_dpc": "Average Latency",
+      "dpc_rate": "DPC Rate",
+      "isr_rate": "ISR Rate",
+      "timer_resolution": "Timer Resolution",
+      "kernel_status": "Kernel Status",
+      "rate_per_sec": "{{count}} /sec"
+    },
+    "sparkline": {
+      "title": "Real-Time DPC/ISR Latency Trace",
+      "threshold": "1000 µs Critical Threshold"
+    },
+    "timer_resolution_card": {
+      "title": "System Timer Resolution",
+      "description": "Lower resolution yields tighter timer scheduling and reduced input latency in competitive games.",
+      "current": "Current: {{resolution}} ms",
+      "min_max": "Range: {{min}} ms - {{max}} ms",
+      "force_05ms": "Force 0.500 ms Precision",
+      "force_10ms": "Set 1.000 ms",
+      "restore_default": "Restore Default (15.6 ms)",
+      "custom": "Custom"
+    },
+    "game_boost": {
+      "title": "Game Boost Engine",
+      "description": "Elevates active process priority, sets 0.5ms timer resolution, and suspends background services.",
+      "enable": "Activate Game Boost",
+      "disable": "Deactivate Game Boost",
+      "status_active": "Boost Active",
+      "status_inactive": "Boost Inactive",
+      "target_process": "Target Process",
+      "target_pid": "Target PID (optional)",
+      "auto_detect": "Auto-detect foreground game",
+      "suspended_services": "Suspended Services ({{count}})",
+      "no_suspended_services": "No non-essential services currently suspended."
+    },
+    "toast": {
+      "timer_success": "Timer resolution adjusted to {{resolution}} ms",
+      "boost_activated": "Game Boost activated for {{process}}",
+      "boost_deactivated": "Game Boost deactivated. Services restored."
+    }
+  },
+  "smartRam": {
+    "title": "Smart RAM & Standby List Memory Purger",
+    "subtitle": "Low-level Win32/NT kernel memory cache reclamation and background working set trimmer",
+    "distribution": {
+      "title": "Physical RAM Distribution",
+      "total": "Total: {{total}} GB",
+      "in_use": "In-Use",
+      "standby": "Standby (Cache)",
+      "modified": "Modified",
+      "free": "Free",
+      "paged_pool": "Paged Pool: {{mb}} MB",
+      "non_paged_pool": "Non-Paged Pool: {{mb}} MB",
+      "system_cache": "System Cache: {{mb}} MB"
+    },
+    "actions": {
+      "purge_standby_title": "Purge Standby Cache",
+      "purge_standby_desc": "Reclaims kernel cached memory pages (NtSetSystemInformation) to free up standby RAM instantly.",
+      "purge_standby_btn": "Purge Standby List",
+      "purge_working_sets_title": "Empty Working Sets",
+      "purge_working_sets_desc": "Flushes unreferenced pages from all running process working sets into the standby pool.",
+      "purge_working_sets_btn": "Empty Process Working Sets",
+      "purge_all_title": "Master Memory Purge",
+      "purge_all_desc": "Executes full sequential memory reclamation (Standby + Working Sets) safely.",
+      "purge_all_btn": "Execute Full Clean"
+    },
+    "auto_trimmer": {
+      "title": "Background Auto-Trimmer",
+      "description": "Automatically purges standby cache and trims working sets when RAM usage crosses your threshold.",
+      "enable_toggle": "Enable Background Auto-Trimmer",
+      "threshold_label": "RAM Usage Trigger Threshold: {{percent}}%",
+      "interval_label": "Check Interval: {{seconds}}s",
+      "purge_standby_option": "Purge Standby List",
+      "purge_working_sets_option": "Purge Working Sets",
+      "excluded_processes": "Protected / Excluded Processes",
+      "excluded_placeholder": "e.g. game.exe, obs64.exe",
+      "add_exclusion": "Add Process",
+      "save_config": "Save Configuration"
+    },
+    "history": {
+      "title": "Recent Purge Telemetry",
+      "last_freed": "Freed {{mb}} MB ({{count}} processes trimmed)",
+      "no_recent": "No purges executed during this session."
+    }
+  },
+  "networkShield": {
+    "title": "Live Network Traffic & Process Firewall Shield",
+    "subtitle": "Real-time TCP/UDP socket monitoring with one-click Windows Firewall process blocking",
+    "stats": {
+      "active_sockets": "Active Sockets",
+      "tcp_established": "TCP Established",
+      "tcp_listening": "TCP Listening",
+      "udp_listeners": "UDP Endpoints",
+      "firewall_rules": "WiScripts Firewall Rules"
+    },
+    "filters": {
+      "search_placeholder": "Filter by process, IP address, or port...",
+      "all": "All Protocols",
+      "tcp": "TCP",
+      "udp": "UDP",
+      "state_all": "All States",
+      "show_blocked_only": "Blocked Only"
+    },
+    "table": {
+      "process": "Process & PID",
+      "protocol": "Protocol",
+      "local_endpoint": "Local Endpoint",
+      "remote_endpoint": "Remote Endpoint",
+      "state": "State",
+      "actions": "Firewall Actions",
+      "block_btn": "Block in Firewall",
+      "unblock_btn": "Unblock",
+      "blocked_badge": "Blocked",
+      "no_connections": "No active connections match your current filters."
+    },
+    "modal": {
+      "title": "Block Process in Windows Firewall",
+      "confirm_text": "Are you sure you want to block inbound and outbound network traffic for:",
+      "rule_name_label": "Rule Name",
+      "block_confirm": "Block Traffic",
+      "rules_drawer_title": "Active WiScripts Firewall Rules",
+      "no_rules": "No active firewall rules created yet."
+    }
+  },
+  "hardwareHealth": {
+    "title": "Hardware NVMe SMART & Battery/Power Analytics",
+    "subtitle": "Physical storage health telemetry, battery wear metrics, and Windows power plan management",
+    "storage": {
+      "title": "Physical Storage SMART Health",
+      "select_drive": "Select Drive",
+      "drive_label": "Drive {{index}}: {{model}} ({{bus}})",
+      "health_optimal": "Optimal Health",
+      "health_warning": "Warning",
+      "temperature": "Temperature",
+      "tbw_written": "Total Written (TBW)",
+      "tbw_read": "Total Read",
+      "power_on_hours": "Power-On Hours",
+      "power_cycles": "Power Cycles",
+      "unsafe_shutdowns": "Unsafe Shutdowns",
+      "spare_capacity": "Available Spare",
+      "critical_warnings": "Critical Warnings",
+      "smart_status": "SMART Status",
+      "hours_unit": "{{hours}} hrs",
+      "no_drives": "No physical storage drives detected."
+    },
+    "battery": {
+      "title": "Battery & Power Analytics",
+      "desktop_ac": "Desktop PC / AC Powered",
+      "desktop_ac_desc": "System is running on direct AC power. Battery analytics disabled.",
+      "charge_level": "Battery Charge",
+      "charging": "Charging",
+      "discharging": "Discharging",
+      "ac_connected": "AC Online",
+      "discharge_rate": "Discharge Rate",
+      "wear_level": "Wear Level",
+      "cycle_count": "Cycle Count",
+      "capacity_ratio": "Capacity: {{current}} / {{design}} mWh",
+      "remaining_time": "Est. Runtime: {{minutes}} min",
+      "power_profile": "Power State"
+    },
+    "power_schemes": {
+      "title": "Windows Power Schemes",
+      "active_badge": "Active",
+      "set_active": "Set Active",
+      "ultimate_title": "Windows Ultimate Performance Scheme",
+      "ultimate_desc": "Eliminates micro-latencies and processor core throttling for maximum system responsiveness.",
+      "enable_ultimate_btn": "Activate Ultimate Performance"
+    }
   }
 }

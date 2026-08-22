@@ -46,6 +46,10 @@ const EXPECTED_VIEWS = [
   { tab: 'script_runner', name: 'ScriptRunnerView', file: 'src/components/ScriptRunnerView.tsx' },
   { tab: 'audio_manager', name: 'AudioView', file: 'src/components/AudioView.tsx' },
   { tab: 'governor', name: 'GovernorView', file: 'src/views/GovernorView.tsx' },
+  { tab: 'gaming_latency', name: 'GamingLatencyView', file: 'src/views/GamingLatencyView.tsx' },
+  { tab: 'smart_ram', name: 'SmartRamView', file: 'src/views/SmartRamView.tsx' },
+  { tab: 'network_shield', name: 'NetworkShieldView', file: 'src/views/NetworkShieldView.tsx' },
+  { tab: 'hardware_health', name: 'HardwareHealthView', file: 'src/views/HardwareHealthView.tsx' },
   { tab: 'optimization', name: 'OptimizationView', file: 'src/components/OptimizationView.tsx' },
   { tab: 'package_manager', name: 'PackageManagerView', file: 'src/components/PackageManagerView.tsx' },
   { tab: 'app_uninstaller', name: 'UninstallerView', file: 'src/views/UninstallerView.tsx' },
@@ -65,7 +69,7 @@ const EXPECTED_VIEWS = [
   { tab: 'settings', name: 'SettingsView', file: 'src/components/SettingsView.tsx' },
 ];
 
-assert(EXPECTED_VIEWS.length === 21, `Catalog defines exactly 21 modular views (got ${EXPECTED_VIEWS.length})`);
+assert(EXPECTED_VIEWS.length === 25, `Catalog defines exactly 25 modular views (got ${EXPECTED_VIEWS.length})`);
 
 const appTsxContent = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'App.tsx'), 'utf-8');
 
@@ -182,7 +186,7 @@ if (tabTypeMatch) {
     .map(s => s.trim().replace(/['"]/g, ''))
     .filter(Boolean);
 
-  assert(unionMembers.length === 21, `TabType has 21 members (found ${unionMembers.length})`);
+  assert(unionMembers.length === 25, `TabType has 25 members (found ${unionMembers.length})`);
 
   for (const view of EXPECTED_VIEWS) {
     assert(unionMembers.includes(view.tab), `TabType union includes '${view.tab}'`);

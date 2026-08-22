@@ -89,12 +89,20 @@ export * from './stateEngine';
 export * from './autoruns';
 export * from './governor';
 export * from './scriptLibrary';
+export * from './gaming';
+export * from './smartRam';
+export * from './networkShield';
+export * from './hardwareHealth';
 
 export type TabType =
   | 'dashboard'
   | 'script_runner'
   | 'audio_manager'
   | 'governor'
+  | 'gaming_latency'
+  | 'smart_ram'
+  | 'network_shield'
+  | 'hardware_health'
   | 'optimization'
   | 'package_manager'
   | 'app_uninstaller'

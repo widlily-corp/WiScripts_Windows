@@ -281,6 +281,10 @@ const EXPECTED_VIEWS = [
   { name: 'ScriptRunnerView', tab: 'script_runner' },
   { name: 'AudioView', tab: 'audio_manager' },
   { name: 'GovernorView', tab: 'governor' },
+  { name: 'GamingLatencyView', tab: 'gaming_latency' },
+  { name: 'SmartRamView', tab: 'smart_ram' },
+  { name: 'NetworkShieldView', tab: 'network_shield' },
+  { name: 'HardwareHealthView', tab: 'hardware_health' },
   { name: 'OptimizationView', tab: 'optimization' },
   { name: 'PackageManagerView', tab: 'package_manager' },
   { name: 'UninstallerView', tab: 'app_uninstaller' },
@@ -300,16 +304,16 @@ const EXPECTED_VIEWS = [
   { name: 'SettingsView', tab: 'settings' },
 ];
 
-runTest('App.tsx contains exactly 21 dynamic React.lazy imports for modular views', () => {
+runTest('App.tsx contains exactly 25 dynamic React.lazy imports for modular views', () => {
   const lazyMatches = appContent.match(/const\s+(\w+)\s*=\s*lazy\(\(\)\s*=>/g) || [];
   assert.strictEqual(
     lazyMatches.length,
-    21,
-    `Expected 21 lazy view declarations, found ${lazyMatches.length}`
+    25,
+    `Expected 25 lazy view declarations, found ${lazyMatches.length}`
   );
 });
 
-runTest('All 21 views are properly mapped to lazy dynamic imports and activeTab conditions', () => {
+runTest('All 25 views are properly mapped to lazy dynamic imports and activeTab conditions', () => {
   for (const view of EXPECTED_VIEWS) {
     const lazyDeclaration = new RegExp(`const\\s+${view.name}\\s*=\\s*lazy\\(`, 'g');
     assert.ok(

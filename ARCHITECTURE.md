@@ -1,7 +1,7 @@
 # WiScripts Windows — Technical Architecture Specification
 
-**Document Version:** 1.0.0  
-**Target Release:** WiScripts Windows v1.0.0 (Production Release)  
+**Document Version:** 1.4.0  
+**Target Release:** WiScripts Windows v1.4.0  
 **Author:** Principal System Architect & Elite Product Designer  
 **Classification:** Core System Architecture
 
@@ -17,8 +17,8 @@ WiScripts Windows is engineered as a hybrid native desktop application marrying 
 │                                                                             │
 │  ┌───────────────────────┐  ┌───────────────────────┐  ┌─────────────────┐  │
 │  │   Navigation & Tabs   │  │ Zustand Store Slices  │  │ Dynamic Widgets │  │
-│  │ (ScriptRunner, Audit, │  │ (system, audio, UI,   │  │ (SparklineArea, │  │
-│  │  Governor, Views...)  │  │  packages, updates...) │  │  Sensors, Bar)  │  │
+│  │ (3-Tier Scrollable    │  │ (system, audio, UI,   │  │ (SparklineArea, │  │
+│  │  Nav, 25 Views...)    │  │  packages, updates...) │  │  Sensors, Bar)  │  │
 │  └───────────┬───────────┘  └───────────┬───────────┘  └────────┬────────┘  │
 └──────────────┼──────────────────────────┼───────────────────────┼───────────┘
                │                          │                       │
@@ -34,8 +34,8 @@ WiScripts Windows is engineered as a hybrid native desktop application marrying 
 │                                                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────────┐  │
 │  │ ExecutionRunner │  │ Win32 Native    │  │ Multi-Tier Telemetry Engine │  │
-│  │ (Real / DryRun) │  │ (Token, Sec,    │  │ (LHM, OHM, NVML, ACPI,      │  │
-│  │                 │  │  SCM, WASAPI)   │  │  nvidia-smi, sysinfo)       │  │
+│  │ (Real / DryRun) │  │ (Token, Sec,    │  │ (AMD ADL, NVML, LHM, OHM,   │  │
+│  │                 │  │  SCM, WASAPI)   │  │  ACPI/CIMv2, CLIs, sysinfo) │  │
 │  └────────┬────────┘  └────────┬────────┘  └──────────────┬──────────────┘  │
 │           │                    │                          │                 │
 │  ┌────────┴────────┐  ┌────────┴────────┐  ┌──────────────┴──────────────┐  │
@@ -154,44 +154,47 @@ src-tauri/src/
 - **Streaming Pipeline:** Standard output and standard error are captured line-by-line via asynchronous reader threads, emitting `script-output-line` events across the Tauri IPC channel.
 - **Drop Cleanup:** An RAII guard ensures that temporary script files on disk are unlinked and destroyed immediately upon process exit or error.
 
-### 4.2 Multi-Tier Temperature Sensor Cascade
-To guarantee maximum hardware compatibility across diverse Intel, AMD, and NVIDIA platforms, WiScripts Windows implements a 6-tier discovery cascade:
+### 4.2 Multi-Tier Temperature Sensor Cascade (v1.4.0)
+To guarantee maximum hardware compatibility across diverse Intel, AMD, and NVIDIA platforms as well as laptop chassis, WiScripts Windows implements a 5-tier multi-vendor discovery cascade:
 
 ```
 [Get Temperatures Request]
          │
          ▼
-┌──────────────────┐  Success
-│ 1. LHM (WMI)     ├──────────► [Emit Sensor Readings]
-└────────┬─────────┘
-         │ (Unavailable / Timeout)
+┌───────────────────────────────┐
+│ Tier 1: In-Process GPU DLLs   │
+│ • AMD ADL (atiadlxx/atiadlxy) │──► [Emit GPU Readings (Overdrive 5/6)]
+│ • NVIDIA NVML (nvml.dll)      │
+└────────┬──────────────────────┘
+         │
          ▼
-┌──────────────────┐  Success
-│ 2. OHM (WMI)     ├──────────► [Emit Sensor Readings]
-└────────┬─────────┘
-         │ (Unavailable / Timeout)
+┌───────────────────────────────┐
+│ Tier 2: Dedicated Monitors    │
+│ • LibreHardwareMonitor (WMI)  │──► [Emit Discrete Core/Package Readings]
+│ • OpenHardwareMonitor (WMI)   │
+└────────┬──────────────────────┘
+         │
          ▼
-┌──────────────────┐  Success
-│ 3. NVIDIA NVML   ├──────────► [Emit Sensor Readings]
-└────────┬─────────┘
-         │ (Unavailable)
+┌───────────────────────────────┐
+│ Tier 3: Laptop & ACPI Zones   │
+│ • MSAcpi_ThermalZoneTemp      │──► [Emit Thermal Zone Readings]
+│ • Win32_Perf ThermalZone (CIM)│
+└────────┬──────────────────────┘
+         │
          ▼
-┌──────────────────┐  Success
-│ 4. ACPI (WMI)    ├──────────► [Emit Sensor Readings]
-└────────┬─────────┘
-         │ (Unavailable)
+┌───────────────────────────────┐
+│ Tier 4: CLI Telemetry (Async) │
+│ • nvidia-smi (Hidden CLI)     │──► [Emit Fallback GPU Readings]
+│ • amd-smi (Hidden CLI)        │
+└────────┬──────────────────────┘
+         │
          ▼
-┌──────────────────┐  Success
-│ 5. nvidia-smi    ├──────────► [Emit GPU Reading]
-└────────┬─────────┘
-         │ (Unavailable)
-         ▼
-┌──────────────────┐
-│ 6. sysinfo Fallback (Kernel Generic) ──► [Final Reading / Safe Fallback]
-└──────────────────┘
+┌───────────────────────────────┐
+│ Tier 5: sysinfo Kernel Base   │──► [Final Reading / Safe Fallback]
+└───────────────────────────────┘
 ```
 
-All WMI subprocesses are guarded by a 3-second timeout thread to prevent UI lockups on corrupted WMI repositories.
+All WMI and CLI subprocesses are executed with `CREATE_NO_WINDOW` (`0x08000000`) and guarded by 2-second timeout threads to prevent UI lockups and console flashing. Heuristic filtering demotes static BIOS dummy stubs ($300.0\text{ K}/301.0\text{ K}$) to ensure accurate CPU/GPU telemetry.
 
 ### 4.3 StateEngine (Transactional Snapshots & Rollback)
 - **Snapshot Creation:** Serializes target Registry keys (`HKLM\SOFTWARE`, `HKCU\Software`) and Service start types (`SERVICE_DEMAND_START`, `SERVICE_DISABLED`) into JSON payloads stored in `%LOCALAPPDATA%\WiScripts\Snapshots\`.

@@ -1,6 +1,6 @@
 # WiScripts Windows 🚀
 
-[![Release](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
+[![Release](https://img.shields.io/badge/release-v1.4.0-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-v2.0-orange.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://react.dev/)
@@ -11,34 +11,24 @@
 
 ---
 
-## 🌟 Key Features (v1.0.0 Production Release)
+## 🌟 Key Features (v1.4.0 Release)
 
-### 🌐 Online Script Library & GitHub Sync (`scripts_lib`) (v1.0)
-- **Community & Verified Catalog:** Direct integration with `scripts_lib/` repository containing 15+ curated PowerShell automation scripts.
-- **Smart Synchronization Engine:** Low-overhead HTTP client with `ETag / If-None-Match` caching and SHA-256 integrity verification.
-- **Dual-Tab Script Runner:** Switch seamlessly between "Editor & Terminal" and "Online Library" with instant search, category filters, and risk badges.
-- **1-Click Actions & Safe Preview:** Inspect verified script source code, load directly into the editor, or run immediately with live streaming output.
-
-### ⚡ Command Palette (`Ctrl + K`) & Pre-Flight Safety (v1.0)
-- **Global Command Palette:** Instant fuzzy search across all 21 modules, 70+ tweaks, online scripts, and installed applications.
-- **Automated Pre-Flight Safety Snapshots:** Automatic creation of VSS System Restore Points and StateEngine transactional snapshots before batch optimizations.
-- **Windows 11 24H2 Ready:** Advanced tweaks for disabling Windows Copilot, Recall AI Snapshots, and Start Menu telemetry.
-- **Native Win32 SCM Engine:** Microsecond service querying via native Win32 Service Control Manager APIs without PowerShell process overhead.
-- **PowerShell & CMD Execution:** Execute custom `.ps1`, `.bat`, and `.cmd` scripts in elevated administrator context.
-- **Real-Time Live Streaming:** Low-latency IPC streaming of `stdout` and `stderr` directly to an interactive terminal viewer.
-- **Isolated Temp Execution:** Automated script sanitization and execution in `%LOCALAPPDATA%\WiScripts\TempScripts\` with automatic drop cleanup.
-- **Log Export & Dry-Run Mode:** Export timestamped terminal execution logs to `.log` files; simulate script workflows safely using dry-run guards.
-
-### 🌡️ Multi-Tier Hardware Telemetry (v0.9.9)
-- **6-Level Cascading Sensor Engine:**
-  1. *Tier 1:* LibreHardwareMonitor (WMI)
-  2. *Tier 2:* OpenHardwareMonitor (WMI)
-  3. *Tier 3:* NVIDIA NVML (Dynamic DLL Runtime Loading)
-  4. *Tier 4:* ACPI Thermal Zone (WMI)
-  5. *Tier 5:* `nvidia-smi` CLI (GPU fallback)
-  6. *Tier 6:* `sysinfo` Components (Universal kernel fallback)
-- **Subprocess Timeout Guards:** 3-second non-blocking timeout protection on all WMI subprocess queries.
+### 🌡️ Multi-Tier Hardware Telemetry & AMD/Laptop Support (v1.4.0)
+- **Multi-Vendor Cascading Sensor Engine:**
+  1. *Tier 1 (In-Process GPU DLLs):* AMD ADL (`atiadlxx.dll`/`atiadlxy.dll` with Overdrive 5/6 & multi-head deduplication) + NVIDIA NVML (`nvml.dll`).
+  2. *Tier 2 (Dedicated Hardware Monitors):* LibreHardwareMonitor & OpenHardwareMonitor via WMI.
+  3. *Tier 3 (Laptop & ACPI Thermal Zones):* `MSAcpi_ThermalZoneTemperature` (`root\wmi`) & `Win32_PerfFormattedData_Counters_ThermalZoneInformation` (`root\cimv2`).
+  4. *Tier 4 (CLI Telemetry Fallbacks):* `nvidia-smi` & `amd-smi` with non-blocking 2-second timeout protection and hidden console flags (`0x08000000`).
+  5. *Tier 5 (Universal Kernel Fallback):* `sysinfo` Components.
+- **Smart Filtering & Primary Sensor Selection:** Automatically rejects static BIOS dummy zones (e.g. $300\text{ K}/301\text{ K} \approx 26.8^\circ\text{C} / 27.8^\circ\text{C}$) and out-of-bound readings ($5^\circ\text{C} - 118^\circ\text{C}$ validation window).
 - **Manual Sensor Selector:** Interactive dropdown selector allowing custom CPU/GPU sensor bindings with persistent state.
+
+### 🧭 Flexible Navigation & Dark Scrollbar Integration (v1.4.0)
+- **3-Tier Flex Layout:** Pinned Brand Header (`shrink-0`) and Pinned Admin Elevation Card (`shrink-0`) with an independent, flexible scroll container (`flex-1 min-h-0 overflow-y-auto custom-scrollbar`).
+- **All 25 Modules Accessible:** Seamless vertical scrolling ensuring all views and tools are reachable across laptops, tablets, and low-resolution displays.
+- **Refined Minimal Dark Scrollbar:** Sub-pixel 5px scrollbars styled in dark neutral `#22252a` with hover state transitions.
+
+### 🌐 Online Script Library & GitHub Sync (`scripts_lib`)
 
 ### 🧠 ProFlow Resource Governor
 - **Dynamic RAM Working Set Trimming:** Free unused physical memory on demand across background processes.

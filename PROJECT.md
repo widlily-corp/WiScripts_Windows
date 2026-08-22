@@ -1,4 +1,4 @@
-# Project: WiScripts Windows High-Performance Subsystems (v1.3.0)
+# Project: WiScripts Windows High-Performance Subsystems (v1.4.0)
 
 ## Architecture
 WiScripts Windows is a high-performance Windows optimization and system telemetry utility built on Tauri 2.0 (Rust backend) and React 18 + TypeScript + Tailwind CSS (frontend).
@@ -11,11 +11,13 @@ WiScripts Windows is a high-performance Windows optimization and system telemetr
    - Real-time kernel timers & DPC telemetry (`NtSetTimerResolution`, `timeBeginPeriod`, `QueryPerformanceCounter`, `NtQuerySystemInformation`).
    - Network socket telemetry & firewall shield (`GetExtendedTcpTable`, `GetExtendedUdpTable`, `netsh advfirewall`, Windows Firewall COM).
    - Storage SMART & battery telemetry (`IOCTL_STORAGE_QUERY_PROPERTY` for NVMe Health Log, `GetSystemPowerStatus`, `CallNtPowerInformation`, WMI `BatteryStaticData`, `powercfg`).
+   - Dynamic GPU & ACPI telemetry (`atiadlxx.dll`/`atiadlxy.dll` for AMD ADL Overdrive 5/6, `nvml.dll` for NVIDIA NVML, `MSAcpi_ThermalZoneTemperature`, `Win32_PerfFormattedData_Counters_ThermalZoneInformation`).
 2. **Tauri IPC Command Layer (`src-tauri/src/lib.rs`)**:
    - Strongly-typed, serialized IPC command handlers returning `Result<T, AppError>`.
    - Comprehensive error handling and graceful fallbacks for unprivileged execution.
 3. **Frontend State & UI Layer (`src/`)**:
    - Modular React 18 views with code-splitting (`React.lazy` + `<Suspense>`).
+   - 3-Tier Flex Navigation Sidebar with independent `.custom-scrollbar` and fixed brand header/admin elevation card.
    - Centralized Zustand store (`useAppStore`) with domain slices.
    - Refined Minimal aesthetic: `#090A0C` background, `#121417` cards, `#22252A` borders, `tabular-nums` typography, accessible ARIA roles, GPU-accelerated micro-charts.
    - Full internationalization parity (`en.json` & `ru.json`).
@@ -26,18 +28,21 @@ WiScripts Windows is a high-performance Windows optimization and system telemetr
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | DPC & ISR Latency Analyzer | Real-time measurement and visualization of DPC/ISR latency metrics and timer jitter via QPC / NtQuerySystemInformation | M1 | ORIGINAL_REQUEST §R1 |
-| 2 | Game Boost & Timer Resolution | High-priority process assignment, non-essential service suspension during gaming, and 0.5ms timer resolution adjustment (NtSetTimerResolution / timeBeginPeriod) | M1 | ORIGINAL_REQUEST §R1 |
-| 3 | Standby List Memory Purge | Low-level kernel standby list memory purge via NtSetSystemInformation (MemoryPurgeStandbyList) with SeProfileSingleProcessPrivilege | M2 | ORIGINAL_REQUEST §R2 |
-| 4 | Working Set Trimmer & Auto-Optimizer | Process working set clearing via EmptyWorkingSet, configurable RAM percentage background auto-trimmer, safe excluded processes list | M2 | ORIGINAL_REQUEST §R2 |
-| 5 | Live Network Socket Monitor | Real-time TCP/UDP socket monitoring with local/remote endpoints, active state, protocol, PID resolution, process names, and bandwidth estimation | M3 | ORIGINAL_REQUEST §R3 |
-| 6 | Process Firewall Shield | One-click inbound/outbound firewall rule creation/deletion for target executables via netsh advfirewall / Windows Firewall COM | M3 | ORIGINAL_REQUEST §R3 |
-| 7 | Hardware NVMe SMART Health | Physical drive NVMe health telemetry (temperature, TBW, percentage health, spare capacity, power-on hours) via IOCTL_STORAGE_QUERY_PROPERTY / WMI | M4 | ORIGINAL_REQUEST §R4 |
-| 8 | Battery & Power Analytics | Battery wear level, charge cycles, discharge rate, power plan enumeration, and one-click activation of Windows Ultimate Performance scheme | M4 | ORIGINAL_REQUEST §R4 |
-| 9 | Refined Minimal UI Views | 4 modular React 18 views (Gaming, RAM, Network Shield, Hardware Health) adhering to Refined Minimal aesthetic (#090A0C, tabular-nums) | M5 | ORIGINAL_REQUEST §R5 |
-| 10 | Navigation & Command Palette Integration | Integration of 4 new views into Sidebar Navigation, Command Palette indexing, and TabType routing | M5 | ORIGINAL_REQUEST §R5 |
-| 11 | Internationalization (i18n) Parity | 100% key and parameter parity across en.json and ru.json for all new features | M5 | ORIGINAL_REQUEST §R5 |
-| 12 | Zero-Warning Quality & Multi-Tier Testing | Zero clippy warnings, zero tsc errors, 100% passing Rust unit tests & Node E2E test suite across Tiers 1–4, and adversarial verification | M6 | ORIGINAL_REQUEST §R5 |
+| 1 | AMD ADL GPU Telemetry | Dynamic loading of `atiadlxx.dll`/`atiadlxy.dll` with Overdrive 5/6, multi-head deduplication, and `amd-smi` fallback | v1.4.0 | R1 |
+| 2 | Laptop & ACPI Thermal Zones | Dual-namespace thermal polling (`MSAcpi_ThermalZoneTemperature`, `Win32_PerfFormattedData_Counters_ThermalZoneInformation`) with BIOS stub filtering | v1.4.0 | R1 |
+| 3 | Navigation Flex Scroll Container | 3-tier pinned header/footer layout with independent dark scrollbar (`.custom-scrollbar`) for all 25 modules | v1.4.0 | R2 |
+| 4 | DPC & ISR Latency Analyzer | Real-time measurement and visualization of DPC/ISR latency metrics and timer jitter via QPC / NtQuerySystemInformation | M1 | ORIGINAL_REQUEST §R1 |
+| 5 | Game Boost & Timer Resolution | High-priority process assignment, non-essential service suspension during gaming, and 0.5ms timer resolution adjustment (NtSetTimerResolution / timeBeginPeriod) | M1 | ORIGINAL_REQUEST §R1 |
+| 6 | Standby List Memory Purge | Low-level kernel standby list memory purge via NtSetSystemInformation (MemoryPurgeStandbyList) with SeProfileSingleProcessPrivilege | M2 | ORIGINAL_REQUEST §R2 |
+| 7 | Working Set Trimmer & Auto-Optimizer | Process working set clearing via EmptyWorkingSet, configurable RAM percentage background auto-trimmer, safe excluded processes list | M2 | ORIGINAL_REQUEST §R2 |
+| 8 | Live Network Socket Monitor | Real-time TCP/UDP socket monitoring with local/remote endpoints, active state, protocol, PID resolution, process names, and bandwidth estimation | M3 | ORIGINAL_REQUEST §R3 |
+| 9 | Process Firewall Shield | One-click inbound/outbound firewall rule creation/deletion for target executables via netsh advfirewall / Windows Firewall COM | M3 | ORIGINAL_REQUEST §R3 |
+| 10 | Hardware NVMe SMART Health | Physical drive NVMe health telemetry (temperature, TBW, percentage health, spare capacity, power-on hours) via IOCTL_STORAGE_QUERY_PROPERTY / WMI | M4 | ORIGINAL_REQUEST §R4 |
+| 11 | Battery & Power Analytics | Battery wear level, charge cycles, discharge rate, power plan enumeration, and one-click activation of Windows Ultimate Performance scheme | M4 | ORIGINAL_REQUEST §R4 |
+| 12 | Refined Minimal UI Views | 4 modular React 18 views (Gaming, RAM, Network Shield, Hardware Health) adhering to Refined Minimal aesthetic (#090A0C, tabular-nums) | M5 | ORIGINAL_REQUEST §R5 |
+| 13 | Navigation & Command Palette Integration | Integration of 4 new views into Sidebar Navigation, Command Palette indexing, and TabType routing | M5 | ORIGINAL_REQUEST §R5 |
+| 14 | Internationalization (i18n) Parity | 100% key and parameter parity across en.json and ru.json for all new features | M5 | ORIGINAL_REQUEST §R5 |
+| 15 | Zero-Warning Quality & Multi-Tier Testing | Zero clippy warnings, zero tsc errors, 100% passing Rust unit tests & Node E2E test suite across Tiers 1–4, and adversarial verification | M6 | ORIGINAL_REQUEST §R5 |
 
 ---
 

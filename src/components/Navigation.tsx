@@ -73,47 +73,49 @@ export function Navigation() {
   const appVersion = useAppStore((s) => s.appVersion);
 
   return (
-    <aside className="w-64 border-r border-border bg-surface flex flex-col justify-between h-full select-none">
-      <div>
-        {/* Brand Header */}
-        <div className="p-4 border-b border-border flex items-center gap-3">
-          <img src="/icon.png" alt="WiScripts" className="h-8 w-8 rounded-[6px] object-cover bg-white shadow-sm" />
-          <div>
-            <h1 className="text-sm font-semibold text-text-primary leading-tight">WiScripts</h1>
-            <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase">
-              {t('nav.app_version', { version: appVersion || '1.0.0' })}
-            </span>
-          </div>
+    <aside className="w-64 border-r border-border bg-surface flex flex-col h-full select-none shrink-0 overflow-hidden">
+      {/* Brand Header */}
+      <div className="p-4 border-b border-border flex items-center gap-3 shrink-0">
+        <img src="/icon.png" alt="WiScripts" className="h-8 w-8 rounded-[6px] object-cover bg-white shadow-sm shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-semibold text-text-primary leading-tight truncate">WiScripts</h1>
+          <span className="text-[10px] font-mono text-text-muted tracking-wider uppercase truncate block">
+            {t('nav.app_version', { version: appVersion || '1.0.0' })}
+          </span>
         </div>
-
-        {/* Nav Links */}
-        <nav className="p-2 space-y-1">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                disabled={isExecuting}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-[6px] transition-opacity ${
-                  isExecuting ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  isActive
-                    ? 'bg-surface-active text-brand border border-border-focus/40'
-                    : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-brand' : 'text-text-muted'}`} />
-                <span>{t(item.labelKey)}</span>
-              </button>
-            );
-          })}
-        </nav>
       </div>
 
+      {/* Nav Links */}
+      <nav
+        className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1 custom-scrollbar"
+        aria-label="Main Navigation"
+      >
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              disabled={isExecuting}
+              aria-current={isActive ? 'page' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-[6px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand ${
+                isExecuting ? 'opacity-50 cursor-not-allowed' : ''
+              } ${
+                isActive
+                  ? 'bg-surface-active text-brand border border-border-focus/40'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-brand' : 'text-text-muted'}`} />
+              <span className="truncate text-left">{t(item.labelKey)}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Admin Elevation Status Card */}
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border shrink-0 bg-surface">
         <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-2.5 flex items-center gap-2.5">
           {systemInfo?.isElevated ? (
             <ShieldCheck className="h-4 w-4 text-status-success shrink-0" />

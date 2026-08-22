@@ -1,3 +1,11 @@
+pub mod acpi;
+pub mod adl;
+pub mod sensors;
+
+pub use acpi::*;
+pub use adl::*;
+pub use sensors::*;
+
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -22,30 +30,6 @@ pub struct SystemMetricsPayload {
     pub network_total_rx_bytes: u64,
     pub network_total_tx_bytes: u64,
     pub timestamp_ms: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct TemperatureSensorInfo {
-    pub id: String,
-    pub name: String,
-    pub label: String,
-    pub temperature_celsius: f32,
-    pub sensor_type: String, // "cpu", "gpu", or "other"
-    pub provider: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct SystemTemperaturesPayload {
-    pub cpu_temp_celsius: Option<f32>,
-    pub gpu_temp_celsius: Option<f32>,
-    pub is_cpu_temp_available: bool,
-    pub is_gpu_temp_available: bool,
-    pub sensor_source: String,
-    pub sensor_items: Vec<TemperatureSensorInfo>,
-    pub selected_cpu_sensor_id: Option<String>,
-    pub selected_gpu_sensor_id: Option<String>,
 }
 
 pub struct MetricsCollector {
@@ -195,10 +179,6 @@ impl MetricsCollector {
     }
 }
 
-pub fn deci_kelvin_to_celsius(deci_k: f32) -> f32 {
-    (deci_k - 2732.0) / 10.0
-}
-
 pub fn run_command_with_timeout(mut cmd: std::process::Command, timeout: std::time::Duration) -> Option<String> {
     use std::io::Read;
     use std::process::Stdio;
@@ -243,7 +223,7 @@ pub fn run_command_with_timeout(mut cmd: std::process::Command, timeout: std::ti
     }
 }
 
-fn run_with_timeout<F, T>(timeout: std::time::Duration, f: F) -> Option<T>
+pub fn run_with_timeout<F, T>(timeout: std::time::Duration, f: F) -> Option<T>
 where
     F: FnOnce() -> Option<T> + Send + 'static,
     T: Send + 'static,
@@ -257,7 +237,7 @@ where
     rx.recv_timeout(timeout).ok().flatten()
 }
 
-fn parse_wmi_hardware_monitor_json(json_str: &str, provider: &str, prefix: &str) -> Vec<TemperatureSensorInfo> {
+pub fn parse_wmi_hardware_monitor_json(json_str: &str, provider: &str, prefix: &str) -> Vec<TemperatureSensorInfo> {
     let mut sensors = Vec::new();
     let trimmed = json_str.trim();
     if trimmed.is_empty() {
@@ -279,24 +259,8 @@ fn parse_wmi_hardware_monitor_json(json_str: &str, provider: &str, prefix: &str)
             let temp_val = item.get("Value").and_then(|v| v.as_f64()).map(|v| v as f32);
 
             if let Some(temp) = temp_val {
-                if temp > 0.0 && temp < 130.0 {
-                    let combined_lower = format!("{} {} {}", identifier, name, parent).to_lowercase();
-                    let sensor_type = if combined_lower.contains("gpu")
-                        || combined_lower.contains("nvidia")
-                        || combined_lower.contains("radeon")
-                        || combined_lower.contains("vram")
-                    {
-                        "gpu".to_string()
-                    } else if combined_lower.contains("cpu")
-                        || combined_lower.contains("core")
-                        || combined_lower.contains("package")
-                        || combined_lower.contains("tdie")
-                        || combined_lower.contains("ccd")
-                    {
-                        "cpu".to_string()
-                    } else {
-                        "other".to_string()
-                    };
+                if is_valid_temperature(temp) {
+                    let sensor_type = classify_sensor(identifier, name, parent);
 
                     let raw_id = if !identifier.is_empty() {
                         identifier.replace(['/', '\\'], "_")
@@ -326,7 +290,7 @@ fn parse_wmi_hardware_monitor_json(json_str: &str, provider: &str, prefix: &str)
     sensors
 }
 
-fn query_lhm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
+pub fn query_lhm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     #[cfg(target_os = "windows")]
     {
         let mut cmd = std::process::Command::new("powershell.exe");
@@ -338,7 +302,7 @@ fn query_lhm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
             "-Command",
             "Get-CimInstance -Namespace root\\LibreHardwareMonitor -ClassName Sensor -Filter \"SensorType='Temperature'\" -ErrorAction SilentlyContinue | Select-Object Identifier, Name, Parent, Value | ConvertTo-Json -Compress",
         ]);
-        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(3));
+        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(2));
 
         if let Some(json_str) = output {
             return parse_wmi_hardware_monitor_json(&json_str, "LibreHardwareMonitor WMI", "lhm");
@@ -347,7 +311,7 @@ fn query_lhm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     Vec::new()
 }
 
-fn query_ohm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
+pub fn query_ohm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     #[cfg(target_os = "windows")]
     {
         let mut cmd = std::process::Command::new("powershell.exe");
@@ -359,7 +323,7 @@ fn query_ohm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
             "-Command",
             "Get-CimInstance -Namespace root\\OpenHardwareMonitor -ClassName Sensor -Filter \"SensorType='Temperature'\" -ErrorAction SilentlyContinue | Select-Object Identifier, Name, Parent, Value | ConvertTo-Json -Compress",
         ]);
-        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(3));
+        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(2));
 
         if let Some(json_str) = output {
             return parse_wmi_hardware_monitor_json(&json_str, "OpenHardwareMonitor WMI", "ohm");
@@ -368,8 +332,14 @@ fn query_ohm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     Vec::new()
 }
 
-fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
-    let output = run_with_timeout(std::time::Duration::from_secs(3), || {
+static NVML_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+pub fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
+    let _lock = match NVML_MUTEX.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let output = run_with_timeout(std::time::Duration::from_secs(2), || {
         let mut sensors = Vec::new();
         #[cfg(target_os = "windows")]
         {
@@ -418,7 +388,7 @@ fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
                                         let mut temp_val: u32 = 0;
                                         if get_temp(handle, 0, &mut temp_val) == 0 {
                                             let temp_f = temp_val as f32;
-                                            if temp_f > 0.0 && temp_f < 120.0 {
+                                            if is_valid_temperature(temp_f) {
                                                 sensors.push(TemperatureSensorInfo {
                                                     id: format!("nvml_gpu_{}", i),
                                                     name: gpu_name.clone(),
@@ -444,58 +414,7 @@ fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
     output.unwrap_or_default()
 }
 
-fn query_acpi_wmi_sensors() -> Vec<TemperatureSensorInfo> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = std::process::Command::new("powershell.exe");
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000);
-        cmd.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-CimInstance -Namespace root\\wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object InstanceName, CurrentTemperature | ConvertTo-Json -Compress",
-        ]);
-        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(3));
-
-        if let Some(json_str) = output {
-            let mut sensors = Vec::new();
-            let trimmed = json_str.trim();
-            if !trimmed.is_empty() {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                    let items = match value {
-                        serde_json::Value::Array(arr) => arr,
-                        serde_json::Value::Object(_) => vec![value],
-                        _ => vec![],
-                    };
-
-                    for (idx, item) in items.iter().enumerate() {
-                        let instance_name = item.get("InstanceName").and_then(|v| v.as_str()).unwrap_or("ThermalZone");
-                        if let Some(raw_deci_k) = item.get("CurrentTemperature").and_then(|v| v.as_f64()).map(|v| v as f32) {
-                            if raw_deci_k > 2000.0 && raw_deci_k < 4000.0 {
-                                let celsius = deci_kelvin_to_celsius(raw_deci_k);
-                                if celsius > 0.0 && celsius < 110.0 {
-                                    sensors.push(TemperatureSensorInfo {
-                                        id: format!("acpi_thermal_zone_{}", idx),
-                                        name: format!("ACPI Thermal Zone {}", idx),
-                                        label: format!("{} ({:.1}°C)", instance_name, celsius),
-                                        temperature_celsius: celsius,
-                                        sensor_type: "cpu".to_string(),
-                                        provider: "ACPI Thermal Zone".to_string(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return sensors;
-        }
-    }
-    Vec::new()
-}
-
-fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
+pub fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
     #[cfg(target_os = "windows")]
     {
         let mut cmd = std::process::Command::new("nvidia-smi");
@@ -505,7 +424,7 @@ fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
             "--query-gpu=temperature.gpu,name",
             "--format=csv,noheader,nounits",
         ]);
-        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(3));
+        let output = run_command_with_timeout(cmd, std::time::Duration::from_secs(2));
 
         if let Some(stdout) = output {
             let mut sensors = Vec::new();
@@ -513,7 +432,7 @@ fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
                 let parts: Vec<&str> = line.split(',').collect();
                 if !parts.is_empty() {
                     if let Ok(temp) = parts[0].trim().parse::<f32>() {
-                        if temp > 0.0 && temp < 120.0 {
+                        if is_valid_temperature(temp) {
                             let name = if parts.len() > 1 {
                                 parts[1].trim().to_string()
                             } else {
@@ -537,30 +456,14 @@ fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
     Vec::new()
 }
 
-fn query_sysinfo_sensors() -> Vec<TemperatureSensorInfo> {
+pub fn query_sysinfo_sensors() -> Vec<TemperatureSensorInfo> {
     let mut sensors = Vec::new();
     let components = Components::new_with_refreshed_list();
     for (idx, comp) in components.iter().enumerate() {
-        let label_lower = comp.label().to_lowercase();
         let temp = comp.temperature();
-
-        let sensor_type = if label_lower.contains("cpu")
-            || label_lower.contains("core")
-            || label_lower.contains("package")
-            || label_lower.contains("tdie")
-        {
-            "cpu".to_string()
-        } else if label_lower.contains("gpu")
-            || label_lower.contains("nvidia")
-            || label_lower.contains("vram")
-        {
-            "gpu".to_string()
-        } else {
-            "other".to_string()
-        };
-
-        if temp > 0.0 && temp < 130.0 {
+        if is_valid_temperature(temp) {
             let clean_label = comp.label().to_string();
+            let sensor_type = classify_sensor(&clean_label, &clean_label, "");
             let slug = clean_label.to_lowercase().replace([' ', '/'], "_");
             sensors.push(TemperatureSensorInfo {
                 id: format!("sysinfo_{}_{}", slug, idx),
@@ -575,59 +478,34 @@ fn query_sysinfo_sensors() -> Vec<TemperatureSensorInfo> {
     sensors
 }
 
-fn push_sensors(
-    dest: &mut Vec<TemperatureSensorInfo>,
-    existing_ids: &mut std::collections::HashSet<String>,
-    sensors: Vec<TemperatureSensorInfo>,
-) {
-    for mut sensor in sensors {
-        if existing_ids.contains(&sensor.id) {
-            let mut suffix = 2;
-            let base_id = sensor.id.clone();
-            while existing_ids.contains(&format!("{}_{}", base_id, suffix)) {
-                suffix += 1;
-            }
-            sensor.id = format!("{}_{}", base_id, suffix);
-        }
-        existing_ids.insert(sensor.id.clone());
-        dest.push(sensor);
-    }
-}
-
 pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
     let mut sensor_items: Vec<TemperatureSensorInfo> = Vec::new();
     let mut existing_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // Tier 1: LibreHardwareMonitor WMI
-    push_sensors(&mut sensor_items, &mut existing_ids, query_lhm_wmi_sensors());
+    // Tier 1: In-process GPU Dynamic DLLs (NVML for NVIDIA, ADL for AMD)
+    push_sensors(&mut sensor_items, &mut existing_ids, query_nvml_sensors());
+    push_sensors(&mut sensor_items, &mut existing_ids, query_adl_sensors());
 
-    // Tier 2: OpenHardwareMonitor WMI
+    // Tier 2: Dedicated Hardware Monitors (LHM & OHM)
+    push_sensors(&mut sensor_items, &mut existing_ids, query_lhm_wmi_sensors());
     push_sensors(&mut sensor_items, &mut existing_ids, query_ohm_wmi_sensors());
 
-    // Tier 3: Dynamic NVML DLL loading (NVIDIA GPUs)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_nvml_sensors());
-
-    // Tier 4: ACPI Thermal Zone WMI
+    // Tier 3: ACPI / Laptop Thermal Zones (root\wmi & root\cimv2)
     push_sensors(&mut sensor_items, &mut existing_ids, query_acpi_wmi_sensors());
+    push_sensors(&mut sensor_items, &mut existing_ids, query_perf_thermal_zone_sensors());
 
-    // Tier 5: nvidia-smi CLI fallback (if no GPU sensor found yet)
+    // Tier 4: CLI GPU Fallbacks (only if no GPU sensor found yet)
     if !sensor_items.iter().any(|s| s.sensor_type == "gpu") {
         push_sensors(&mut sensor_items, &mut existing_ids, query_nvidia_smi_sensors());
+        push_sensors(&mut sensor_items, &mut existing_ids, query_amd_smi_sensors());
     }
 
-    // Tier 6: sysinfo fallback
+    // Tier 5: sysinfo Components fallback
     push_sensors(&mut sensor_items, &mut existing_ids, query_sysinfo_sensors());
 
-    // Primary CPU & GPU temps:
-    let cpu_temp = sensor_items
-        .iter()
-        .find(|s| s.sensor_type == "cpu")
-        .map(|s| s.temperature_celsius);
-
-    let gpu_temp = sensor_items
-        .iter()
-        .find(|s| s.sensor_type == "gpu")
-        .map(|s| s.temperature_celsius);
+    // Primary CPU & GPU temperature selection with priority heuristics
+    let (cpu_temp, selected_cpu_id) = select_primary_cpu_sensor(&sensor_items);
+    let (gpu_temp, selected_gpu_id) = select_primary_gpu_sensor(&sensor_items);
 
     let is_cpu_temp_available = cpu_temp.is_some();
     let is_gpu_temp_available = gpu_temp.is_some();
@@ -653,24 +531,14 @@ pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
         is_gpu_temp_available,
         sensor_source,
         sensor_items,
-        selected_cpu_sensor_id: None,
-        selected_gpu_sensor_id: None,
+        selected_cpu_sensor_id: selected_cpu_id,
+        selected_gpu_sensor_id: selected_gpu_id,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_deci_kelvin_to_celsius() {
-        assert_eq!(deci_kelvin_to_celsius(2732.0), 0.0);
-        assert!((deci_kelvin_to_celsius(3000.0) - 26.8).abs() < 0.01);
-        assert_eq!(deci_kelvin_to_celsius(3732.0), 100.0);
-        assert_eq!(deci_kelvin_to_celsius(0.0), -273.2);
-        assert_eq!(deci_kelvin_to_celsius(2000.0), -73.2);
-        assert_eq!(deci_kelvin_to_celsius(4000.0), 126.8);
-    }
 
     #[test]
     fn test_temperature_sensor_info_creation() {
@@ -840,6 +708,3 @@ mod tests {
         }
     }
 }
-
-
-

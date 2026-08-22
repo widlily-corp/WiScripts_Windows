@@ -74,7 +74,7 @@ export interface UpdaterSlice {
 }
 
 export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = (set, get) => ({
-  appVersion: '1.3.0',
+  appVersion: '1.4.0',
   setAppVersion: (ver) => set({ appVersion: ver }),
   fetchAppVersion: async () => {
     try {
@@ -86,7 +86,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     } catch (err) {
       // Dev mode fallback
     }
-    const current = get().appVersion || '1.3.0';
+    const current = get().appVersion || '1.4.0';
     return current;
   },
 

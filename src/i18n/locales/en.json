@@ -100,6 +100,10 @@
       "settings": "Global Configuration & Preferences",
       "script_runner": "PowerShell & Batch Script Runner Library",
       "governor": "System Resource Governor & CPU Affinity",
+      "gaming_latency": "Gaming Low-Latency & DPC Latency Analyzer",
+      "smart_ram": "Smart RAM & Standby List Memory Purger",
+      "network_shield": "Live Network Traffic & Process Firewall Shield",
+      "hardware_health": "Hardware NVMe SMART & Battery/Power Analytics",
       "autoruns": "Windows AutoRuns & Deep Startup Inspector"
     },
     "logs": {
@@ -203,6 +207,18 @@
     "gpuSensor": "GPU Hardware Thermal Sensor",
     "cpuSensorSource": "ACPI / sysinfo Multi-Tier Pipeline",
     "gpuSensorSource": "NVIDIA SMI / Open Hardware Sensor",
+    "thermal_status": {
+      "optimal": "Optimal",
+      "elevated": "Elevated",
+      "critical": "Critical",
+      "unavailable": "Unavailable"
+    },
+    "thermal_threshold": "Max Threshold: 95°C",
+    "thermal_unsupported": "Requires Admin / Unsupported",
+    "select_sensor": "Select Temperature Sensor",
+    "select_sensor_aria": "Select {{title}} temperature sensor",
+    "autodetect": "Auto-detect (Default)",
+    "sensor_source_label": "Source:",
     "operatingSystem": "Operating System",
     "build": "Build {{build}} ({{version}})",
     "telemetryService": "Telemetry Service",

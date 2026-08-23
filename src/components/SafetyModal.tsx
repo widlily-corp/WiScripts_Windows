@@ -34,6 +34,16 @@ export function SafetyModal() {
     setShowCommands(false);
   }, [modal?.isOpen]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && modal?.isOpen && !isSubmitting) {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modal?.isOpen, isSubmitting, closeModal]);
+
   if (!modal || !modal.isOpen) return null;
 
   const isCritical = modal.riskLevel === 'critical';

@@ -122,6 +122,8 @@ export interface ScriptRunnerSlice {
   executeScriptWithParameters: (script: ScriptManifestEntry, values?: Record<string, ScriptParameterValue>) => Promise<CommandOutput | null>;
 }
 
+const MAX_SCRIPT_LOG_LINES = 2000;
+
 const DEFAULT_SCRIPT_CONTENT = `# WiScripts Windows Custom PowerShell Script
 # Runs with elevated Administrator privileges
 
@@ -172,7 +174,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       timestamp,
     };
     set((state) => ({
-      outputLogs: [...state.outputLogs, newEntry],
+      outputLogs: [...state.outputLogs, newEntry].slice(-MAX_SCRIPT_LOG_LINES),
     }));
   },
 

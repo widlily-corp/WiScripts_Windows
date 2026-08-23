@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Cpu, HardDrive, Thermometer, ChevronDown } from 'lucide-react';
 import { ThermalStatus, TemperatureSensorInfo } from '../types';
 
@@ -23,6 +24,8 @@ export function TemperatureSensorWidget({
   selectedSensorId = null,
   onSelectSensor,
 }: TemperatureSensorWidgetProps) {
+  const { t } = useTranslation();
+
   const getBadgeStyle = (status: ThermalStatus) => {
     switch (status) {
       case 'normal':
@@ -39,13 +42,13 @@ export function TemperatureSensorWidget({
   const getStatusLabel = (status: ThermalStatus) => {
     switch (status) {
       case 'normal':
-        return 'Optimal';
+        return t('dashboard.thermal_status.optimal', 'Optimal');
       case 'warm':
-        return 'Elevated';
+        return t('dashboard.thermal_status.elevated', 'Elevated');
       case 'hot':
-        return 'Critical';
+        return t('dashboard.thermal_status.critical', 'Critical');
       default:
-        return 'Unavailable';
+        return t('dashboard.thermal_status.unavailable', 'Unavailable');
     }
   };
 
@@ -77,7 +80,9 @@ export function TemperatureSensorWidget({
           </span>
         </div>
         <span className="text-[10px] font-mono text-text-muted text-right">
-          {isAvailable ? 'Max Threshold: 95°C' : 'Requires Admin / Unsupported'}
+          {isAvailable
+            ? t('dashboard.thermal_threshold', 'Max Threshold: 95°C')
+            : t('dashboard.thermal_unsupported', 'Requires Admin / Unsupported')}
         </span>
       </div>
 
@@ -102,17 +107,17 @@ export function TemperatureSensorWidget({
             htmlFor={`sensor-select-${sensorType}`}
             className="text-[10px] font-mono uppercase tracking-wider text-text-muted block"
           >
-            Select Temperature Sensor
+            {t('dashboard.select_sensor', 'Select Temperature Sensor')}
           </label>
           <div className="relative">
             <select
               id={`sensor-select-${sensorType}`}
-              aria-label={`Select ${title} temperature sensor`}
+              aria-label={t('dashboard.select_sensor_aria', { title, defaultValue: `Select ${title} temperature sensor` })}
               value={selectedSensorId || ''}
               onChange={(e) => onSelectSensor(e.target.value || null)}
               className="w-full bg-surface-subtle text-text-primary border border-border-subtle rounded-[4px] px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-brand appearance-none cursor-pointer pr-7 truncate"
             >
-              <option value="">Auto-detect (Default)</option>
+              <option value="">{t('dashboard.autodetect', 'Auto-detect (Default)')}</option>
               {availableSensors.map((sensor) => (
                 <option key={sensor.id} value={sensor.id}>
                   {sensor.label || sensor.name} ({sensor.provider}) - {sensor.temperatureCelsius.toFixed(1)}°C
@@ -126,7 +131,7 @@ export function TemperatureSensorWidget({
 
       {sensorSource && (
         <div className="text-[10px] font-mono text-text-muted flex justify-between pt-1 border-t border-border-subtle/40">
-          <span>Source:</span>
+          <span>{t('dashboard.sensor_source_label', 'Source:')}</span>
           <span className="truncate max-w-[200px] text-text-secondary">{sensorSource}</span>
         </div>
       )}

@@ -1,127 +1,53 @@
-# Project: WiScripts Windows High-Performance Subsystems (v1.4.0)
+# Project: WiScripts Windows v1.4.1 Maintenance & Release
 
 ## Architecture
-WiScripts Windows is a high-performance Windows optimization and system telemetry utility built on Tauri 2.0 (Rust backend) and React 18 + TypeScript + Tailwind CSS (frontend).
-
-### Architectural Layers
-1. **Low-Level Native Kernel & Win32 Layer (`src-tauri/src/`)**:
-   - Direct Win32 and NT kernel API interactions (`ntdll.dll`, `psapi.dll`, `iphlpapi.dll`, `powrprof.dll`, `kernel32.dll`).
-   - Privilege management (`SeProfileSingleProcessPrivilege`, `SeIncreaseQuotaPrivilege`).
-   - Memory management (`NtSetSystemInformation` with `SystemMemoryListInformation`, `K32EmptyWorkingSet`).
-   - Real-time kernel timers & DPC telemetry (`NtSetTimerResolution`, `timeBeginPeriod`, `QueryPerformanceCounter`, `NtQuerySystemInformation`).
-   - Network socket telemetry & firewall shield (`GetExtendedTcpTable`, `GetExtendedUdpTable`, `netsh advfirewall`, Windows Firewall COM).
-   - Storage SMART & battery telemetry (`IOCTL_STORAGE_QUERY_PROPERTY` for NVMe Health Log, `GetSystemPowerStatus`, `CallNtPowerInformation`, WMI `BatteryStaticData`, `powercfg`).
-   - Dynamic GPU & ACPI telemetry (`atiadlxx.dll`/`atiadlxy.dll` for AMD ADL Overdrive 5/6, `nvml.dll` for NVIDIA NVML, `MSAcpi_ThermalZoneTemperature`, `Win32_PerfFormattedData_Counters_ThermalZoneInformation`).
-2. **Tauri IPC Command Layer (`src-tauri/src/lib.rs`)**:
-   - Strongly-typed, serialized IPC command handlers returning `Result<T, AppError>`.
-   - Comprehensive error handling and graceful fallbacks for unprivileged execution.
-3. **Frontend State & UI Layer (`src/`)**:
-   - Modular React 18 views with code-splitting (`React.lazy` + `<Suspense>`).
-   - 3-Tier Flex Navigation Sidebar with independent `.custom-scrollbar` and fixed brand header/admin elevation card.
-   - Centralized Zustand store (`useAppStore`) with domain slices.
-   - Refined Minimal aesthetic: `#090A0C` background, `#121417` cards, `#22252A` borders, `tabular-nums` typography, accessible ARIA roles, GPU-accelerated micro-charts.
-   - Full internationalization parity (`en.json` & `ru.json`).
-   - Global Sidebar navigation & fuzzy Command Palette indexing.
-
----
+WiScripts Windows is an enterprise-grade Windows optimization, management, and diagnostics desktop application.
+- **Backend (Rust / Tauri v2)**: Native Windows APIs (Win32, COM, WMI, ADL2, NVML, ACPI), elevated process execution runner with pipe streaming and process tree teardown, hardware telemetry collectors, and memory purge engine.
+- **Frontend (React 18 / TypeScript / Tailwind CSS / Zustand / i18n)**: High-density modular UI, dual-tier safety pre-flight modals, terminal script execution console, hardware telemetry charts, and dual-locale English/Russian translation engine.
+- **Scripts Library (`scripts_lib/`)**: 27 verified, parameter-driven PowerShell 5.1/7 scripts with administrator elevation guards, idempotent registry/service configurations, and UTF-8 BOM encoding.
+- **Testing Track (`tests/` & `tests/e2e/`)**: 24 automated regression test suites, 4 E2E testing tiers (66 scenarios), Rust library test harness (237 tests), and TypeScript compilation verification.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
-|---|---------|-------------|-----------|--------|
-| 1 | AMD ADL GPU Telemetry | Dynamic loading of `atiadlxx.dll`/`atiadlxy.dll` with Overdrive 5/6, multi-head deduplication, and `amd-smi` fallback | v1.4.0 | R1 |
-| 2 | Laptop & ACPI Thermal Zones | Dual-namespace thermal polling (`MSAcpi_ThermalZoneTemperature`, `Win32_PerfFormattedData_Counters_ThermalZoneInformation`) with BIOS stub filtering | v1.4.0 | R1 |
-| 3 | Navigation Flex Scroll Container | 3-tier pinned header/footer layout with independent dark scrollbar (`.custom-scrollbar`) for all 25 modules | v1.4.0 | R2 |
-| 4 | DPC & ISR Latency Analyzer | Real-time measurement and visualization of DPC/ISR latency metrics and timer jitter via QPC / NtQuerySystemInformation | M1 | ORIGINAL_REQUEST §R1 |
-| 5 | Game Boost & Timer Resolution | High-priority process assignment, non-essential service suspension during gaming, and 0.5ms timer resolution adjustment (NtSetTimerResolution / timeBeginPeriod) | M1 | ORIGINAL_REQUEST §R1 |
-| 6 | Standby List Memory Purge | Low-level kernel standby list memory purge via NtSetSystemInformation (MemoryPurgeStandbyList) with SeProfileSingleProcessPrivilege | M2 | ORIGINAL_REQUEST §R2 |
-| 7 | Working Set Trimmer & Auto-Optimizer | Process working set clearing via EmptyWorkingSet, configurable RAM percentage background auto-trimmer, safe excluded processes list | M2 | ORIGINAL_REQUEST §R2 |
-| 8 | Live Network Socket Monitor | Real-time TCP/UDP socket monitoring with local/remote endpoints, active state, protocol, PID resolution, process names, and bandwidth estimation | M3 | ORIGINAL_REQUEST §R3 |
-| 9 | Process Firewall Shield | One-click inbound/outbound firewall rule creation/deletion for target executables via netsh advfirewall / Windows Firewall COM | M3 | ORIGINAL_REQUEST §R3 |
-| 10 | Hardware NVMe SMART Health | Physical drive NVMe health telemetry (temperature, TBW, percentage health, spare capacity, power-on hours) via IOCTL_STORAGE_QUERY_PROPERTY / WMI | M4 | ORIGINAL_REQUEST §R4 |
-| 11 | Battery & Power Analytics | Battery wear level, charge cycles, discharge rate, power plan enumeration, and one-click activation of Windows Ultimate Performance scheme | M4 | ORIGINAL_REQUEST §R4 |
-| 12 | Refined Minimal UI Views | 4 modular React 18 views (Gaming, RAM, Network Shield, Hardware Health) adhering to Refined Minimal aesthetic (#090A0C, tabular-nums) | M5 | ORIGINAL_REQUEST §R5 |
-| 13 | Navigation & Command Palette Integration | Integration of 4 new views into Sidebar Navigation, Command Palette indexing, and TabType routing | M5 | ORIGINAL_REQUEST §R5 |
-| 14 | Internationalization (i18n) Parity | 100% key and parameter parity across en.json and ru.json for all new features | M5 | ORIGINAL_REQUEST §R5 |
-| 15 | Zero-Warning Quality & Multi-Tier Testing | Zero clippy warnings, zero tsc errors, 100% passing Rust unit tests & Node E2E test suite across Tiers 1–4, and adversarial verification | M6 | ORIGINAL_REQUEST §R5 |
-
----
+|---|---|---|---|---|
+| 1 | Rust Backend Telemetry & Concurrency Stability | Multi-tier AMD ADL2/PMLog & NVIDIA NVML DLL bindings, ACPI laptop zones, WMI queries, deadlock-free process pipe runner | M1 | Survey |
+| 2 | Frontend State Store & Buffer Safety | Fix unbounded `outputLogs` append in `scriptRunnerSlice.ts` by enforcing a 2,000-line buffer limit | M2 | Survey |
+| 3 | Subsystem Header Localization & Tab Titles | Add `gaming_latency`, `smart_ram`, `network_shield`, `hardware_health` tab titles in `Header.tsx` and `en.json`/`ru.json` | M2 | Survey |
+| 4 | Keyboard Accessibility (A11y) & Modal Dismissal | Add `Escape` key event listeners in `SafetyModal.tsx` and `GitHubIssueModal.tsx` | M2 | Survey |
+| 5 | UI Localization Hardening | Localize `TemperatureSensorWidget.tsx`, `SafetyModal.tsx`, and component UI strings across EN and RU | M2 | Survey |
+| 6 | PowerShell Script Library Safeguards | Verify all 27 scripts in `scripts_lib/` maintain elevation checks, UTF-8 BOM, and idempotent execution | M3 | Survey |
+| 7 | Full Automated Regression & E2E Test Suite | Execute all 24 Node test suites, 66 E2E tests, 237 Rust tests, and TypeScript build with 100% pass rate | M4 | Survey |
+| 8 | Version Synchronization (v1.4.1) | Synchronize version `1.4.1` across `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `updaterSlice.ts`, and test assertions | M5 | Survey |
+| 9 | Release Documentation & Git Finalization | Publish `RELEASE_NOTES_1.4.1.md` and commit all release changes adhering to Conventional Commits | M5 | Survey |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
-|---|------|-------|-------------|--------|
-| E2E | E2E Testing Track | Simulator engines in harness.js & comprehensive test suite (Tiers 1–4) for R1–R5, publishing TEST_READY.md | none | DONE |
-| M1 | Gaming Latency Engine & DPC Analyzer | Backend `src-tauri/src/gaming/` + IPC commands + unit tests | none | DONE |
-| M2 | Smart RAM & Standby List Memory Purger | Backend `src-tauri/src/memory/` + IPC commands + unit tests | none | DONE |
-| M3 | Live Network Traffic & Process Firewall Shield | Backend `src-tauri/src/network_shield/` + IPC commands + unit tests | none | DONE |
-| M4 | Hardware NVMe SMART & Battery Analytics | Backend `src-tauri/src/hardware_health/` + IPC commands + unit tests | none | DONE |
-| M5 | UI Architecture & Parity Integration | Frontend types, slices, views, Navigation, Command Palette, en/ru i18n parity, aesthetic styling | M1, M2, M3, M4 | DONE |
-| M6 | Final Verification & Quality Pass | 100% Clippy zero warnings, tsc clean, passing cargo tests, 100% passing E2E test suite, and adversarial verification | E2E, M5 | DONE |
-
----
+|---|---|---|---|---|
+| M1 | Rust Backend Telemetry, IPC & Concurrency Verification | Audit and verify Rust backend commands, telemetry collectors, and runner | none | DONE |
+| M2 | Frontend Defect Remediation & i18n Hardening | Patch `scriptRunnerSlice.ts`, `Header.tsx`, `SafetyModal.tsx`, `GitHubIssueModal.tsx`, `TemperatureSensorWidget.tsx`, and locales | M1 | DONE |
+| M3 | PowerShell Script Library Validation & Safety | Verify script parameter schemas, elevation safeguards, and syntax | none | DONE |
+| M4 | Comprehensive Test Suite & Regression Verification | Run full suite of 24 Node tests, 66 E2E tests, 237 Rust tests, and frontend build | M2, M3 | DONE |
+| M5 | Release v1.4.1 Packaging, Version Sync & Git Finalization | Bump version to 1.4.1 across 7 files, author `RELEASE_NOTES_1.4.1.md`, verify build, and commit | M4 | DONE |
 
 ## Interface Contracts
+### Frontend (`src/store/slices/scriptRunnerSlice.ts`) ↔ UI Components
+- `outputLogs`: Array of `ScriptOutputLine`, bounded to `MAX_SCRIPT_LOG_LINES = 2000`.
+- `addOutputLine(payload)`: Appends line and slices to last 2,000 items.
 
-### 1. Gaming & Latency Subsystem (`M1`)
-```rust
-// IPC Commands:
-// - get_latency_metrics() -> Result<LatencyMetrics, AppError>
-// - set_timer_resolution(resolution_100ns: u32) -> Result<TimerResolutionInfo, AppError>
-// - toggle_game_boost(target_pid: Option<u32>, enable: bool) -> Result<GameBoostStatus, AppError>
-// - get_game_boost_status() -> Result<GameBoostStatus, AppError>
-```
-
-### 2. Smart RAM Subsystem (`M2`)
-```rust
-// IPC Commands:
-// - get_memory_breakdown() -> Result<MemoryBreakdown, AppError>
-// - purge_standby_memory(mode: StandbyPurgeMode) -> Result<PurgeResult, AppError>
-// - purge_working_sets(excluded_pids: Vec<u32>) -> Result<PurgeResult, AppError>
-// - configure_ram_auto_trimmer(config: AutoTrimmerConfig) -> Result<AutoTrimmerConfig, AppError>
-// - get_ram_auto_trimmer_config() -> Result<AutoTrimmerConfig, AppError>
-```
-
-### 3. Network Traffic & Firewall Shield (`M3`)
-```rust
-// IPC Commands:
-// - get_active_network_connections() -> Result<Vec<NetworkConnection>, AppError>
-// - get_firewall_rules() -> Result<Vec<FirewallRuleInfo>, AppError>
-// - block_process_firewall(process_path: String, rule_name: String) -> Result<FirewallActionResult, AppError>
-// - unblock_process_firewall(rule_name: String) -> Result<FirewallActionResult, AppError>
-```
-
-### 4. Hardware Health & Power Subsystem (`M4`)
-```rust
-// IPC Commands:
-// - get_storage_devices_health() -> Result<Vec<StorageDeviceHealth>, AppError>
-// - get_battery_health_analytics() -> Result<BatteryHealthAnalytics, AppError>
-// - get_power_schemes() -> Result<Vec<PowerSchemeInfo>, AppError>
-// - set_active_power_scheme(scheme_guid: String) -> Result<bool, AppError>
-// - enable_ultimate_performance_scheme() -> Result<PowerSchemeInfo, AppError>
-```
-
----
+### Navigation / Header ↔ Locales (`en.json` / `ru.json`)
+- `header.tab_titles.gaming_latency`: EN / RU string.
+- `header.tab_titles.smart_ram`: EN / RU string.
+- `header.tab_titles.network_shield`: EN / RU string.
+- `header.tab_titles.hardware_health`: EN / RU string.
 
 ## Code Layout
-
-### Backend (`src-tauri/src/`)
-- `lib.rs` — Tauri command handler registration
-- `gaming/mod.rs` — DPC/ISR kernel jitter telemetry, timer resolution, Game Boost orchestration & unit tests
-- `memory/mod.rs` — Standby list purge, working set trimmer, auto-trim background task & unit tests
-- `network_shield/mod.rs` — Socket table queries (TCP/UDP), process resolver, firewall rules management & unit tests
-- `hardware_health/mod.rs` — NVMe SMART IOCTL, battery analytics, power schemes & unit tests
-
-### Frontend (`src/`)
-- `types/` — `gaming.ts`, `smartRam.ts`, `networkShield.ts`, `hardwareHealth.ts`, `index.ts`
-- `store/slices/` — `gamingSlice.ts`, `smartRamSlice.ts`, `networkShieldSlice.ts`, `hardwareHealthSlice.ts`
-- `views/` — `GamingLatencyView.tsx`, `SmartRamView.tsx`, `NetworkShieldView.tsx`, `HardwareHealthView.tsx`
-- `components/` — `Navigation.tsx`, `CommandPalette.tsx`, `SparklineAreaGraph.tsx`
-- `locales/` — `en.json`, `ru.json`
-
-### Tests (`tests/`)
-- `tests/e2e/harness.js` — Simulator engines and mock IPC
-- `tests/e2e/tier1_feature_coverage.test.js` — Tier 1 test cases
-- `tests/e2e/tier2_boundary_edge.test.js` — Tier 2 test cases
-- `tests/e2e/tier3_cross_feature.test.js` — Tier 3 test cases
-- `tests/e2e/tier4_real_world.test.js` — Tier 4 test cases
-- `tests/test_i18n_parity.cjs` — i18n key and parameter validation
-- `tests/test_component_i18n_keys.cjs` — JSX component key validation
+- `src/`: React 18 TypeScript frontend source code
+  - `src/components/`: Modular UI components (Navigation, Header, Modals, Widgets)
+  - `src/store/slices/`: Zustand state management slices
+  - `src/i18n/locales/`: Localization catalogs (`en.json`, `ru.json`)
+- `src-tauri/`: Tauri Rust backend source code
+  - `src-tauri/src/commands/`: IPC command handlers
+  - `src-tauri/src/metrics/`: Hardware telemetry, ADL2, NVML, ACPI collectors
+  - `src-tauri/src/script_runner/`: Process execution, elevation runner, pipe streaming
+- `scripts_lib/`: PowerShell 5.1 / 7 scripts library
+- `tests/`: Automated Node.js regression test suites and E2E test runner

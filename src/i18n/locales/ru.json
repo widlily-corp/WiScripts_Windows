@@ -100,6 +100,10 @@
       "settings": "Глобальные настройки и параметры",
       "script_runner": "Каталог и запуск скриптов PowerShell & Batch",
       "governor": "Управление ресурсами системы и привязкой ядер ЦП",
+      "gaming_latency": "Игровой режим низкой задержки и анализ DPC",
+      "smart_ram": "Умная очистка ОЗУ и кэша Standby List",
+      "network_shield": "Сетевой мониторинг и файрвол процессов",
+      "hardware_health": "Здоровье NVMe SMART и энергопотребление",
       "autoruns": "Глубокий анализ автозагрузки (AutoRuns)"
     },
     "logs": {
@@ -203,6 +207,18 @@
     "gpuSensor": "Аппаратный термодатчик ГП",
     "cpuSensorSource": "Многоуровневый конвейер ACPI / sysinfo",
     "gpuSensorSource": "NVIDIA SMI / Открытый аппаратный датчик",
+    "thermal_status": {
+      "optimal": "Оптимально",
+      "elevated": "Повышенная",
+      "critical": "Критическая",
+      "unavailable": "Недоступно"
+    },
+    "thermal_threshold": "Макс. порог: 95°C",
+    "thermal_unsupported": "Требуются права админа / Не поддерживается",
+    "select_sensor": "Выбор датчика температуры",
+    "select_sensor_aria": "Выбор датчика температуры для {{title}}",
+    "autodetect": "Автоопределение (по умолчанию)",
+    "sensor_source_label": "Источник:",
     "operatingSystem": "Операционная система",
     "build": "Сборка {{build}} ({{version}})",
     "telemetryService": "Служба телеметрии",

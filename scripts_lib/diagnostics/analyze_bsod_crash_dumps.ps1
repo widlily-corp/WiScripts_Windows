@@ -1,4 +1,4 @@
-param(
+﻿param(
     [int]$MaxEvents = 10
 )
 
@@ -36,10 +36,14 @@ if (Test-Path $memoryDmp) {
 }
 
 Write-Host "Querying System Event Log for BugCheck crash events..." -ForegroundColor Cyan
-$events = Get-EventLog -LogName System -Source "Microsoft-Windows-WER-SystemErrorReporting", "BugCheck" -Newest $MaxEvents -ErrorAction SilentlyContinue
+$filter = @{
+    LogName      = 'System'
+    ProviderName = @('Microsoft-Windows-WER-SystemErrorReporting', 'BugCheck', 'Microsoft-Windows-Kernel-Power')
+}
+$events = Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
 
 if ($events) {
-    $events | Format-Table TimeGenerated, EventID, Source, Message -AutoSize
+    $events | Format-Table TimeCreated, Id, ProviderName, Message -AutoSize
 } else {
     Write-Host "No recent BugCheck events recorded in the System Event Log." -ForegroundColor Green
 }

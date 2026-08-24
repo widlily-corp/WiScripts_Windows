@@ -1,12 +1,20 @@
 /**
- * WiScripts Windows v1.3.0 — Comprehensive E2E Master Test Runner
- * Executes Tier 1 (Feature Coverage R1-R5), Tier 2 (Boundary & Edge Cases),
- * Tier 3 (Cross-Feature Interactions), and Tier 4 (Real-World Application Scenarios)
- * test suites with full diagnostics and exit code reporting.
+ * WiScripts Windows v1.5.1 — Comprehensive Master Test & Verification Runner
+ * 
+ * Executes:
+ * - Static Analysis: PowerShell 5.1 AST syntax parser, manifest schema, SHA-256 parity & CP1251 encoding checks
+ * - Unit Tests: Multi-TB / PB binary scaling, 64-bit tabular formatting, OS guardrails, tree mutations
+ * - Tier 1: Feature Coverage (R1-R5 subsystems)
+ * - Tier 2: Boundary, Edge Cases, and Guardrail Violations
+ * - Tier 3: Cross-Feature Interactions & Workflows
+ * - Tier 4: Real-World Application Workload Scenarios
+ * - Disk Space Analyzer & Filesystem Tree Explorer Suite
  */
 
 import path from 'path';
 import { pathToFileURL } from 'url';
+import { buildStaticAnalysisSuite } from '../static_analysis/static_analysis_suite.js';
+import { buildUnitDiskAnalyzerSuite } from '../unit/disk_analyzer_format.test.js';
 import { buildTier1Suite } from './tier1_feature_coverage.test.js';
 import { buildTier2Suite } from './tier2_boundary_edge.test.js';
 import { buildTier3Suite } from './tier3_cross_feature.test.js';
@@ -15,13 +23,16 @@ import { buildDiskSpaceAnalyzerSuite } from './disk_space_analyzer.test.js';
 
 export async function runAllE2ETests() {
   console.log(`================================================================`);
-  console.log(` WiScripts Windows v1.3.0/v1.4.0 — Comprehensive E2E Test Runner`);
+  console.log(` WiScripts Windows v1.5.1 — Master Test & Verification Runner`);
   console.log(` Date: ${new Date().toISOString()}`);
   console.log(` Architecture: Rust Tauri v2 + React 18 + TypeScript + Refined Minimal`);
-  console.log(` Subsystems: Gaming, RAM, Network, Hardware, Disk Space Analyzer`);
+  console.log(` Subsystems: Disk Analyzer, Script Library, Gaming, RAM, Network, Hardware`);
+  console.log(` Verification: Static AST, Schema Hashes, Mock IPC, Unit & E2E Suites`);
   console.log(`================================================================\n`);
 
   const suites = [
+    buildStaticAnalysisSuite(),
+    buildUnitDiskAnalyzerSuite(),
     buildTier1Suite(),
     buildTier2Suite(),
     buildTier3Suite(),
@@ -47,11 +58,11 @@ export async function runAllE2ETests() {
   const overallDuration = Date.now() - overallStart;
 
   console.log(`================================================================`);
-  console.log(` OVERALL E2E TEST SUITE RESULTS (v1.3.0 SUBSYSTEMS RELEASE)`);
+  console.log(` OVERALL TEST & VERIFICATION RESULTS (v1.5.1 RELEASE)`);
   console.log(`================================================================`);
   for (const res of suiteResults) {
     const status = res.failed === 0 ? '✓ PASS' : '✗ FAIL';
-    console.log(`  [${status}] ${res.suiteName.padEnd(42)} : ${res.passed}/${res.total} passed`);
+    console.log(`  [${status}] ${res.suiteName.padEnd(46)} : ${res.passed}/${res.total} passed`);
   }
   console.log(`----------------------------------------------------------------`);
   console.log(` TOTAL TEST CASES  : ${grandTotal}`);
@@ -64,7 +75,7 @@ export async function runAllE2ETests() {
     console.error(`FAILED: ${grandFailed} test(s) failed out of ${grandTotal}.`);
     process.exit(1);
   } else {
-    console.log(`SUCCESS: All ${grandTotal} E2E tests passed cleanly with exit code 0!`);
+    console.log(`SUCCESS: All ${grandTotal} tests passed cleanly with exit code 0!`);
     return { grandTotal, grandPassed, grandFailed, overallDuration };
   }
 }

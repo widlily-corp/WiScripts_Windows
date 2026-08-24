@@ -120,25 +120,95 @@ impl Drop for CancellationGuard {
 }
 
 // ---------------------------------------------------------------------------
-// Internal Traversal Data Models
+// Internal Traversal Data Models & Bounded Min-Heap Ranking
 // ---------------------------------------------------------------------------
 
+use std::cmp::Ordering as CmpOrdering;
+use std::collections::BinaryHeap;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct TopItemCandidate {
+    size_bytes: u64,
+    name: String,
+    path: String,
+    is_dir: bool,
+    extension: Option<String>,
+    modified_timestamp: u64,
+    item_count: u64,
+}
+
+// Min-heap ordering: smallest size_bytes at the top of the heap
+impl Ord for TopItemCandidate {
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        other
+            .size_bytes
+            .cmp(&self.size_bytes)
+            .then_with(|| self.name.cmp(&other.name))
+    }
+}
+
+impl PartialOrd for TopItemCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[inline]
+fn push_bounded_top(heap: &mut BinaryHeap<TopItemCandidate>, item: TopItemCandidate, limit: usize) {
+    if heap.len() < limit {
+        heap.push(item);
+    } else if let Some(min_top) = heap.peek() {
+        if item.size_bytes > min_top.size_bytes {
+            heap.pop();
+            heap.push(item);
+        }
+    }
+}
+
+fn convert_heap_to_ranked(
+    heap: BinaryHeap<TopItemCandidate>,
+    total_scanned_bytes: u64,
+) -> Vec<RankedFsItem> {
+    let mut items: Vec<TopItemCandidate> = heap.into_vec();
+    // Sort descending by size_bytes
+    items.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
+
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, item)| {
+            let pct = if total_scanned_bytes > 0 {
+                (item.size_bytes as f64 / total_scanned_bytes as f64) * 100.0
+            } else {
+                0.0
+            };
+            RankedFsItem {
+                rank: idx + 1,
+                name: item.name,
+                path: item.path,
+                size_bytes: item.size_bytes,
+                is_dir: item.is_dir,
+                extension: item.extension,
+                modified_timestamp: item.modified_timestamp,
+                item_count: item.item_count,
+                percentage_of_total: pct,
+            }
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
-struct RawFileEntry {
-    path: PathBuf,
+struct CompactFileEntry {
     name: String,
     size_bytes: u64,
-    extension: Option<String>,
     modified_timestamp: u64,
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 struct RawDirNode {
-    path: PathBuf,
     name: String,
     modified_timestamp: u64,
-    direct_files: Vec<RawFileEntry>,
+    direct_files: Vec<CompactFileEntry>,
     sub_dirs: Vec<PathBuf>,
 }
 
@@ -156,7 +226,8 @@ fn get_modified_timestamp(path: &Path) -> u64 {
 fn aggregate_dir_tree(
     current_dir: &PathBuf,
     dirs_map: &HashMap<PathBuf, RawDirNode>,
-    all_folders: &mut Vec<(PathBuf, String, u64, u64, u64)>, // (path, name, size, item_count, modified)
+    root_path: &PathBuf,
+    top_folders_heap: &mut BinaryHeap<TopItemCandidate>,
 ) -> FsTreeNode {
     let raw_node = dirs_map.get(current_dir);
 
@@ -182,21 +253,23 @@ fn aggregate_dir_tree(
 
     // Recurse into subdirectories
     for sub_dir_path in sub_dirs {
-        let child_tree = aggregate_dir_tree(sub_dir_path, dirs_map, all_folders);
-        total_size_bytes += child_tree.size_bytes;
-        total_file_count += child_tree.file_count;
-        total_dir_count += 1 + child_tree.dir_count;
+        let child_tree = aggregate_dir_tree(sub_dir_path, dirs_map, root_path, top_folders_heap);
+        total_size_bytes = total_size_bytes.saturating_add(child_tree.size_bytes);
+        total_file_count = total_file_count.saturating_add(child_tree.file_count);
+        total_dir_count = total_dir_count.saturating_add(1).saturating_add(child_tree.dir_count);
         children_nodes.push(child_tree);
     }
 
     // Add direct files
     for file in direct_files {
-        total_size_bytes += file.size_bytes;
-        total_file_count += 1;
+        total_size_bytes = total_size_bytes.saturating_add(file.size_bytes);
+        total_file_count = total_file_count.saturating_add(1);
+        let file_path = current_dir.join(&file.name);
+        let file_path_str = file_path.to_string_lossy().to_string();
         children_nodes.push(FsTreeNode {
-            id: file.path.to_string_lossy().to_string(),
+            id: file_path_str.clone(),
             name: file.name.clone(),
-            path: file.path.to_string_lossy().to_string(),
+            path: file_path_str,
             size_bytes: file.size_bytes,
             file_count: 0,
             dir_count: 0,
@@ -207,21 +280,31 @@ fn aggregate_dir_tree(
     }
 
     // Sort children by size descending
-    children_nodes.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+    children_nodes.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
 
-    let folder_item_count = total_file_count + total_dir_count;
-    all_folders.push((
-        current_dir.clone(),
-        name.clone(),
-        total_size_bytes,
-        folder_item_count,
-        modified_timestamp,
-    ));
+    let folder_item_count = total_file_count.saturating_add(total_dir_count);
 
+    if current_dir != root_path {
+        push_bounded_top(
+            top_folders_heap,
+            TopItemCandidate {
+                size_bytes: total_size_bytes,
+                name: name.clone(),
+                path: current_dir.to_string_lossy().to_string(),
+                is_dir: true,
+                extension: None,
+                modified_timestamp,
+                item_count: folder_item_count,
+            },
+            20,
+        );
+    }
+
+    let cur_path_str = current_dir.to_string_lossy().to_string();
     FsTreeNode {
-        id: current_dir.to_string_lossy().to_string(),
+        id: cur_path_str.clone(),
         name,
-        path: current_dir.to_string_lossy().to_string(),
+        path: cur_path_str,
         size_bytes: total_size_bytes,
         file_count: total_file_count,
         dir_count: total_dir_count,
@@ -263,7 +346,7 @@ pub fn scan_directory_tree(
     );
 
     let mut dirs_map: HashMap<PathBuf, RawDirNode> = HashMap::new();
-    let mut all_files: Vec<RawFileEntry> = Vec::new();
+    let mut top_files_heap: BinaryHeap<TopItemCandidate> = BinaryHeap::with_capacity(21);
 
     let root_name = match root_path_buf.file_name() {
         Some(name) => name.to_string_lossy().to_string(),
@@ -273,7 +356,6 @@ pub fn scan_directory_tree(
     dirs_map.insert(
         root_path_buf.clone(),
         RawDirNode {
-            path: root_path_buf.clone(),
             name: root_name,
             modified_timestamp: get_modified_timestamp(&root_path_buf),
             direct_files: Vec::new(),
@@ -301,164 +383,127 @@ pub fn scan_directory_tree(
                 break;
             }
 
-        let entry = match entry_res {
-            Ok(e) => e,
-            Err(err) => {
-                log::debug!("[Storage Analyzer] Skipping inaccessible path: {}", err);
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(err) => {
+                    log::debug!("[Storage Analyzer] Skipping inaccessible path: {}", err);
+                    continue;
+                }
+            };
+
+            let entry_path = entry.path().to_path_buf();
+            if entry_path == root_path_buf {
                 continue;
             }
-        };
 
-        let entry_path = entry.path().to_path_buf();
-        if entry_path == root_path_buf {
-            continue;
-        }
+            let file_type = entry.file_type();
+            let parent_path = entry_path
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| root_path_buf.clone());
 
-        let file_type = entry.file_type();
-        let parent_path = entry_path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| root_path_buf.clone());
+            if file_type.is_dir() {
+                directories_scanned = directories_scanned.saturating_add(1);
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                let mod_time = get_modified_timestamp(&entry_path);
 
-        if file_type.is_dir() {
-            directories_scanned += 1;
-            let dir_name = entry.file_name().to_string_lossy().to_string();
-            let mod_time = get_modified_timestamp(&entry_path);
+                dirs_map.insert(
+                    entry_path.clone(),
+                    RawDirNode {
+                        name: dir_name,
+                        modified_timestamp: mod_time,
+                        direct_files: Vec::new(),
+                        sub_dirs: Vec::new(),
+                    },
+                );
 
-            dirs_map.insert(
-                entry_path.clone(),
-                RawDirNode {
-                    path: entry_path.clone(),
-                    name: dir_name,
-                    modified_timestamp: mod_time,
-                    direct_files: Vec::new(),
-                    sub_dirs: Vec::new(),
-                },
-            );
-
-            dirs_map
-                .entry(parent_path)
-                .or_insert_with(|| RawDirNode {
-                    path: entry_path.parent().unwrap().to_path_buf(),
-                    name: "Unknown".to_string(),
-                    modified_timestamp: 0,
-                    direct_files: Vec::new(),
-                    sub_dirs: Vec::new(),
-                })
-                .sub_dirs
-                .push(entry_path.clone());
-        } else if file_type.is_file() {
-            files_scanned += 1;
-            let file_size = match entry.metadata() {
-                Ok(m) => m.len(),
-                Err(_) => 0,
-            };
-            total_bytes_scanned += file_size;
-
-            let file_name = entry.file_name().to_string_lossy().to_string();
-            let extension = entry_path
-                .extension()
-                .map(|e| e.to_string_lossy().to_string());
-            let mod_time = get_modified_timestamp(&entry_path);
-
-            let file_entry = RawFileEntry {
-                path: entry_path.clone(),
-                name: file_name,
-                size_bytes: file_size,
-                extension,
-                modified_timestamp: mod_time,
-            };
-
-            dirs_map
-                .entry(parent_path)
-                .or_insert_with(|| RawDirNode {
-                    path: entry_path.parent().unwrap().to_path_buf(),
-                    name: "Unknown".to_string(),
-                    modified_timestamp: 0,
-                    direct_files: Vec::new(),
-                    sub_dirs: Vec::new(),
-                })
-                .direct_files
-                .push(file_entry.clone());
-
-            all_files.push(file_entry);
-        }
-
-        // Throttled real-time progress emission (every 100ms)
-        if last_progress_emit.elapsed() >= Duration::from_millis(100) {
-            if let Some(handle) = app {
-                let payload = DiskScanProgressPayload {
-                    scan_id: scan_id.clone(),
-                    current_path: entry_path.to_string_lossy().to_string(),
-                    files_scanned,
-                    directories_scanned,
-                    total_bytes_scanned,
-                    elapsed_ms: start_instant.elapsed().as_millis() as u64,
+                dirs_map
+                    .entry(parent_path)
+                    .or_insert_with(|| RawDirNode {
+                        name: "Unknown".to_string(),
+                        modified_timestamp: 0,
+                        direct_files: Vec::new(),
+                        sub_dirs: Vec::new(),
+                    })
+                    .sub_dirs
+                    .push(entry_path.clone());
+            } else if file_type.is_file() {
+                files_scanned = files_scanned.saturating_add(1);
+                let file_size = match entry.metadata() {
+                    Ok(m) => m.len(),
+                    Err(_) => 0,
                 };
-                let _ = handle.emit("disk-scan-progress", &payload);
+                total_bytes_scanned = total_bytes_scanned.saturating_add(file_size);
+
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                let extension = entry_path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_string());
+                let mod_time = get_modified_timestamp(&entry_path);
+
+                let compact_file = CompactFileEntry {
+                    name: file_name.clone(),
+                    size_bytes: file_size,
+                    modified_timestamp: mod_time,
+                };
+
+                dirs_map
+                    .entry(parent_path)
+                    .or_insert_with(|| RawDirNode {
+                        name: "Unknown".to_string(),
+                        modified_timestamp: 0,
+                        direct_files: Vec::new(),
+                        sub_dirs: Vec::new(),
+                    })
+                    .direct_files
+                    .push(compact_file);
+
+                // Bounded Top-20 min-heap insertion: O(1) memory bound
+                push_bounded_top(
+                    &mut top_files_heap,
+                    TopItemCandidate {
+                        size_bytes: file_size,
+                        name: file_name,
+                        path: entry_path.to_string_lossy().to_string(),
+                        is_dir: false,
+                        extension,
+                        modified_timestamp: mod_time,
+                        item_count: 1,
+                    },
+                    20,
+                );
             }
-            last_progress_emit = Instant::now();
+
+            // Throttled real-time progress emission (200ms interval to prevent IPC saturation)
+            if last_progress_emit.elapsed() >= Duration::from_millis(200) {
+                if let Some(handle) = app {
+                    let payload = DiskScanProgressPayload {
+                        scan_id: scan_id.clone(),
+                        current_path: entry_path.to_string_lossy().to_string(),
+                        files_scanned,
+                        directories_scanned,
+                        total_bytes_scanned,
+                        elapsed_ms: start_instant.elapsed().as_millis() as u64,
+                    };
+                    let _ = handle.emit("disk-scan-progress", &payload);
+                }
+                last_progress_emit = Instant::now();
+            }
         }
     }
-    }
 
-    let mut all_folders_flat = Vec::new();
-    let tree = aggregate_dir_tree(&root_path_buf, &dirs_map, &mut all_folders_flat);
+    let mut top_folders_heap: BinaryHeap<TopItemCandidate> = BinaryHeap::with_capacity(21);
+    let tree = aggregate_dir_tree(
+        &root_path_buf,
+        &dirs_map,
+        &root_path_buf,
+        &mut top_folders_heap,
+    );
 
     let total_scanned_bytes = tree.size_bytes;
 
-    let mut top_folders_candidates: Vec<_> = all_folders_flat
-        .into_iter()
-        .filter(|(p, _, _, _, _)| p != &root_path_buf)
-        .collect();
-    top_folders_candidates.sort_by(|a, b| b.2.cmp(&a.2));
-    top_folders_candidates.truncate(20);
-
-    let top_folders: Vec<RankedFsItem> = top_folders_candidates
-        .into_iter()
-        .enumerate()
-        .map(|(idx, (p, name, size_bytes, item_count, mod_time))| {
-            let pct = if total_scanned_bytes > 0 {
-                (size_bytes as f64 / total_scanned_bytes as f64) * 100.0
-            } else {
-                0.0
-            };
-            RankedFsItem {
-                rank: idx + 1,
-                name,
-                path: p.to_string_lossy().to_string(),
-                size_bytes,
-                is_dir: true,
-                extension: None,
-                modified_timestamp: mod_time,
-                item_count,
-                percentage_of_total: pct,
-            }
-        })
-        .collect();
-
-    all_files.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
-    all_files.truncate(20);
-
-    let top_files: Vec<RankedFsItem> = all_files
-        .into_iter()
-        .enumerate()
-        .map(|(idx, f)| {
-            let pct = if total_scanned_bytes > 0 {
-                (f.size_bytes as f64 / total_scanned_bytes as f64) * 100.0
-            } else {
-                0.0
-            };
-            RankedFsItem {
-                rank: idx + 1,
-                name: f.name,
-                path: f.path.to_string_lossy().to_string(),
-                size_bytes: f.size_bytes,
-                is_dir: false,
-                extension: f.extension,
-                modified_timestamp: f.modified_timestamp,
-                item_count: 1,
-                percentage_of_total: pct,
-            }
-        })
-        .collect();
+    let top_folders = convert_heap_to_ranked(top_folders_heap, total_scanned_bytes);
+    let top_files = convert_heap_to_ranked(top_files_heap, total_scanned_bytes);
 
     let duration_ms = start_instant.elapsed().as_millis() as u64;
 
@@ -584,5 +629,39 @@ mod tests {
         assert!(!token2.load(Ordering::Relaxed));
         assert!(cancel_scan(Some("test-cancel-2")));
         assert!(token2.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_scan_directory_bounded_heaps_large_item_count() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // Create 25 folders each with 2 files (50 files total)
+        for i in 1..=25 {
+            let folder = root.join(format!("dir_{:02}", i));
+            fs::create_dir_all(&folder).unwrap();
+            let size1 = i * 100;
+            let size2 = i * 100 + 50;
+            fs::write(folder.join(format!("file_{}_1.dat", i)), vec![0xAA; size1 as usize]).unwrap();
+            fs::write(folder.join(format!("file_{}_2.dat", i)), vec![0xBB; size2 as usize]).unwrap();
+        }
+
+        let result = scan_directory_tree(None, root.to_string_lossy().to_string(), None).unwrap();
+
+        assert_eq!(result.total_files, 50);
+        assert_eq!(result.total_dirs, 25);
+        // Top heaps are bounded to max 20
+        assert_eq!(result.top_folders.len(), 20);
+        assert_eq!(result.top_files.len(), 20);
+
+        // Verify ranks are strictly descending 1..=20
+        for i in 0..19 {
+            assert!(result.top_folders[i].size_bytes >= result.top_folders[i + 1].size_bytes);
+            assert_eq!(result.top_folders[i].rank, i + 1);
+            assert!(result.top_files[i].size_bytes >= result.top_files[i + 1].size_bytes);
+            assert_eq!(result.top_files[i].rank, i + 1);
+        }
+        assert_eq!(result.top_folders[19].rank, 20);
+        assert_eq!(result.top_files[19].rank, 20);
     }
 }

@@ -139,10 +139,10 @@ async function main() {
     assert.throws(() => sanitizeAndVerifyScriptPath(scriptsLibDir, 'valid.ps1\0.jpg'), /Null byte/);
   });
 
-  await runTest('(a.4) Catalog Containment: All 27 manifest script paths resolve safely inside scripts_lib', () => {
+  await runTest('(a.4) Catalog Containment: All 40 manifest script paths resolve safely inside scripts_lib', () => {
     const rawManifest = fs.readFileSync(manifestPath, 'utf8');
     const manifest = JSON.parse(rawManifest);
-    assert.strictEqual(manifest.scripts.length, 27);
+    assert.strictEqual(manifest.scripts.length, 40);
 
     for (const s of manifest.scripts) {
       const resolved = sanitizeAndVerifyScriptPath(scriptsLibDir, s.path);
@@ -203,7 +203,7 @@ async function main() {
 
     const result = manager.getLibraryManifest('manifest_cache');
     assert.strictEqual(result.source, 'local_seed_fallback');
-    assert.strictEqual(result.manifest.scripts.length, 27);
+    assert.strictEqual(result.manifest.scripts.length, 40);
     assert.strictEqual(manager.cacheStore.has('manifest_cache'), false, 'Corrupt cache entry must be pruned');
     assert.strictEqual(manager.pruneLog.length, 1);
   });
@@ -214,18 +214,18 @@ async function main() {
 
     const result = manager.getLibraryManifest('manifest_cache');
     assert.strictEqual(result.source, 'local_seed_fallback');
-    assert.strictEqual(result.manifest.scripts.length, 27);
+    assert.strictEqual(result.manifest.scripts.length, 40);
     assert.strictEqual(manager.cacheStore.has('manifest_cache'), false);
     assert.strictEqual(manager.pruneLog.length, 1);
   });
 
-  await runTest('(b.3) Cache Recovery: Type-mismatched manifest prunes and recovers 27 scripts', () => {
+  await runTest('(b.3) Cache Recovery: Type-mismatched manifest prunes and recovers 40 scripts', () => {
     const manager = new ResilientManifestCacheManager(manifestPath);
     manager.setRawCache('manifest_cache', JSON.stringify({ schemaVersion: '1.0.0', scripts: 'invalid_type' }));
 
     const result = manager.getLibraryManifest('manifest_cache');
     assert.strictEqual(result.source, 'local_seed_fallback');
-    assert.strictEqual(result.manifest.scripts.length, 27);
+    assert.strictEqual(result.manifest.scripts.length, 40);
     assert.strictEqual(manager.cacheStore.has('manifest_cache'), false);
   });
 
@@ -236,7 +236,7 @@ async function main() {
 
     const result = manager.getLibraryManifest('manifest_cache');
     assert.strictEqual(result.source, 'cache');
-    assert.strictEqual(result.manifest.scripts.length, 27);
+    assert.strictEqual(result.manifest.scripts.length, 40);
   });
 
   // ============================================================================

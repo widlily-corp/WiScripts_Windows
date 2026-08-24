@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -36,8 +36,12 @@ if ($status -eq "Offline") {
     powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 95 2>$null
     powercfg /setactive SCHEME_CURRENT 2>$null
 } else {
-    powercfg -duplicatescheme $ultimatePerfGUID 2>$null | Out-Null
-    $res = powercfg /setactive $ultimatePerfGUID 2>&1
+    $targetGuid = $ultimatePerfGUID
+    $dupOutput = powercfg -duplicatescheme $ultimatePerfGUID 2>&1 | Out-String
+    if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+        $targetGuid = $matches[1]
+    }
+    $res = powercfg /setactive $targetGuid 2>&1
     if ($LASTEXITCODE -ne 0) {
         powercfg /setactive $highPerfGUID 2>$null
     }

@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -31,7 +31,6 @@ $servicesToStop = @(
     "SysMain",
     "DiagTrack",
     "WSearch",
-    "CompatTelRunner",
     "AMD External Events Utility",
     "AMD Crash Defender Service",
     "ClickToRunSvc"

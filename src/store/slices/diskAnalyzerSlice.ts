@@ -475,18 +475,22 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
     if (!scanResult || !scanResult.tree) return;
 
     const allPaths = new Set<string>();
-    const collectPaths = (node: FsTreeNode) => {
+    const MAX_DEPTH = 5;
+    const MAX_EXPANDED_NODES = 1000;
+
+    const collectPaths = (node: FsTreeNode, currentDepth: number = 0) => {
+      if (allPaths.size >= MAX_EXPANDED_NODES || currentDepth > MAX_DEPTH) return;
       const isDirectory = node.isDir || node.isDirectory || (node.children && node.children.length > 0);
       if (isDirectory) {
         allPaths.add(node.path);
         if (node.children) {
           for (const child of node.children) {
-            collectPaths(child);
+            collectPaths(child, currentDepth + 1);
           }
         }
       }
     };
-    collectPaths(scanResult.tree);
+    collectPaths(scanResult.tree, 0);
     set({ expandedNodePaths: allPaths });
   },
 

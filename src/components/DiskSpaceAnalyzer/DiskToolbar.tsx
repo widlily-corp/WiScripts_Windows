@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FolderTree,
@@ -47,6 +47,28 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
   isScanning,
 }) => {
   const { t } = useTranslation();
+  const [localQuery, setLocalQuery] = useState(searchQuery);
+
+  // Sync external searchQuery changes (e.g. clear or navigation)
+  useEffect(() => {
+    setLocalQuery(searchQuery);
+  }, [searchQuery]);
+
+  // Debounce search query updates to avoid freezing during fast keystrokes
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localQuery !== searchQuery) {
+        onSearchChange(localQuery);
+      }
+    }, 200);
+
+    return () => clearTimeout(handler);
+  }, [localQuery, onSearchChange, searchQuery]);
+
+  const handleClear = () => {
+    setLocalQuery('');
+    onSearchChange('');
+  };
 
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3 bg-surface border border-border rounded-[8px]">
@@ -93,14 +115,14 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
           <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            value={localQuery}
+            onChange={(e) => setLocalQuery(e.target.value)}
             placeholder={t('diskAnalyzer.searchPlaceholder', 'Filter by name or ext (.log, .zip)...')}
             className="w-full bg-surface-subtle border border-border rounded-[6px] pl-8 pr-7 py-1.5 text-xs text-text placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand font-mono"
           />
-          {searchQuery && (
+          {localQuery && (
             <button
-              onClick={() => onSearchChange('')}
+              onClick={handleClear}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text p-0.5"
             >
               <X className="w-3 h-3" />

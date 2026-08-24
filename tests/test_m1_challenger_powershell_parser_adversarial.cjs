@@ -70,7 +70,7 @@ for (const cat of categories) {
     }
 }
 
-assert(totalScripts === 27, `Verified exactly 27 scripts in scripts_lib (Found: ${totalScripts})`);
+assert(totalScripts === 40, `Verified exactly 40 scripts in scripts_lib (Found: ${totalScripts})`);
 
 // 2. Adversarial Test: Prepending code vs Prepending UTF-8 BOM
 console.log('\n--- 2. Adversarial Test: param() break on code prepending vs BOM prepending ---');

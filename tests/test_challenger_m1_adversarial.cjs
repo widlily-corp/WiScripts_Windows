@@ -60,9 +60,9 @@ async function main() {
   // ============================================================================
   console.log('--- SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 27 Scripts ---');
 
-  await runTest('Manifest defines full 27-script catalog across 5 categories', () => {
+  await runTest('Manifest defines full 40-script catalog across 5 categories', () => {
     assert.strictEqual(Array.isArray(manifest.scripts), true, 'manifest.scripts must be an array');
-    assert.strictEqual(manifest.scripts.length, 27, `Must contain exactly 27 scripts (got ${manifest.scripts.length})`);
+    assert.strictEqual(manifest.scripts.length === 40, true, `Must contain exactly 40 scripts (got ${manifest.scripts.length})`);
 
     const expectedCategories = ['maintenance', 'network', 'security', 'performance', 'diagnostics'];
     const actualCategories = [...new Set(manifest.scripts.map((s) => s.category))].sort();

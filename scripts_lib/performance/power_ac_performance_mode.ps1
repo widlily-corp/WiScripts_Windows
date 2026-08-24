@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
@@ -12,8 +12,13 @@ Write-Host "==========================================================" -Foregro
 $ultimatePerfGUID = "e9a42b02-d5df-448d-aa00-03f14749eb61"
 $highPerfGUID     = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
 
-powercfg -duplicatescheme $ultimatePerfGUID 2>$null | Out-Null
-$planOutput = powercfg /setactive $ultimatePerfGUID 2>&1
+$targetGuid = $ultimatePerfGUID
+$dupOutput = powercfg -duplicatescheme $ultimatePerfGUID 2>&1 | Out-String
+if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+    $targetGuid = $matches[1]
+}
+
+$planOutput = powercfg /setactive $targetGuid 2>&1
 if ($LASTEXITCODE -ne 0) {
     powercfg /setactive $highPerfGUID 2>$null
     if ($LASTEXITCODE -eq 0) {

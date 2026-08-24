@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderSearch } from 'lucide-react';
 import { FsTreeNode } from '../../types';
@@ -17,6 +17,16 @@ interface DiskTreeViewProps {
   onOpenDeleteModal: (node: FsTreeNode) => void;
 }
 
+interface VisibleTreeRow {
+  node: FsTreeNode;
+  depth: number;
+  isExpanded: boolean;
+}
+
+const ROW_HEIGHT = 44;
+const CONTAINER_HEIGHT = 600;
+const OVERSCAN = 10;
+
 export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
   rootNode,
   expandedNodePaths,
@@ -29,6 +39,8 @@ export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
   onOpenDeleteModal,
 }) => {
   const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
 
   // Memoized filter calculation
   const displayedTree = useMemo(() => {
@@ -41,7 +53,33 @@ export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
     });
   }, [rootNode, searchQuery, sizeFilterThreshold]);
 
-  if (!displayedTree) {
+  // Flatten the visible (expanded) hierarchy into a linear array for virtualization
+  const visibleRows = useMemo<VisibleTreeRow[]>(() => {
+    if (!displayedTree) return [];
+    const rows: VisibleTreeRow[] = [];
+
+    const traverse = (node: FsTreeNode, depth: number) => {
+      const isExpanded = expandedNodePaths.has(node.path);
+      const hasChildren = Boolean(node.children && node.children.length > 0);
+
+      rows.push({ node, depth, isExpanded });
+
+      if (isExpanded && hasChildren && node.children) {
+        for (const child of node.children) {
+          traverse(child, depth + 1);
+        }
+      }
+    };
+
+    traverse(displayedTree, 0);
+    return rows;
+  }, [displayedTree, expandedNodePaths]);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
+
+  if (!displayedTree || visibleRows.length === 0) {
     return (
       <div className="bg-surface border border-border rounded-[8px] p-12 text-center space-y-3">
         <FolderSearch className="w-8 h-8 text-text-muted mx-auto" />
@@ -55,32 +93,21 @@ export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
     );
   }
 
-  // Recursive tree renderer
-  const renderNodeAndChildren = (node: FsTreeNode, depth: number = 0): React.ReactNode => {
-    const isExpanded = expandedNodePaths.has(node.path);
-    const hasChildren = node.children && node.children.length > 0;
+  // Virtual window slice calculations
+  const totalCount = visibleRows.length;
+  const isVirtualized = totalCount > 40;
 
-    return (
-      <React.Fragment key={node.path}>
-        <DiskTreeNodeRow
-          node={node}
-          depth={depth}
-          isExpanded={isExpanded}
-          onToggle={onToggleNode}
-          onNavigate={onNavigate}
-          onOpenInExplorer={onOpenInExplorer}
-          onCopyPath={onCopyPath}
-          onOpenDeleteModal={onOpenDeleteModal}
-          searchQuery={searchQuery}
-        />
-        {isExpanded && hasChildren && (
-          <div>
-            {node.children!.map((child) => renderNodeAndChildren(child, depth + 1))}
-          </div>
-        )}
-      </React.Fragment>
-    );
-  };
+  const startIndex = isVirtualized
+    ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+    : 0;
+  const endIndex = isVirtualized
+    ? Math.min(totalCount, Math.ceil((scrollTop + CONTAINER_HEIGHT) / ROW_HEIGHT) + OVERSCAN)
+    : totalCount;
+
+  const topSpacerHeight = isVirtualized ? startIndex * ROW_HEIGHT : 0;
+  const bottomSpacerHeight = isVirtualized ? Math.max(0, (totalCount - endIndex) * ROW_HEIGHT) : 0;
+
+  const renderedRows = visibleRows.slice(startIndex, endIndex);
 
   return (
     <div className="bg-surface border border-border rounded-[8px] overflow-hidden shadow-sm">
@@ -105,9 +132,28 @@ export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
         </div>
       </div>
 
-      {/* Tree Content */}
-      <div className="divide-y divide-border-subtle max-h-[600px] overflow-y-auto">
-        {renderNodeAndChildren(displayedTree, 0)}
+      {/* Virtualized Tree Content Container */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="divide-y divide-border-subtle max-h-[600px] overflow-y-auto"
+      >
+        {topSpacerHeight > 0 && <div style={{ height: `${topSpacerHeight}px` }} />}
+        {renderedRows.map((row) => (
+          <DiskTreeNodeRow
+            key={row.node.path}
+            node={row.node}
+            depth={row.depth}
+            isExpanded={row.isExpanded}
+            onToggle={onToggleNode}
+            onNavigate={onNavigate}
+            onOpenInExplorer={onOpenInExplorer}
+            onCopyPath={onCopyPath}
+            onOpenDeleteModal={onOpenDeleteModal}
+            searchQuery={searchQuery}
+          />
+        ))}
+        {bottomSpacerHeight > 0 && <div style={{ height: `${bottomSpacerHeight}px` }} />}
       </div>
     </div>
   );

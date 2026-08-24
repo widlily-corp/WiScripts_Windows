@@ -40,7 +40,7 @@ function assert(condition, message) {
 }
 
 // 1. Script Count & Uniqueness
-assert(manifest.scripts.length === 27, `Manifest contains exactly 27 scripts (got ${manifest.scripts.length})`);
+assert(manifest.scripts.length === 40, `Manifest contains exactly 40 scripts (got ${manifest.scripts.length})`);
 const scriptIds = new Set();
 const scriptPaths = new Set();
 
@@ -63,7 +63,7 @@ function getPs1Files(dir) {
 }
 
 const onDiskPs1 = getPs1Files(scriptsLibDir);
-assert(onDiskPs1.length === 27, `Physical scripts_lib directory contains exactly 27 .ps1 files (got ${onDiskPs1.length})`);
+assert(onDiskPs1.length === 40, `Physical scripts_lib directory contains exactly 40 .ps1 files (got ${onDiskPs1.length})`);
 
 console.log('\n--- SECTION 1: SHA-256 Cryptographic & Path Verification ---');
 for (const script of manifest.scripts) {
@@ -144,5 +144,5 @@ if (failed > 0) {
   console.error(`VERDICT: FAILED with ${failed} issues`);
   process.exit(1);
 } else {
-  console.log('🎉 VERDICT: SUCCESS — All 27 scripts passed SHA-256, param(), ASCII comment, and AST checks.');
+  console.log('🎉 VERDICT: SUCCESS — All 40 scripts passed SHA-256, param(), ASCII comment, and AST checks.');
 }

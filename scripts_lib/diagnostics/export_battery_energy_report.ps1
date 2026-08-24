@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OutputDirectory = "$env:USERPROFILE\Desktop",
     [switch]$IncludeEnergyAudit
 )

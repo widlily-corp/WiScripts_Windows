@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "1.1.3",
-  "lastUpdated": "2026-08-18T12:52:00Z",
+  "version": "1.5.1",
+  "lastUpdated": "2026-08-24T12:00:00Z",
   "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
   "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
   "scripts": [
@@ -21,7 +21,7 @@
         "maintenance",
         "services"
       ],
-      "sha256": "972447519cf58922f72b25a4f19c7f8bcd4e8c65d9944171d9240a695feab16a",
+      "sha256": "cb961eeb47715e73451f0bdbc3a5a0578a6ccd47d264d44fbe7dc8c4f49a287e",
       "parameters": []
     },
     {
@@ -59,7 +59,7 @@
         "component-store",
         "disk-cleanup"
       ],
-      "sha256": "4c7027c581b4c62d4c52161f1fb24f296b608a9fdd35ec68e877f06b0ae6de2e",
+      "sha256": "d8b74e90b76d586dad1b96d3f35a7a22e02b858ebfb73b783441ae3fd87b3899",
       "parameters": [
         {
           "name": "ResetBase",
@@ -85,7 +85,7 @@
         "network",
         "repair"
       ],
-      "sha256": "ff875895f61c2859b191524bcee8ec3da3f967d625d90163f09d8facaed7a2a3",
+      "sha256": "1dcab6878837de4c98cc1711f91bb2633650302f51b9d56ad91e7ec4c0e89ba7",
       "parameters": []
     },
     {
@@ -105,7 +105,7 @@
         "arp",
         "network"
       ],
-      "sha256": "aac13eaf9f6458e8d8a6bb91ab9bf88bce900d08752cca6deda3658d11505a9f",
+      "sha256": "cd910c2b969961d9cc37042abe14ffa26d192b191b59fc883292af6ba7225255",
       "parameters": []
     },
     {
@@ -125,7 +125,7 @@
         "performance",
         "throughput"
       ],
-      "sha256": "6bab310c279dcd1760d9c8d0bcfb4b5dd411ab81117ad8009de8d466eb41239e",
+      "sha256": "f8270ff6cb9261c8b7e7763ca8b91c2e64734d31729dbf9200f9058db5d1e989",
       "parameters": [
         {
           "name": "AutoTuningLevel",
@@ -158,7 +158,7 @@
         "security",
         "hardening"
       ],
-      "sha256": "8fdfd89ad072dc31d1146222af61d29e4b531dd784fb04fe79564360a698859e",
+      "sha256": "271a8fd1e23483629a8f9ce76a803e8ba982f98d3535c535ca782a3b1fd7dded",
       "parameters": []
     },
     {
@@ -177,7 +177,7 @@
         "logging",
         "amsi"
       ],
-      "sha256": "87dd0bc95b38bf7db28689f60936d09b071bf4f92b904aa824b71eae94d4466f",
+      "sha256": "22062400bd8f75208d62e284cec5c22a0daa2e1a5d39e46f53bdce606ca7781a",
       "parameters": []
     },
     {
@@ -196,7 +196,7 @@
         "integrity",
         "system-repair"
       ],
-      "sha256": "1e9f6fbb41efa11a06f3211317d239d38fbcd4c527945a37159d616352fd3ce0",
+      "sha256": "2d0ac87568868dbbf6ca2cc87caca18296c8a732e53705ba6064887ae54534d0",
       "parameters": [
         {
           "name": "SkipDism",
@@ -222,7 +222,7 @@
         "energy",
         "cpu"
       ],
-      "sha256": "92a5084e2b1b48ef164c4fb720c2e0ec4a2e766a2c527b05c865207a530baf25",
+      "sha256": "73cf18f34168af82b379ce9ab472b1b0ef4903c4e2b24fab3672437b477baa1c",
       "parameters": []
     },
     {
@@ -241,7 +241,7 @@
         "latency",
         "gaming"
       ],
-      "sha256": "7e94dc85872fa97185c850b74ee2737e5856a143457e27503da24547d3124a3c",
+      "sha256": "931f416464413bd2470230d915cb9758f094c874eb94532d0abcaf0ef1e0c4d9",
       "parameters": []
     },
     {
@@ -260,7 +260,7 @@
         "disk-io",
         "fsutil"
       ],
-      "sha256": "3f0baac4f34e26ac98ca3b5367a53c843231ac0d02fd8f75fa660d3d949ea42d",
+      "sha256": "0a1fd52b7c3bfa1547a8b4fd7efb44d9fcb4e8752539bb0105844a46c102d150",
       "parameters": []
     },
     {
@@ -279,13 +279,19 @@
         "energy",
         "diagnostics"
       ],
-      "sha256": "45c0be9dcc61b78131da09d21c810badd026efabff4cd3c04d8a278cc4c5e3a3",
+      "sha256": "4c3a7148b07ce8323679eded87e447fa662944679aafeacd43f6fb63e4b21b30",
       "parameters": [
         {
           "name": "OutputDirectory",
           "type": "string",
           "default": "$env:USERPROFILE\\Desktop",
           "description": "Target folder for generated HTML reports"
+        },
+        {
+          "name": "IncludeEnergyAudit",
+          "type": "boolean",
+          "default": false,
+          "description": "Run a 10-second energy efficiency audit report"
         }
       ]
     },
@@ -306,7 +312,7 @@
         "eventlog",
         "diagnostics"
       ],
-      "sha256": "743050748f99d566d03d05ac3e16dc644ae37c774407340219c1e87f8b53e6ad",
+      "sha256": "818cbf9e0d95800bba3c2c06801a9535d3881af5179265623b0ae358bfe6ce15",
       "parameters": [
         {
           "name": "MaxEvents",
@@ -333,7 +339,7 @@
         "process",
         "audit"
       ],
-      "sha256": "4f5d6b2a9b4f117402d9db139dcffd5bf6baafa5af8c1dc8ab1f0c7e40482a4e",
+      "sha256": "cf5043977f48cb50f4b5ff5d382dc2efdba38b1bfeb1968ab484421b0f1b5360",
       "parameters": [
         {
           "name": "StateFilter",
@@ -376,6 +382,12 @@
           "type": "string",
           "default": "cloudflare.com",
           "description": "Target domain for DNS and connectivity testing"
+        },
+        {
+          "name": "Detailed",
+          "type": "boolean",
+          "default": false,
+          "description": "Enable extended network diagnostic output"
         }
       ]
     },
@@ -431,7 +443,7 @@
         "dns",
         "repair"
       ],
-      "sha256": "cfebac2f637e4e08e53e85213ef701066ac5bde68e45e9b63dd84308cf95d7dd",
+      "sha256": "a4022d9290b8acbb7143cd9a1d2e14f00a7c0cf3a041af81ca28fbfe77aa4141",
       "parameters": []
     },
     {
@@ -451,7 +463,7 @@
         "security",
         "network"
       ],
-      "sha256": "557dfb902f1b69111ee0a41f75da930bf7664500691f9592aee67323917e73f6",
+      "sha256": "137ddecff744f2501b3f005bb885327c7c6c23347a2d8393b2af5eb7c3f069ab",
       "parameters": []
     },
     {
@@ -471,7 +483,7 @@
         "registry",
         "network"
       ],
-      "sha256": "388329293dbcb225e9b58815534e4284582f6feca6ef3fd6c096c0e0583f5486",
+      "sha256": "e4332784cd467ae6e9e5394d95e9ab5b6b8f6388d8e6069a36cc04f305474637",
       "parameters": []
     },
     {
@@ -491,7 +503,7 @@
         "repair",
         "network"
       ],
-      "sha256": "1de5e148286027bc8a41fed8d1a9b6e5c0cdc6c6d0741a16d42bf814a3cf782b",
+      "sha256": "1cb3c760085a20a69a483e7709be9929a3f77c9327dc3666447f47c59ae5a6df",
       "parameters": []
     },
     {
@@ -511,7 +523,7 @@
         "discovery",
         "network"
       ],
-      "sha256": "1ccc761b4836dd19affc52a3d579aa61a7702769b1ef39725f146624aa4053b2",
+      "sha256": "164fd33d8f11bd77c8e47898e1316012fb1f93e1afe85cbf3a5acae6c27243be",
       "parameters": []
     },
     {
@@ -531,7 +543,7 @@
         "wmi",
         "maintenance"
       ],
-      "sha256": "3e8f83e831eea2536e11d32bd5e026534155950d6615c98888dc0e7d865b7733",
+      "sha256": "2e75cf5fa2dd79af8c9c04b50c162b40e42ed2627266a64a2265c39e3d35b844",
       "parameters": []
     },
     {
@@ -551,8 +563,15 @@
         "telemetry",
         "privacy"
       ],
-      "sha256": "fc0d77122186766ed7644b9b177ea60cbca620eb17889063d81d3b609612b088",
-      "parameters": []
+      "sha256": "5de469c03e68308e8d30200bb17123384d436bc7217bb6194cc34f26fba41bfa",
+      "parameters": [
+        {
+          "name": "IncludeSystemRepair",
+          "type": "boolean",
+          "default": false,
+          "description": "Include heavy SFC and DISM system component repair (may take several minutes)"
+        }
+      ]
     },
     {
       "id": "perf-power-ac-mode",
@@ -570,7 +589,7 @@
         "performance",
         "cpu"
       ],
-      "sha256": "0d91704bc9cc90e5dd1d909f5b8a03fd4cd1de44b47bc1aa45cc689a98f573df",
+      "sha256": "75ff90b82eabfc2644cf904b5174357aa5dea424eb159b7e8abe84d316f84535",
       "parameters": []
     },
     {
@@ -589,7 +608,7 @@
         "energy-saver",
         "efficiency"
       ],
-      "sha256": "efd2e0f07ff1ccf0e04db29a85b4ae71b68d05f74a0ed1cc9d5b4c11d7c65652",
+      "sha256": "1f64ae36b6477405dc6b9ffa3dc77d03523ff6afa2765d1a3199da98da4704df",
       "parameters": []
     },
     {
@@ -608,8 +627,453 @@
         "automation",
         "battery"
       ],
-      "sha256": "7fc73d0d569446fbf04bf78e9cf1fd8d016f5a14be0389aa3509dc448bd3d5e1",
+      "sha256": "77e60514209ad8e81996d76bfa471745c4fc9e4c6359a565f6eae566ed38c31b",
       "parameters": []
+    },
+    {
+      "id": "diag-battery-health-report",
+      "name": "Detailed Battery Health & Wear Analysis",
+      "category": "diagnostics",
+      "path": "diagnostics/battery_health_report.ps1",
+      "description": "Analyzes battery design capacity, full charge capacity, wear level percentage, cycle count, and exports an official HTML battery diagnostics report.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "battery",
+        "powercfg",
+        "wear",
+        "diagnostics",
+        "energy"
+      ],
+      "parameters": [
+        {
+          "name": "OutputDirectory",
+          "type": "string",
+          "default": "C:UsersWidlily\\\\Desktop",
+          "description": "Directory where HTML battery diagnostics will be exported"
+        },
+        {
+          "name": "IncludeEnergyAudit",
+          "type": "boolean",
+          "default": false,
+          "description": "Run a 10-second system energy efficiency audit via powercfg"
+        },
+        {
+          "name": "OpenReport",
+          "type": "boolean",
+          "default": false,
+          "description": "Open the generated HTML report in default browser upon completion"
+        }
+      ],
+      "sha256": "2b877d097378ec1dba54b850acc5d59c956b8b8b22b39569b87305a6a7a1a816"
+    },
+    {
+      "id": "diag-gpu-telemetry",
+      "name": "GPU Hardware, VRAM & Driver Telemetry",
+      "category": "diagnostics",
+      "path": "diagnostics/get_gpu_telemetry.ps1",
+      "description": "Queries all installed graphics cards (Discrete & Integrated), VRAM capacity, driver versions, DirectX feature levels, resolution, and real-time NVIDIA/AMD telemetry.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "gpu",
+        "graphics",
+        "vram",
+        "nvidia",
+        "directx",
+        "telemetry"
+      ],
+      "parameters": [
+        {
+          "name": "Detailed",
+          "type": "boolean",
+          "default": false,
+          "description": "Displays extended video architecture and device IDs"
+        }
+      ],
+      "sha256": "8048b15530d29ba339449469dc9031774d33fac11935baf5ecfe91dee1391c39"
+    },
+    {
+      "id": "diag-disk-smart-summary",
+      "name": "Disk SMART Health & Physical Drive Inspector",
+      "category": "diagnostics",
+      "path": "diagnostics/disk_smart_health_summary.ps1",
+      "description": "Inspects physical disk hardware health, Media Type (NVMe/SSD/HDD), Bus Type, SMART predictive failure status, wear level, and partition layouts.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "disk",
+        "smart",
+        "nvme",
+        "ssd",
+        "storage",
+        "diagnostics"
+      ],
+      "parameters": [
+        {
+          "name": "IncludePartitions",
+          "type": "boolean",
+          "default": false,
+          "description": "List partition table and volume drive letters for each physical disk"
+        }
+      ],
+      "sha256": "21e3b6d89fdafc60b3d9d98e40d34bee06fa3a0c550fb05142a50f2ef3965e97"
+    },
+    {
+      "id": "net-flush-dns-renew-ip",
+      "name": "Flush DNS, Purge ARP & Renew DHCP Leases",
+      "category": "network",
+      "path": "network/flush_dns_renew_ip.ps1",
+      "description": "Flushes the DNS resolver cache, clears NetBIOS and ARP tables, releases and renews DHCP IP addresses, and registers DNS client names.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "dns",
+        "dhcp",
+        "ipconfig",
+        "arp",
+        "network",
+        "repair"
+      ],
+      "parameters": [
+        {
+          "name": "InterfaceAlias",
+          "type": "string",
+          "default": "All",
+          "description": "Target specific adapter alias or All for all active network adapters"
+        }
+      ],
+      "sha256": "9f5ca66aa565745cf259f4a1f1bf72c77fb25da8bccdf9e7a46209a6355b7c27"
+    },
+    {
+      "id": "net-latency-diagnostics",
+      "name": "Multi-Target Ping, Jitter & MTU Diagnostics",
+      "category": "network",
+      "path": "network/network_latency_diagnostics.ps1",
+      "description": "Performs multi-target latency, jitter, packet loss benchmarking across Gateway, National DNS, and Global CDNs, with path MTU fragmentation testing.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "network",
+        "latency",
+        "jitter",
+        "packet-loss",
+        "ping",
+        "mtu",
+        "benchmark"
+      ],
+      "parameters": [
+        {
+          "name": "TargetHost",
+          "type": "string",
+          "default": "1.1.1.1",
+          "description": "Target remote host or IP to benchmark"
+        },
+        {
+          "name": "PacketCount",
+          "type": "number",
+          "default": 10,
+          "description": "Number of ICMP packets per test node (3..50)"
+        },
+        {
+          "name": "CheckMTU",
+          "type": "boolean",
+          "default": false,
+          "description": "Test Path MTU with Dont Fragment flag (1500 to 1400 bytes)"
+        }
+      ],
+      "sha256": "aabe524b103fe040921479c3dd0ed81115b2357c51aafbd3c10b55843f758aad"
+    },
+    {
+      "id": "net-reset-network-adapters",
+      "name": "Network Adapter Soft Reset & TCP Optimization",
+      "category": "network",
+      "path": "network/reset_network_adapters.ps1",
+      "description": "Performs a clean software restart of active network adapters, disables energy-efficient Ethernet sleep states, and applies optimal TCP Receive-Side Scaling (RSS).",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "network",
+        "adapter",
+        "reset",
+        "rss",
+        "tcp",
+        "gaming"
+      ],
+      "parameters": [
+        {
+          "name": "AdapterName",
+          "type": "string",
+          "default": "Active",
+          "description": "Adapter alias or Active to automatically target connected adapters"
+        },
+        {
+          "name": "OptimizeTcp",
+          "type": "boolean",
+          "default": true,
+          "description": "Apply high-throughput TCP window scaling and autotuning"
+        }
+      ],
+      "sha256": "1e36e5a1ebdd2b640bfb003f47e33a9a668332cec93ff7126e305f983c1a01e8"
+    },
+    {
+      "id": "maint-clean-windows-update-cache",
+      "name": "Clean Windows Update Cache & SoftwareDistribution",
+      "category": "maintenance",
+      "path": "maintenance/clean_windows_update_cache.ps1",
+      "description": "Stops update servicing daemons (wuauserv, bits, cryptsvc, dosvc), safely purges downloaded update installation files, and restarts services.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "windows-update",
+        "cache",
+        "softwaredistribution",
+        "cleanup",
+        "disk-space"
+      ],
+      "parameters": [
+        {
+          "name": "PurgeDataStore",
+          "type": "boolean",
+          "default": false,
+          "description": "Rebuild Windows Update history database (SoftwareDistribution\\\\DataStore)"
+        }
+      ],
+      "sha256": "8d263142b91406a5e249c5d64c22c1f59d844760ddf7dd8b466da8daefd8824e"
+    },
+    {
+      "id": "maint-safe-browser-cache-cleaner",
+      "name": "Safe Web Browser Cache Cleaner",
+      "category": "maintenance",
+      "path": "maintenance/safe_browser_cache_cleaner.ps1",
+      "description": "Safely purges temporary HTTP, Shader, GPU, and Code caches across Chrome, Edge, Brave, Yandex, and Firefox while strictly protecting logins, cookies, and bookmarks.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "browser",
+        "chrome",
+        "edge",
+        "firefox",
+        "brave",
+        "cache",
+        "cleanup"
+      ],
+      "parameters": [
+        {
+          "name": "TargetBrowsers",
+          "type": "string",
+          "default": "All",
+          "description": "Browsers to clean (All, Chrome, Edge, Brave, Yandex, Firefox)"
+        },
+        {
+          "name": "CloseRunningBrowsers",
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically close browser processes before cleaning"
+        }
+      ],
+      "sha256": "6dcc0916779277678df38f1a176bb6cfae4397cb4c5dc731094499f947be1c52"
+    },
+    {
+      "id": "maint-clean-delivery-optimization",
+      "name": "Clean Delivery Optimization Cache",
+      "category": "maintenance",
+      "path": "maintenance/clean_delivery_optimization_cache.ps1",
+      "description": "Purges Windows Delivery Optimization (WUDO) peer-to-peer update cache files and temporary update staging fragments.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "delivery-optimization",
+        "wudo",
+        "dosvc",
+        "cache",
+        "cleanup"
+      ],
+      "parameters": [
+        {
+          "name": "MaxAgeDays",
+          "type": "number",
+          "default": 0,
+          "description": "Minimum age in days of cache files to clean (0 = purge all)"
+        }
+      ],
+      "sha256": "acec4e79e2aeda7135f1a123ffb90a6ac1b81d4a479f568179d91c869ab8a06b"
+    },
+    {
+      "id": "sec-disable-telemetry-tasks",
+      "name": "Disable Windows Telemetry & Data Collection Tasks",
+      "category": "security",
+      "path": "security/disable_telemetry_tasks.ps1",
+      "description": "Disables background diagnostic data collection services (DiagTrack, dmwappushservice) and Customer Experience Improvement Program (CEIP) scheduled tasks.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "telemetry",
+        "privacy",
+        "ceip",
+        "diagtrack",
+        "security"
+      ],
+      "parameters": [
+        {
+          "name": "DisableServices",
+          "type": "boolean",
+          "default": true,
+          "description": "Stop and disable DiagTrack and dmwappushservice"
+        },
+        {
+          "name": "DisableScheduledTasks",
+          "type": "boolean",
+          "default": true,
+          "description": "Disable CEIP and Application Experience telemetry tasks"
+        },
+        {
+          "name": "DisableRegistryTelemetry",
+          "type": "boolean",
+          "default": true,
+          "description": "Set AllowTelemetry=0 in group policy registry"
+        }
+      ],
+      "sha256": "24854dd6ebacd2c39e5fad5f12f580a0a729157a374b5f958b29dc705ac170ba"
+    },
+    {
+      "id": "sec-configure-defender-schedule",
+      "name": "Configure Windows Defender Schedule & CPU Throttling",
+      "category": "security",
+      "path": "security/configure_defender_scan_schedule.ps1",
+      "description": "Configures Microsoft Defender background scan schedules, daily execution time, and CPU throttling limits to prevent system slowdowns.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "defender",
+        "antivirus",
+        "scan",
+        "schedule",
+        "cpu-throttle",
+        "security"
+      ],
+      "parameters": [
+        {
+          "name": "ScanDay",
+          "type": "string",
+          "default": "Everyday",
+          "description": "Day of week for scan (Everyday, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)"
+        },
+        {
+          "name": "ScanTime",
+          "type": "string",
+          "default": "03:00",
+          "description": "24-hour time for daily scan (HH:mm)"
+        },
+        {
+          "name": "CpuThrottlePercent",
+          "type": "number",
+          "default": 30,
+          "description": "Maximum CPU % Defender may consume (10-100%)"
+        },
+        {
+          "name": "ScanType",
+          "type": "string",
+          "default": "QuickScan",
+          "description": "Type of scan (QuickScan, FullScan)"
+        },
+        {
+          "name": "UpdateDefinitionsFirst",
+          "type": "boolean",
+          "default": true,
+          "description": "Check for signature updates before scan"
+        }
+      ],
+      "sha256": "6278e05c76119a2027e22f7470cf5e8a8ff671b210a14be16121aa94686a1ae2"
+    },
+    {
+      "id": "perf-clear-ram-standby-list",
+      "name": "Clear RAM Standby List & Purge Memory Cache",
+      "category": "performance",
+      "path": "performance/clear_ram_standby_list.ps1",
+      "description": "Purges Windows RAM standby list cache and working sets using native memory manager APIs to free memory without terminating applications.",
+      "riskLevel": "safe",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "ram",
+        "memory",
+        "standby-list",
+        "working-sets",
+        "performance"
+      ],
+      "parameters": [
+        {
+          "name": "Target",
+          "type": "string",
+          "default": "StandbyList",
+          "description": "Target memory pool to purge (StandbyList, WorkingSets, All)"
+        }
+      ],
+      "sha256": "b2e18c16ccb80210fc73fd6a0231b95a21c1d12a1ee855dbfd6b3df04d1f38f5"
+    },
+    {
+      "id": "perf-optimize-visual-effects",
+      "name": "Optimize Windows Visual Effects for Performance",
+      "category": "performance",
+      "path": "performance/optimize_visual_effects.ps1",
+      "description": "Disables costly window animations, fade effects, and shadows to boost GPU/CPU frame rates while preserving ClearType font smoothing and icon thumbnails.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "visual-effects",
+        "performance",
+        "animations",
+        "fonts",
+        "ui",
+        "explorer"
+      ],
+      "parameters": [
+        {
+          "name": "Preset",
+          "type": "string",
+          "default": "Optimal",
+          "description": "Tuning profile (Optimal, MaxPerformance, Default)"
+        },
+        {
+          "name": "KeepFontSmoothing",
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve ClearType font smoothing to avoid blurry text"
+        },
+        {
+          "name": "KeepThumbnails",
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve icon thumbnails in File Explorer"
+        }
+      ],
+      "sha256": "1a72e36076b401eb7a15bde99aaf5e765759e8c7da1bd96a39c9afc057c0221f"
     }
   ]
 }

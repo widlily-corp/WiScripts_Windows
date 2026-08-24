@@ -14,6 +14,7 @@ import {
   HardDrive,
   FileText,
   ShieldAlert,
+  FolderSearch,
 } from 'lucide-react';
 
 function formatBytes(bytes: number): string {
@@ -29,6 +30,7 @@ export function SystemCleaner() {
   const addLog = useAppStore((s) => s.addLog);
   const addToast = useAppStore((s) => s.addToast);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
 
   const [scanResult, setScanResult] = useState<CleanerScanResult | null>(null);
   const [selectedCatIds, setSelectedCatIds] = useState<Set<string>>(new Set());
@@ -171,6 +173,16 @@ export function SystemCleaner() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('storage_utilities')}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-[6px] bg-brand/10 border border-brand/20 text-brand hover:bg-brand/20 transition-colors"
+              title={t('systemCleaner.openDiskAnalyzerTitle', 'Открыть детальный анализатор диска и дерево папок')}
+            >
+              <FolderSearch className="h-3.5 w-3.5" />
+              <span>{t('systemCleaner.openDiskAnalyzer', 'Анализ диска и дерево')}</span>
+            </button>
+
             <button
               type="button"
               onClick={handleScan}

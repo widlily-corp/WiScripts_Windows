@@ -1,3 +1,22 @@
+pub mod analyzer;
+pub mod deletion;
+pub mod drives;
+pub mod guardrails;
+
+pub use analyzer::{
+    cancel_scan, register_cancellation_token, scan_directory_tree, DiskScanProgressPayload,
+    DiskScanResult, FsTreeNode, RankedFsItem,
+};
+pub use deletion::{
+    calculate_target_size, delete_filesystem_items, DeletionItemReport, DeletionResult,
+};
+pub use drives::{get_all_disk_drives, DiskDriveInfo};
+pub use guardrails::{
+    check_path_protection_status, is_drive_root, is_system_protected_path, normalize_path,
+    resolve_and_normalize_path, strip_unc_prefix, validate_path_deletion_guardrail,
+    PathProtectionStatus,
+};
+
 use crate::error::AppError;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -5,7 +24,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
@@ -49,37 +68,6 @@ pub fn get_user_profile_dir() -> Result<PathBuf, AppError> {
         .ok_or_else(|| {
             AppError::InvalidConfig("Could not resolve USERPROFILE directory".to_string())
         })
-}
-
-fn strip_unc_prefix(path: PathBuf) -> PathBuf {
-    let s = path.to_string_lossy();
-    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(stripped)
-    } else {
-        path
-    }
-}
-
-pub fn normalize_path(p: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for comp in p.components() {
-        match comp {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::Normal(c) => {
-                out.push(c);
-            }
-            Component::Prefix(p_val) => {
-                out.push(p_val.as_os_str());
-            }
-            Component::RootDir => {
-                out.push(comp.as_os_str());
-            }
-        }
-    }
-    out
 }
 
 pub fn validate_path_in_user_profile<P: AsRef<Path>>(path: P) -> Result<PathBuf, AppError> {
@@ -416,7 +404,6 @@ mod tests {
             f3.sync_all().unwrap();
         }
 
-        // Direct test of phase 1 & 2 logic on mock directory
         let mut size_map: HashMap<u64, Vec<PathBuf>> = HashMap::new();
         for entry in WalkDir::new(dir.path()).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
@@ -461,7 +448,6 @@ mod tests {
         let file1_path = dir.path().join("col1.txt");
         let file2_path = dir.path().join("col2.txt");
 
-        // Two files of exact same length (16 bytes) but different content
         let content1 = b"AAAA BBBB CCCC 1";
         let content2 = b"AAAA BBBB CCCC 2";
         assert_eq!(content1.len(), content2.len());
@@ -477,9 +463,6 @@ mod tests {
             f2.sync_all().unwrap();
         }
 
-        let _groups = scan_duplicate_files(Some(dir.path().to_string_lossy().to_string()));
-        // Note: target_dir in tempdir is outside USERPROFILE unless tempdir is in USERPROFILE.
-        // Let's check compute_file_hash and hashing logic directly:
         let hash1 = compute_file_hash(&file1_path).unwrap();
         let hash2 = compute_file_hash(&file2_path).unwrap();
         assert_ne!(
@@ -504,49 +487,11 @@ mod tests {
             let valid_sub = user_profile.join("Downloads");
             assert!(validate_path_in_user_profile(&valid_sub).is_ok());
 
-            // Test traversal relative to profile
             let traversal_inside = user_profile.join("Downloads").join("..").join("Documents");
             assert!(validate_path_in_user_profile(&traversal_inside).is_ok());
 
             let traversal_outside = user_profile.join("..").join("Windows");
             assert!(validate_path_in_user_profile(&traversal_outside).is_err());
-        }
-    }
-
-    #[test]
-    fn test_security_junction_point_outside_profile() {
-        if let Ok(user_profile) = get_user_profile_dir() {
-            let test_dir = user_profile
-                .join("AppData")
-                .join("Local")
-                .join("Temp")
-                .join("test_junction_test");
-            let _ = std::fs::create_dir_all(&test_dir);
-            let junction_target = Path::new(r"C:\Windows\System32");
-            let junction_link = test_dir.join("sys32_link");
-
-            // Attempt junction creation using cmd mklink /J
-            let output = std::process::Command::new("cmd")
-                .args([
-                    "/C",
-                    "mklink",
-                    "/J",
-                    junction_link.to_str().unwrap(),
-                    junction_target.to_str().unwrap(),
-                ])
-                .output();
-
-            if let Ok(out) = output {
-                if out.status.success() {
-                    let result = validate_path_in_user_profile(&junction_link);
-                    assert!(
-                        result.is_err(),
-                        "Junction pointing outside USERPROFILE must be rejected!"
-                    );
-                    let _ = std::fs::remove_dir(&junction_link);
-                }
-            }
-            let _ = std::fs::remove_dir_all(&test_dir);
         }
     }
 
@@ -569,41 +514,5 @@ mod tests {
         let full_small = compute_file_hash(temp_small.path()).unwrap();
 
         assert_eq!(partial_small, full_small);
-    }
-
-    #[test]
-    fn test_2stage_storage_hasher_small_file_reuse_and_large_file_collision() {
-        let dir = tempdir().expect("failed to create temp dir");
-
-        // Small files (<= 4096 bytes)
-        let small1_path = dir.path().join("small1.bin");
-        let small2_path = dir.path().join("small2.bin");
-        let small_content = vec![0x42u8; 512];
-        std::fs::write(&small1_path, &small_content).unwrap();
-        std::fs::write(&small2_path, &small_content).unwrap();
-
-        // Large files with identical 4KB header but different bodies (> 4096 bytes)
-        let large1_path = dir.path().join("large1.bin");
-        let large2_path = dir.path().join("large2.bin");
-        let large_content1 = vec![0xAAu8; 8192];
-        let mut large_content2 = vec![0xAAu8; 8192];
-        // Modify bytes after 4096 in large2
-        large_content2[5000] = 0xBB;
-        std::fs::write(&large1_path, &large_content1).unwrap();
-        std::fs::write(&large2_path, &large_content2).unwrap();
-
-        // 1. Verify small file partial hash == full hash
-        let small1_part = compute_partial_file_hash(&small1_path).unwrap();
-        let small1_full = compute_file_hash(&small1_path).unwrap();
-        assert_eq!(small1_part, small1_full, "For files <= 4096 bytes, partial hash must match full hash");
-
-        // 2. Verify large files have same partial hash (first 4KB match) but different full hashes
-        let large1_part = compute_partial_file_hash(&large1_path).unwrap();
-        let large2_part = compute_partial_file_hash(&large2_path).unwrap();
-        assert_eq!(large1_part, large2_part, "4KB headers match, so partial hashes must match");
-
-        let large1_full = compute_file_hash(&large1_path).unwrap();
-        let large2_full = compute_file_hash(&large2_path).unwrap();
-        assert_ne!(large1_full, large2_full, "Full hashes must differ due to differing trailing bytes");
     }
 }

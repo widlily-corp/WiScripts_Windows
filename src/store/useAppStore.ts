@@ -12,6 +12,7 @@ import { createGamingSlice, GamingSlice } from './slices/gamingSlice';
 import { createSmartRamSlice, SmartRamSlice } from './slices/smartRamSlice';
 import { createNetworkShieldSlice, NetworkShieldSlice } from './slices/networkShieldSlice';
 import { createHardwareHealthSlice, HardwareHealthSlice } from './slices/hardwareHealthSlice';
+import { createDiskAnalyzerSlice, DiskAnalyzerSlice } from './slices/diskAnalyzerSlice';
 
 export type { PendingSafetyModal };
 
@@ -26,7 +27,8 @@ export type AppState = SystemSlice &
   GamingSlice &
   SmartRamSlice &
   NetworkShieldSlice &
-  HardwareHealthSlice;
+  HardwareHealthSlice &
+  DiskAnalyzerSlice;
 
 export const useAppStore = create<AppState>()(
   devtools(
@@ -44,6 +46,7 @@ export const useAppStore = create<AppState>()(
         ...createSmartRamSlice(...a),
         ...createNetworkShieldSlice(...a),
         ...createHardwareHealthSlice(...a),
+        ...createDiskAnalyzerSlice(...a),
       }),
       {
         name: 'wiscripts-app-store',
@@ -56,8 +59,12 @@ export const useAppStore = create<AppState>()(
           selectedDnsProvider: state.selectedDnsProvider,
           selectedCpuSensorId: state.selectedCpuSensorId,
           selectedGpuSensorId: state.selectedGpuSensorId,
+          selectedDrive: state.selectedDrive,
+          customPath: state.customPath,
+          viewMode: state.viewMode,
         }),
       }
     )
   )
 );
+

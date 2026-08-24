@@ -1,53 +1,82 @@
-# Project: WiScripts Windows v1.4.1 Maintenance & Release
+# Project: Disk Space Analyzer & Filesystem Tree Explorer
 
 ## Architecture
-WiScripts Windows is an enterprise-grade Windows optimization, management, and diagnostics desktop application.
-- **Backend (Rust / Tauri v2)**: Native Windows APIs (Win32, COM, WMI, ADL2, NVML, ACPI), elevated process execution runner with pipe streaming and process tree teardown, hardware telemetry collectors, and memory purge engine.
-- **Frontend (React 18 / TypeScript / Tailwind CSS / Zustand / i18n)**: High-density modular UI, dual-tier safety pre-flight modals, terminal script execution console, hardware telemetry charts, and dual-locale English/Russian translation engine.
-- **Scripts Library (`scripts_lib/`)**: 27 verified, parameter-driven PowerShell 5.1/7 scripts with administrator elevation guards, idempotent registry/service configurations, and UTF-8 BOM encoding.
-- **Testing Track (`tests/` & `tests/e2e/`)**: 24 automated regression test suites, 4 E2E testing tiers (66 scenarios), Rust library test harness (237 tests), and TypeScript compilation verification.
+- **Rust Backend (`src-tauri/src/storage/`)**:
+  - `drives.rs`: Enumerates drives and free/total storage metrics via sysinfo / winapi.
+  - `analyzer.rs`: Multi-threaded `WalkDir` ingestion, bottom-up tree aggregation, top 20 ranked items, atomic cancellation token registry, throttled 100ms progress emission (`disk-scan-progress`).
+  - `deletion.rs`: Safe recursive deletion with Windows Recycle Bin (`trash` crate) and Permanent Deletion (`clear_readonly` + bottom-up removal).
+  - `guardrails.rs`: Protection against deleting root drives (`C:\`), Windows SystemRoot (`C:\Windows`, `System32`, `SysWOW64`), `Boot`, `$Recycle.Bin`, `pagefile.sys`, Program Files, and User profile roots.
+  - `commands/storage.rs`: Tauri v2 IPC command wrappers running on `tauri::async_runtime::spawn_blocking`.
+- **React Frontend (`src/components/DiskSpaceAnalyzer/`)**:
+  - `DiskSpaceAnalyzerView.tsx`: Main view coordinating scanning, navigation, metrics, tree, and deletion.
+  - `DiskTargetSelector.tsx`: Drive picker + custom folder path selector.
+  - `DiskScanProgress.tsx`: Non-blocking progress bar, telemetry counters, cancellation button.
+  - `DiskScanSummary.tsx`: Total scanned size, file/folder counts, top directory metrics.
+  - `DiskBreadcrumbs.tsx`: Path drilldown navigation.
+  - `DiskToolbar.tsx`: Search/filter, sort, view toggles (Tree vs Ranked Largest).
+  - `DiskTreeView.tsx` & `DiskTreeNodeRow.tsx`: Interactive expandable directory tree with proportional visual usage bars and tabular bytes.
+  - `DiskRankedLargestView.tsx`: Top largest folders & files tables.
+  - `DiskDeleteModal.tsx`: Deletion confirmation modal (Recycle Bin vs Permanent Deletion, system protection alert, `CONFIRM` input).
+- **State Management (`src/store/slices/diskAnalyzerSlice.ts`)**:
+  - Zustand store managing scanning state, cancellation tokens, tree filtering, breadcrumbs, and `syncTreeAfterDeletion` in-memory recalculation.
+- **Integration (`src/components/StorageUtilities.tsx` & `src/components/SystemCleaner.tsx`)**:
+  - Integrated sub-tab inside StorageUtilities (`analyzer`, `duplicates`, `large`).
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
-|---|---|---|---|---|
-| 1 | Rust Backend Telemetry & Concurrency Stability | Multi-tier AMD ADL2/PMLog & NVIDIA NVML DLL bindings, ACPI laptop zones, WMI queries, deadlock-free process pipe runner | M1 | Survey |
-| 2 | Frontend State Store & Buffer Safety | Fix unbounded `outputLogs` append in `scriptRunnerSlice.ts` by enforcing a 2,000-line buffer limit | M2 | Survey |
-| 3 | Subsystem Header Localization & Tab Titles | Add `gaming_latency`, `smart_ram`, `network_shield`, `hardware_health` tab titles in `Header.tsx` and `en.json`/`ru.json` | M2 | Survey |
-| 4 | Keyboard Accessibility (A11y) & Modal Dismissal | Add `Escape` key event listeners in `SafetyModal.tsx` and `GitHubIssueModal.tsx` | M2 | Survey |
-| 5 | UI Localization Hardening | Localize `TemperatureSensorWidget.tsx`, `SafetyModal.tsx`, and component UI strings across EN and RU | M2 | Survey |
-| 6 | PowerShell Script Library Safeguards | Verify all 27 scripts in `scripts_lib/` maintain elevation checks, UTF-8 BOM, and idempotent execution | M3 | Survey |
-| 7 | Full Automated Regression & E2E Test Suite | Execute all 24 Node test suites, 66 E2E tests, 237 Rust tests, and TypeScript build with 100% pass rate | M4 | Survey |
-| 8 | Version Synchronization (v1.4.1) | Synchronize version `1.4.1` across `package.json`, `package-lock.json`, `Cargo.toml`, `Cargo.lock`, `tauri.conf.json`, `updaterSlice.ts`, and test assertions | M5 | Survey |
-| 9 | Release Documentation & Git Finalization | Publish `RELEASE_NOTES_1.4.1.md` and commit all release changes adhering to Conventional Commits | M5 | Survey |
+|---|---------|-------------|-----------|--------|
+| 1 | High-Performance Filesystem Scanner | Multi-threaded async scanning with progress telemetry and cancellation | M1 | ORIGINAL_REQUEST §R1 |
+| 2 | Recursive Size & Item Calculation | Accurate bottom-up sizing, item counts, and percentage calculations | M1 | ORIGINAL_REQUEST §R1 |
+| 3 | Ranked Largest Folders & Files | Top 20 largest folders and top 20 largest files overview | M1 | ORIGINAL_REQUEST §R1 |
+| 4 | Interactive Filesystem Tree View | Expandable/collapsible tree with formatted sizes, tabular bytes, usage bars | M2 | ORIGINAL_REQUEST §R2 |
+| 5 | Breadcrumb Navigation & Filter | Path navigation and live search filtering in scanned trees | M2 | ORIGINAL_REQUEST §R2 |
+| 6 | Item Quick Actions | Open in File Explorer and Copy Path to clipboard | M2 | ORIGINAL_REQUEST §R2 |
+| 7 | Safe Recursive Deletion Engine | Deletion via Windows Recycle Bin and Permanent Deletion | M3 | ORIGINAL_REQUEST §R3 |
+| 8 | System Directory Protection Guardrail | Multi-layered blocking of C:\Windows, System32, Boot, etc. | M3 | ORIGINAL_REQUEST §R3 |
+| 9 | Real-time Tree & Space Recalculation | In-memory tree delta update and freed storage calculation post-deletion | M3 | ORIGINAL_REQUEST §R3 |
+| 10 | Refined Minimal / Dark UI Styling | High-density dark aesthetic, Geist Mono tabular metrics, accessible UI | M4 | ORIGINAL_REQUEST §R4 |
+| 11 | Full Bilingual i18n (EN/RU) | Complete key parity under diskAnalyzer in en.json and ru.json | M4 | ORIGINAL_REQUEST §R4 |
+| 12 | System Cleaner & Storage UI Integration | Embedded sub-tab in StorageUtilities.tsx and navigation hookup | M4 | ORIGINAL_REQUEST §R4 |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
-|---|---|---|---|---|
-| M1 | Rust Backend Telemetry, IPC & Concurrency Verification | Audit and verify Rust backend commands, telemetry collectors, and runner | none | DONE |
-| M2 | Frontend Defect Remediation & i18n Hardening | Patch `scriptRunnerSlice.ts`, `Header.tsx`, `SafetyModal.tsx`, `GitHubIssueModal.tsx`, `TemperatureSensorWidget.tsx`, and locales | M1 | DONE |
-| M3 | PowerShell Script Library Validation & Safety | Verify script parameter schemas, elevation safeguards, and syntax | none | DONE |
-| M4 | Comprehensive Test Suite & Regression Verification | Run full suite of 24 Node tests, 66 E2E tests, 237 Rust tests, and frontend build | M2, M3 | DONE |
-| M5 | Release v1.4.1 Packaging, Version Sync & Git Finalization | Bump version to 1.4.1 across 7 files, author `RELEASE_NOTES_1.4.1.md`, verify build, and commit | M4 | DONE |
+|---|------|-------|-------------|--------|
+| M1 | Rust Scanner & Deletion Backend | `src-tauri/src/storage/` & `src-tauri/src/commands/storage.rs` | none | DONE |
+| M2 | React Tree View & Ranked Views | `src/components/DiskSpaceAnalyzer/` & `src/store/slices/diskAnalyzerSlice.ts` | M1 | DONE |
+| M3 | Deletion Engine, Guardrails & Sync | `DiskDeleteModal.tsx`, `guardrails.rs`, `syncTreeAfterDeletion` | M1, M2 | DONE |
+| M4 | StorageUtilities Integration & i18n | `StorageUtilities.tsx`, `SystemCleaner.tsx`, `en.json`, `ru.json` | M1-M3 | DONE |
+| M5 | E2E Testing, Adversarial Hardening & Audit | `tests/e2e/`, unit tests, cargo check, tsc, forensic audit | M1-M4 | DONE |
 
 ## Interface Contracts
-### Frontend (`src/store/slices/scriptRunnerSlice.ts`) ↔ UI Components
-- `outputLogs`: Array of `ScriptOutputLine`, bounded to `MAX_SCRIPT_LOG_LINES = 2000`.
-- `addOutputLine(payload)`: Appends line and slices to last 2,000 items.
+### Rust Tauri IPC Commands
+- `get_disk_drives() -> Result<Vec<DiskDriveInfo>, String>`
+- `scan_disk_space(path: String, scan_id: String) -> Result<DiskScanResult, String>`
+- `cancel_disk_scan(scan_id: String) -> Result<bool, String>`
+- `delete_filesystem_items(paths: Vec<String>, permanent: bool) -> Result<DeletionResult, String>`
+- `check_path_protection(path: String) -> Result<PathProtectionStatus, String>`
+- `open_in_file_explorer(path: String) -> Result<(), String>`
 
-### Navigation / Header ↔ Locales (`en.json` / `ru.json`)
-- `header.tab_titles.gaming_latency`: EN / RU string.
-- `header.tab_titles.smart_ram`: EN / RU string.
-- `header.tab_titles.network_shield`: EN / RU string.
-- `header.tab_titles.hardware_health`: EN / RU string.
+### Tauri Events
+- `disk-scan-progress` -> payload: `DiskScanProgressPayload { scanId, currentPath, filesCount, dirsCount, totalBytesScanned, isCompleted, isCancelled }`
 
 ## Code Layout
-- `src/`: React 18 TypeScript frontend source code
-  - `src/components/`: Modular UI components (Navigation, Header, Modals, Widgets)
-  - `src/store/slices/`: Zustand state management slices
-  - `src/i18n/locales/`: Localization catalogs (`en.json`, `ru.json`)
-- `src-tauri/`: Tauri Rust backend source code
-  - `src-tauri/src/commands/`: IPC command handlers
-  - `src-tauri/src/metrics/`: Hardware telemetry, ADL2, NVML, ACPI collectors
-  - `src-tauri/src/script_runner/`: Process execution, elevation runner, pipe streaming
-- `scripts_lib/`: PowerShell 5.1 / 7 scripts library
-- `tests/`: Automated Node.js regression test suites and E2E test runner
+- Backend:
+  - `src-tauri/src/storage/mod.rs`
+  - `src-tauri/src/storage/analyzer.rs`
+  - `src-tauri/src/storage/deletion.rs`
+  - `src-tauri/src/storage/guardrails.rs`
+  - `src-tauri/src/storage/drives.rs`
+  - `src-tauri/src/commands/storage.rs`
+- Frontend:
+  - `src/types/diskAnalyzer.ts`
+  - `src/utils/diskAnalyzer.ts`
+  - `src/store/slices/diskAnalyzerSlice.ts`
+  - `src/components/DiskSpaceAnalyzer/` (10 components)
+  - `src/components/StorageUtilities.tsx`
+  - `src/components/SystemCleaner.tsx`
+  - `src/i18n/locales/en.json` & `ru.json`
+- Tests:
+  - `tests/e2e/disk_space_analyzer.test.js`
+  - `tests/e2e/runner.js`
+  - `src/utils/__tests__/diskAnalyzer.test.ts`
+  - `src-tauri/tests/`

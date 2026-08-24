@@ -15,9 +15,11 @@ use crate::runner::{CommandRunner, DryRunRunner, ExecutionSummary, RealRunner};
 use crate::scheduler;
 use crate::startup;
 use crate::state_engine::{self, RollbackResult, SystemSnapshot};
-use crate::storage;
+use crate::storage as fs_storage;
 use crate::system_restore::{self, RestorePoint};
 use crate::uninstaller;
+pub mod storage;
+pub use self::storage::*;
 pub use crate::script_runner::{
     cancel_running_script, execute_custom_script, get_cached_scripts_library, read_library_script,
     sync_scripts_library,
@@ -1162,12 +1164,12 @@ pub async fn clean_system_items(
 #[tauri::command]
 pub async fn scan_duplicate_files(
     target_dir: Option<String>,
-) -> Result<Vec<storage::DuplicateGroup>, AppError> {
+) -> Result<Vec<fs_storage::DuplicateGroup>, AppError> {
     log::info!(
         "[IPC] scan_duplicate_files request received: target_dir={:?}",
         target_dir
     );
-    tauri::async_runtime::spawn_blocking(move || storage::scan_duplicate_files(target_dir))
+    tauri::async_runtime::spawn_blocking(move || fs_storage::scan_duplicate_files(target_dir))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in scan_duplicate_files: {}", e)))?
 }
@@ -1176,24 +1178,24 @@ pub async fn scan_duplicate_files(
 pub async fn scan_large_files(
     target_dir: Option<String>,
     limit: Option<usize>,
-) -> Result<Vec<storage::LargeFileItem>, AppError> {
+) -> Result<Vec<fs_storage::LargeFileItem>, AppError> {
     log::info!(
         "[IPC] scan_large_files request received: target_dir={:?}, limit={:?}",
         target_dir,
         limit
     );
-    tauri::async_runtime::spawn_blocking(move || storage::scan_large_files(target_dir, limit))
+    tauri::async_runtime::spawn_blocking(move || fs_storage::scan_large_files(target_dir, limit))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in scan_large_files: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn delete_files(paths: Vec<String>) -> Result<storage::DeleteResult, AppError> {
+pub async fn delete_files(paths: Vec<String>) -> Result<fs_storage::DeleteResult, AppError> {
     log::info!(
         "[IPC] delete_files request received for {} paths",
         paths.len()
     );
-    tauri::async_runtime::spawn_blocking(move || storage::delete_target_files(paths))
+    tauri::async_runtime::spawn_blocking(move || fs_storage::delete_target_files(paths))
         .await
         .map_err(|e| AppError::Execution(format!("Join error in delete_files: {}", e)))?
 }

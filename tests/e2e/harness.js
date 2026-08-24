@@ -389,7 +389,7 @@ export class CommandPaletteEngine {
       { id: 'app_uninstaller', title: 'App Uninstaller & Debloat', category: 'Navigation', keywords: ['uninstall', 'uwp', 'clean apps'] },
       { id: 'presets', title: '1-Click Presets & Profiles', category: 'Navigation', keywords: ['profiles', 'gaming', 'privacy', 'wiscripts'] },
       { id: 'system_cleaner', title: 'System & Disk Cleaner', category: 'Navigation', keywords: ['temp', 'junk', 'cache', 'clean'] },
-      { id: 'storage_utilities', title: 'Storage Utilities', category: 'Navigation', keywords: ['duplicates', 'large files', '2-stage hash'] },
+      { id: 'storage_utilities', title: 'Storage Utilities & Disk Space Analyzer', category: 'Navigation', keywords: ['duplicates', 'large files', '2-stage hash', 'disk space analyzer', 'analyzer', 'disk space', 'tree explorer', 'storage'] },
       { id: 'startup', title: 'Startup Apps', category: 'Navigation', keywords: ['autostart', 'boot', 'run keys'] },
       { id: 'scheduler', title: 'Task Scheduler', category: 'Navigation', keywords: ['tasks', 'scheduled', 'telemetry tasks'] },
       { id: 'autoruns', title: 'Deep Autoruns & Security', category: 'Navigation', keywords: ['sysinternals', 'drivers', 'quarantine'] },
@@ -1029,6 +1029,808 @@ export class HardwareTelemetrySimulator {
   }
 }
 
+// --- 8b. Disk Space Analyzer & Safe Deletion Subsystem Simulators ---
+
+export const PROTECTED_SYSTEM_PATHS = [
+  'c:\\windows',
+  'c:\\windows\\system32',
+  'c:\\windows\\syswow64',
+  'c:\\windows\\winsxs',
+  'c:\\windows\\systemapps',
+  'c:\\windows\\boot',
+  'c:\\boot',
+  'c:\\recovery',
+  'c:\\$windows.~bt',
+  'c:\\$windows.~ws',
+  'c:\\system volume information',
+  'c:\\$recycle.bin',
+  'd:\\system volume information',
+  'd:\\$recycle.bin',
+  'e:\\system volume information',
+  'e:\\$recycle.bin',
+  'c:\\program files',
+  'c:\\program files (x86)',
+  'c:\\programdata\\microsoft\\windows',
+  'c:\\users\\default',
+  'c:\\users\\public'
+];
+
+export function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.floor(Math.log(Number(bytes)) / Math.log(k));
+  if (i < 0 || !isFinite(i)) return '0 B';
+  const idx = Math.min(i, sizes.length - 1);
+  const val = (Number(bytes) / Math.pow(k, idx)).toFixed(2);
+  return `${parseFloat(val)} ${sizes[idx]}`;
+}
+
+export function formatTabularBytes(bytes) {
+  return `${Number(bytes).toLocaleString('en-US').replace(/,/g, ' ')} B`;
+}
+
+export class VirtualFilesystemSimulator {
+  constructor() {
+    this.drives = new Map();
+    this.nodes = new Map(); // normalized path lowercased -> Node
+    this.recycleBin = [];
+    this.initDefaultDrives();
+  }
+
+  initDefaultDrives() {
+    this.addDrive('C', {
+      name: 'Local Disk (C:)',
+      mountPoint: 'C:\\',
+      totalBytes: 512110190592, // 512 GB
+      freeBytes: 128849018880,  // 120 GB
+      fileSystem: 'NTFS',
+      isSystem: true
+    });
+    this.addDrive('D', {
+      name: 'Secondary Data (D:)',
+      mountPoint: 'D:\\',
+      totalBytes: 1024220381184, // 1 TB
+      freeBytes: 644245094400,   // 600 GB
+      fileSystem: 'NTFS',
+      isSystem: false
+    });
+  }
+
+  normalizePath(rawPath) {
+    if (!rawPath || typeof rawPath !== 'string') return '';
+    let p = rawPath.trim();
+    if (p.startsWith('\\\\?\\')) {
+      p = p.substring(4);
+    }
+    p = p.replace(/\//g, '\\');
+    if (/^[a-zA-Z]:/.test(p)) {
+      p = p[0].toUpperCase() + p.substring(1);
+    }
+    p = p.replace(/\\+/g, '\\');
+
+    const parts = p.split('\\');
+    const resolved = [];
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (part === '.' || (part === '' && i > 0 && i === parts.length - 1)) {
+        continue;
+      }
+      if (part === '..') {
+        if (resolved.length > 1) {
+          resolved.pop();
+        }
+        continue;
+      }
+      if (part !== '' || i === 0) {
+        resolved.push(part);
+      }
+    }
+
+    let out = resolved.join('\\');
+    if (/^[A-Z]:$/.test(out)) {
+      out += '\\';
+    }
+    return out;
+  }
+
+  getDrives() {
+    return Array.from(this.drives.values());
+  }
+
+  addDrive(letter, info = {}) {
+    const key = letter.toUpperCase();
+    const driveObj = {
+      id: key,
+      name: info.name || `Drive (${key}:)`,
+      mountPoint: `${key}:\\`,
+      totalBytes: info.totalBytes || 512110190592,
+      freeBytes: info.freeBytes || 128849018880,
+      fileSystem: info.fileSystem || 'NTFS',
+      isSystem: info.isSystem !== undefined ? info.isSystem : key === 'C'
+    };
+    this.drives.set(key, driveObj);
+    const rootPath = `${key}:\\`;
+    this.mkdir(rootPath);
+  }
+
+  mkdir(dirPath, options = {}) {
+    const norm = this.normalizePath(dirPath);
+    if (!norm) return null;
+    const key = norm.toLowerCase();
+    if (this.nodes.has(key)) {
+      const existing = this.nodes.get(key);
+      if (options.isAccessDenied !== undefined) existing.isAccessDenied = options.isAccessDenied;
+      return existing;
+    }
+
+    const parentPath = this.getParentPath(norm);
+    if (parentPath && parentPath !== norm) {
+      this.mkdir(parentPath);
+    }
+
+    const nodeName = this.getNodeName(norm);
+    const node = {
+      id: `dir_${Math.random().toString(36).substring(2, 9)}`,
+      name: nodeName || norm,
+      path: norm,
+      isDirectory: true,
+      sizeBytes: 0,
+      fileCount: 0,
+      folderCount: 0,
+      modifiedTimestamp: options.modifiedTimestamp || Math.floor(Date.now() / 1000),
+      isReadOnly: options.isReadOnly || false,
+      isLocked: options.isLocked || false,
+      isAccessDenied: options.isAccessDenied || false,
+      symlinkTarget: options.symlinkTarget || null,
+      children: new Map()
+    };
+    this.nodes.set(key, node);
+
+    if (parentPath && parentPath !== norm) {
+      const parentNode = this.nodes.get(parentPath.toLowerCase());
+      if (parentNode) {
+        parentNode.children.set(nodeName.toLowerCase(), node);
+      }
+    }
+    return node;
+  }
+
+  writeFile(filePath, sizeBytes = 0, options = {}) {
+    const norm = this.normalizePath(filePath);
+    if (!norm) return null;
+    const parentPath = this.getParentPath(norm);
+    if (parentPath) {
+      this.mkdir(parentPath);
+    }
+    const nodeName = this.getNodeName(norm);
+    const ext = path.extname(nodeName).replace(/^\./, '').toLowerCase();
+
+    const node = {
+      id: `file_${Math.random().toString(36).substring(2, 9)}`,
+      name: nodeName,
+      path: norm,
+      isDirectory: false,
+      sizeBytes: Number(sizeBytes),
+      fileCount: 0,
+      folderCount: 0,
+      extension: ext,
+      modifiedTimestamp: options.modifiedTimestamp || Math.floor(Date.now() / 1000),
+      isReadOnly: options.isReadOnly || false,
+      isLocked: options.isLocked || false,
+      isAccessDenied: options.isAccessDenied || false,
+      symlinkTarget: options.symlinkTarget || null,
+      children: new Map()
+    };
+    const key = norm.toLowerCase();
+    this.nodes.set(key, node);
+
+    if (parentPath) {
+      const parentNode = this.nodes.get(parentPath.toLowerCase());
+      if (parentNode) {
+        parentNode.children.set(nodeName.toLowerCase(), node);
+      }
+    }
+    return node;
+  }
+
+  addSymlink(linkPath, targetPath) {
+    const normLink = this.normalizePath(linkPath);
+    const normTarget = this.normalizePath(targetPath);
+    return this.mkdir(normLink, { symlinkTarget: normTarget });
+  }
+
+  getNode(pathStr) {
+    const norm = this.normalizePath(pathStr);
+    return this.nodes.get(norm.toLowerCase()) || null;
+  }
+
+  getParentPath(normPath) {
+    if (/^[A-Z]:\\$/.test(normPath)) return null;
+    const lastSlash = normPath.lastIndexOf('\\');
+    if (lastSlash === -1) return null;
+    if (lastSlash === 2 && normPath[1] === ':') {
+      return normPath.substring(0, 3);
+    }
+    return normPath.substring(0, lastSlash);
+  }
+
+  getNodeName(normPath) {
+    if (/^[A-Z]:\\$/.test(normPath)) return normPath;
+    const lastSlash = normPath.lastIndexOf('\\');
+    if (lastSlash === -1) return normPath;
+    return normPath.substring(lastSlash + 1);
+  }
+
+  deleteNode(pathStr, permanent = false) {
+    const norm = this.normalizePath(pathStr);
+    const key = norm.toLowerCase();
+    const node = this.nodes.get(key);
+    if (!node) return false;
+
+    const parentPath = this.getParentPath(norm);
+    if (parentPath) {
+      const parentNode = this.nodes.get(parentPath.toLowerCase());
+      if (parentNode) {
+        parentNode.children.delete(node.name.toLowerCase());
+      }
+    }
+
+    const keysToRemove = [];
+    const collectKeys = (currPath) => {
+      const k = currPath.toLowerCase();
+      keysToRemove.push(k);
+      for (const [nKey] of this.nodes.entries()) {
+        if (nKey.startsWith(k + '\\')) {
+          keysToRemove.push(nKey);
+        }
+      }
+    };
+    collectKeys(norm);
+
+    for (const k of keysToRemove) {
+      const n = this.nodes.get(k);
+      if (n) {
+        if (!permanent) {
+          this.recycleBin.push({ ...n, deletedAt: Date.now() });
+        }
+        this.nodes.delete(k);
+      }
+    }
+    return true;
+  }
+
+  populateSampleDrive(driveLetter = 'C') {
+    const root = `${driveLetter.toUpperCase()}:\\`;
+    this.mkdir(root);
+
+    this.mkdir(`${root}Windows`);
+    this.mkdir(`${root}Windows\\System32`);
+    this.writeFile(`${root}Windows\\System32\\ntoskrnl.exe`, 10485760); // 10MB
+    this.writeFile(`${root}Windows\\System32\\kernel32.dll`, 2097152);  // 2MB
+    this.mkdir(`${root}Windows\\WinSxS`);
+    this.writeFile(`${root}Windows\\WinSxS\\manifest.xml`, 5242880);   // 5MB
+
+    this.mkdir(`${root}System Volume Information`);
+    this.writeFile(`${root}System Volume Information\\tracking.log`, 1024);
+    this.mkdir(`${root}Boot`);
+    this.writeFile(`${root}Boot\\BCD`, 262144);
+    this.mkdir(`${root}$Recycle.Bin`);
+
+    this.mkdir(`${root}Program Files`);
+    this.mkdir(`${root}Program Files\\WiScripts`);
+    this.writeFile(`${root}Program Files\\WiScripts\\wiscripts.exe`, 26214400); // 25MB
+
+    this.mkdir(`${root}Users`);
+    this.mkdir(`${root}Users\\TestUser`);
+    this.mkdir(`${root}Users\\TestUser\\Documents`);
+    this.writeFile(`${root}Users\\TestUser\\Documents\\report.docx`, 1048576); // 1MB
+    this.writeFile(`${root}Users\\TestUser\\Documents\\data.xlsx`, 2097152);   // 2MB
+
+    this.mkdir(`${root}Users\\TestUser\\Downloads`);
+    this.writeFile(`${root}Users\\TestUser\\Downloads\\installer.exe`, 52428800); // 50MB
+    this.writeFile(`${root}Users\\TestUser\\Downloads\\archive.zip`, 104857600);  // 100MB
+
+    this.mkdir(`${root}Users\\TestUser\\Projects`);
+    this.mkdir(`${root}Users\\TestUser\\Projects\\WebApp`);
+    this.mkdir(`${root}Users\\TestUser\\Projects\\WebApp\\node_modules`);
+    this.writeFile(`${root}Users\\TestUser\\Projects\\WebApp\\node_modules\\bundle.js`, 41943040); // 40MB
+    this.writeFile(`${root}Users\\TestUser\\Projects\\WebApp\\package.json`, 2048);
+
+    this.mkdir(`${root}Users\\TestUser\\AppData\\Local\\Temp`);
+    this.writeFile(`${root}Users\\TestUser\\AppData\\Local\\Temp\\cache.tmp`, 15728640); // 15MB
+  }
+}
+
+export class DiskDeletionEngineSimulator {
+  constructor(vfs = new VirtualFilesystemSimulator()) {
+    this.vfs = vfs;
+    this.deletionLog = [];
+  }
+
+  validateDeletionGuardrail(rawPath) {
+    const norm = this.vfs.normalizePath(rawPath);
+    const pathLower = norm.toLowerCase();
+
+    // Check root drive e.g. "C:\" or "C:"
+    if (/^[a-z]:\\?$/i.test(pathLower) || pathLower.startsWith('\\\\?\\')) {
+      throw new Error(`Security Violation: Cannot delete root drive directory '${norm}'`);
+    }
+
+    // Block C:\Users root folder itself (exact match only)
+    if (pathLower === 'c:\\users' || pathLower === 'c:\\users\\') {
+      throw new Error(`Security Violation: Deletion of critical Windows system directory '${norm}' is blocked`);
+    }
+
+    for (const protectedPath of PROTECTED_SYSTEM_PATHS) {
+      const protLower = protectedPath.toLowerCase();
+      if (pathLower === protLower || pathLower.startsWith(protLower + '\\')) {
+        throw new Error(`Security Violation: Deletion of critical Windows system directory '${norm}' is blocked`);
+      }
+    }
+    return norm;
+  }
+
+  checkPathProtection(rawPath) {
+    try {
+      this.validateDeletionGuardrail(rawPath);
+      return { isProtected: false };
+    } catch (err) {
+      return { isProtected: true, reason: err.message };
+    }
+  }
+
+  deleteItem(rawPath, { permanent = false, dryRun = false } = {}) {
+    const norm = this.validateDeletionGuardrail(rawPath);
+    const node = this.vfs.getNode(norm);
+
+    if (!node) {
+      return {
+        success: false,
+        path: norm,
+        bytesFreed: 0,
+        itemsDeleted: 0,
+        movedToRecycleBin: !permanent,
+        errors: [`File does not exist: ${norm}`]
+      };
+    }
+
+    const allDescendants = [];
+    const errors = [];
+    const prefix = norm.toLowerCase();
+
+    for (const [k, n] of this.vfs.nodes.entries()) {
+      if (k === prefix || k.startsWith(prefix + '\\')) {
+        allDescendants.push(n);
+      }
+    }
+
+    let bytesFreed = 0;
+    let itemsDeleted = 0;
+    const lockedNodes = [];
+
+    for (const item of allDescendants) {
+      if (item.isLocked) {
+        errors.push(`File is locked by another process: ${item.path}`);
+        lockedNodes.push(item);
+      } else {
+        if (!item.isDirectory) {
+          bytesFreed += item.sizeBytes;
+        }
+        itemsDeleted++;
+      }
+    }
+
+    if (dryRun) {
+      this.deletionLog.push({ path: norm, permanent, dryRun: true, bytesFreed, itemsDeleted });
+      return {
+        success: true,
+        path: norm,
+        bytesFreed,
+        itemsDeleted,
+        movedToRecycleBin: !permanent,
+        isDryRun: true,
+        errors
+      };
+    }
+
+    if (lockedNodes.length === allDescendants.length) {
+      return {
+        success: false,
+        path: norm,
+        bytesFreed: 0,
+        itemsDeleted: 0,
+        movedToRecycleBin: !permanent,
+        errors
+      };
+    }
+
+    if (errors.length === 0) {
+      this.vfs.deleteNode(norm, permanent);
+    } else {
+      const lockedAncestorPrefixes = new Set();
+      for (const locked of lockedNodes) {
+        let p = this.vfs.getParentPath(locked.path);
+        while (p) {
+          lockedAncestorPrefixes.add(p.toLowerCase());
+          p = this.vfs.getParentPath(p);
+        }
+      }
+
+      for (const item of allDescendants) {
+        if (!item.isLocked) {
+          if (item.isDirectory && lockedAncestorPrefixes.has(item.path.toLowerCase())) {
+            continue;
+          }
+          this.vfs.deleteNode(item.path, permanent);
+        }
+      }
+    }
+
+    this.deletionLog.push({ path: norm, permanent, dryRun: false, bytesFreed, itemsDeleted, errors });
+    return {
+      success: errors.length === 0,
+      path: norm,
+      bytesFreed,
+      itemsDeleted,
+      movedToRecycleBin: !permanent,
+      errors
+    };
+  }
+
+  deleteItems(paths, options = {}) {
+    const results = [];
+    for (const p of paths) {
+      results.push(this.deleteItem(p, options));
+    }
+    return results;
+  }
+}
+
+export class DiskAnalyzerEngineSimulator {
+  constructor(vfs = new VirtualFilesystemSimulator()) {
+    this.vfs = vfs;
+    this.isCancelled = false;
+  }
+
+  cancelScan() {
+    this.isCancelled = true;
+    return true;
+  }
+
+  async scan(targetPath, { maxDepth = null, ipc = null, emitProgress = true } = {}) {
+    const scanStart = Date.now();
+    const normTarget = this.vfs.normalizePath(targetPath);
+    const rootNodeData = this.vfs.getNode(normTarget);
+
+    if (!rootNodeData) {
+      throw new Error(`PathNotFound: Target path '${normTarget}' does not exist on filesystem`);
+    }
+    if (rootNodeData.isAccessDenied) {
+      throw new Error(`AccessDenied: Permission denied scanning path '${normTarget}'`);
+    }
+
+    const visitedCanonicalPaths = new Set();
+    const skippedErrors = [];
+    const allFolders = [];
+    const allFiles = [];
+    let filesScanned = 0;
+    let dirsScanned = 0;
+    let bytesProcessed = 0;
+    let nodeCounter = 1;
+
+    if (ipc && emitProgress) {
+      await ipc.emit('disk-scan-progress', {
+        filesScanned: 0,
+        directoriesScanned: 0,
+        bytesProcessed: 0,
+        currentPath: normTarget,
+        elapsedMs: 0
+      });
+    }
+
+    if (this.isCancelled) {
+      this.isCancelled = false;
+      return {
+        rootNode: {
+          id: 'node_root',
+          name: rootNodeData.name,
+          path: rootNodeData.path,
+          isDirectory: true,
+          sizeBytes: 0,
+          fileCount: 0,
+          folderCount: 0,
+          percentageOfParent: 100,
+          percentageOfRoot: 100,
+          modifiedTimestamp: rootNodeData.modifiedTimestamp,
+          children: []
+        },
+        totalBytes: 0,
+        totalFiles: 0,
+        totalFolders: 0,
+        scanDurationMs: Math.max(1, Date.now() - scanStart),
+        largestFolders: [],
+        largestFiles: [],
+        skippedErrors: [],
+        isPartial: true
+      };
+    }
+
+    const buildTree = (currNode, currentDepth) => {
+      if (this.isCancelled) {
+        return null;
+      }
+
+      const norm = this.vfs.normalizePath(currNode.path);
+      const canonKey = (currNode.symlinkTarget ? this.vfs.normalizePath(currNode.symlinkTarget) : norm).toLowerCase();
+
+      if (visitedCanonicalPaths.has(canonKey)) {
+        skippedErrors.push(`Circular link detected: ${norm} -> ${currNode.symlinkTarget}`);
+        return null;
+      }
+      visitedCanonicalPaths.add(canonKey);
+
+      if (currNode.isAccessDenied) {
+        skippedErrors.push(`Access Denied: ${norm}`);
+        return null;
+      }
+
+      dirsScanned++;
+
+      let subtreeBytes = 0;
+      let subtreeFiles = 0;
+      let subtreeFolders = 0;
+      const childTreeNodes = [];
+
+      const canRecurse = maxDepth === null || currentDepth < maxDepth;
+
+      if (canRecurse && currNode.children) {
+        for (const [, child] of currNode.children.entries()) {
+          if (this.isCancelled) break;
+
+          if (child.isDirectory) {
+            subtreeFolders++;
+            const childResult = buildTree(child, currentDepth + 1);
+            if (childResult) {
+              subtreeBytes += childResult.sizeBytes;
+              subtreeFiles += childResult.fileCount;
+              subtreeFolders += childResult.folderCount;
+              childTreeNodes.push(childResult);
+            }
+          } else {
+            subtreeFiles++;
+            subtreeBytes += child.sizeBytes;
+            filesScanned++;
+            bytesProcessed += child.sizeBytes;
+
+            const fileTreeNode = {
+              id: `node_${nodeCounter++}`,
+              name: child.name,
+              path: child.path,
+              isDirectory: false,
+              sizeBytes: child.sizeBytes,
+              fileCount: 0,
+              folderCount: 0,
+              extension: child.extension || '',
+              percentageOfParent: 0,
+              percentageOfRoot: 0,
+              modifiedTimestamp: child.modifiedTimestamp || Math.floor(Date.now() / 1000)
+            };
+            childTreeNodes.push(fileTreeNode);
+
+            allFiles.push({
+              path: child.path,
+              name: child.name,
+              sizeBytes: child.sizeBytes,
+              extension: child.extension || '',
+              modifiedTimestamp: child.modifiedTimestamp || Math.floor(Date.now() / 1000),
+              percentageOfTotal: 0
+            });
+          }
+        }
+      }
+
+      childTreeNodes.sort((a, b) => b.sizeBytes - a.sizeBytes);
+
+      for (const child of childTreeNodes) {
+        child.percentageOfParent = subtreeBytes > 0 ? Number(((child.sizeBytes / subtreeBytes) * 100).toFixed(2)) : 0;
+      }
+
+      const treeNode = {
+        id: `node_${nodeCounter++}`,
+        name: currNode.name,
+        path: currNode.path,
+        isDirectory: true,
+        sizeBytes: subtreeBytes,
+        fileCount: subtreeFiles,
+        folderCount: subtreeFolders,
+        percentageOfParent: 100,
+        percentageOfRoot: 100,
+        modifiedTimestamp: currNode.modifiedTimestamp || Math.floor(Date.now() / 1000),
+        children: childTreeNodes
+      };
+
+      if (norm !== normTarget) {
+        allFolders.push({
+          path: currNode.path,
+          name: currNode.name,
+          totalBytes: subtreeBytes,
+          itemCount: subtreeFiles + subtreeFolders,
+          percentageOfTotal: 0
+        });
+      }
+
+      return treeNode;
+    };
+
+    const rootTreeNode = buildTree(rootNodeData, 0) || {
+      id: 'node_root',
+      name: rootNodeData.name,
+      path: rootNodeData.path,
+      isDirectory: true,
+      sizeBytes: 0,
+      fileCount: 0,
+      folderCount: 0,
+      percentageOfParent: 100,
+      percentageOfRoot: 100,
+      modifiedTimestamp: rootNodeData.modifiedTimestamp,
+      children: []
+    };
+
+    const totalBytes = rootTreeNode.sizeBytes;
+    const totalFiles = rootTreeNode.fileCount;
+    const totalFolders = rootTreeNode.folderCount;
+
+    const assignRootPercentage = (node) => {
+      node.percentageOfRoot = totalBytes > 0 ? Number(((node.sizeBytes / totalBytes) * 100).toFixed(2)) : 0;
+      if (node.children) {
+        for (const child of node.children) {
+          assignRootPercentage(child);
+        }
+      }
+    };
+    assignRootPercentage(rootTreeNode);
+
+    for (const f of allFolders) {
+      f.percentageOfTotal = totalBytes > 0 ? Number(((f.totalBytes / totalBytes) * 100).toFixed(2)) : 0;
+    }
+    allFolders.sort((a, b) => b.totalBytes - a.totalBytes);
+    const largestFolders = allFolders.slice(0, 20);
+
+    for (const file of allFiles) {
+      file.percentageOfTotal = totalBytes > 0 ? Number(((file.sizeBytes / totalBytes) * 100).toFixed(2)) : 0;
+    }
+    allFiles.sort((a, b) => b.sizeBytes - a.sizeBytes);
+    const largestFiles = allFiles.slice(0, 50);
+
+    const elapsedMs = Math.max(1, Date.now() - scanStart);
+
+    if (ipc && emitProgress) {
+      await ipc.emit('disk-scan-progress', {
+        filesScanned,
+        directoriesScanned: dirsScanned,
+        bytesProcessed,
+        currentPath: normTarget,
+        elapsedMs
+      });
+    }
+
+    return {
+      rootNode: rootTreeNode,
+      totalBytes,
+      totalFiles,
+      totalFolders,
+      scanDurationMs: elapsedMs,
+      largestFolders,
+      largestFiles,
+      skippedErrors,
+      isPartial: this.isCancelled
+    };
+  }
+
+  searchTree(rootNode, { query = '', extension = '', minBytes = 0 } = {}) {
+    if (!rootNode) return null;
+    const qLower = (query || '').toLowerCase().trim();
+    const extFilter = (extension || '').toLowerCase().replace(/^\./, '').trim();
+    const minSize = Number(minBytes) || 0;
+
+    if (!qLower && !extFilter && minSize === 0) {
+      return JSON.parse(JSON.stringify(rootNode));
+    }
+
+    const filterNode = (node) => {
+      if (!node.isDirectory) {
+        const matchesQuery = !qLower || node.name.toLowerCase().includes(qLower) || node.path.toLowerCase().includes(qLower);
+        const matchesExt = !extFilter || (node.extension && node.extension.toLowerCase() === extFilter) || node.name.toLowerCase().endsWith('.' + extFilter);
+        const matchesSize = node.sizeBytes >= minSize;
+        return (matchesQuery && matchesExt && matchesSize) ? { ...node } : null;
+      }
+
+      const matchingChildren = [];
+      if (node.children) {
+        for (const child of node.children) {
+          const res = filterNode(child);
+          if (res) {
+            matchingChildren.push(res);
+          }
+        }
+      }
+
+      const folderMatchesQuery = !qLower || node.name.toLowerCase().includes(qLower) || node.path.toLowerCase().includes(qLower);
+
+      if (matchingChildren.length > 0 || (folderMatchesQuery && !extFilter && minSize === 0)) {
+        return {
+          ...node,
+          children: matchingChildren
+        };
+      }
+      return null;
+    };
+
+    return filterNode(rootNode);
+  }
+}
+
+export function syncTreeAfterDeletion(rootNode, deletedPath, bytesFreed, itemsDeleted) {
+  if (!rootNode || !deletedPath) return rootNode;
+  const targetNorm = deletedPath.replace(/\//g, '\\').toLowerCase();
+
+  const updateSubtree = (node) => {
+    const nodeNorm = node.path.replace(/\//g, '\\').toLowerCase();
+    if (nodeNorm === targetNorm) {
+      return { removed: true, bytes: node.sizeBytes, files: node.fileCount || 1, folders: node.folderCount || 0 };
+    }
+
+    if (node.children && node.children.length > 0) {
+      const newChildren = [];
+      let freedInChild = 0;
+      let itemsInChild = 0;
+
+      for (const child of node.children) {
+        const childNorm = child.path.replace(/\//g, '\\').toLowerCase();
+        if (childNorm === targetNorm) {
+          freedInChild += child.sizeBytes;
+          itemsInChild += (child.isDirectory ? ((child.fileCount || 0) + (child.folderCount || 0) + 1) : 1);
+        } else {
+          const subResult = updateSubtree(child);
+          if (subResult && subResult.freed) {
+            freedInChild += subResult.freed;
+            itemsInChild += subResult.items;
+          }
+          newChildren.push(child);
+        }
+      }
+
+      if (freedInChild > 0 || itemsInChild > 0) {
+        node.sizeBytes = Math.max(0, node.sizeBytes - freedInChild);
+        node.fileCount = Math.max(0, (node.fileCount || 0) - itemsInChild);
+        node.children = newChildren;
+
+        for (const child of node.children) {
+          child.percentageOfParent = node.sizeBytes > 0 ? Number(((child.sizeBytes / node.sizeBytes) * 100).toFixed(2)) : 0;
+        }
+        return { freed: freedInChild, items: itemsInChild };
+      }
+    }
+    return null;
+  };
+
+  updateSubtree(rootNode);
+
+  const total = rootNode.sizeBytes;
+  const recomputeRootPercentage = (node) => {
+    node.percentageOfRoot = total > 0 ? Number(((node.sizeBytes / total) * 100).toFixed(2)) : 0;
+    if (node.children) {
+      for (const child of node.children) {
+        recomputeRootPercentage(child);
+      }
+    }
+  };
+  recomputeRootPercentage(rootNode);
+
+  return rootNode;
+}
+
 // --- 9. Mock IPC Simulator for v1.3.0 Architecture ---
 export class MockIPC {
   constructor(isElevated = true) {
@@ -1041,6 +1843,11 @@ export class MockIPC {
     this.memoryPurger = new NativeMemoryPurgerSimulator();
     this.networkFirewall = new NetworkFirewallSimulator();
     this.hardwareTelemetry = new HardwareTelemetrySimulator();
+    this.vfs = new VirtualFilesystemSimulator();
+    this.diskAnalyzer = new DiskAnalyzerEngineSimulator(this.vfs);
+    this.diskDeletion = new DiskDeletionEngineSimulator(this.vfs);
+    this.explorerInvocations = [];
+    this.clipboardContent = '';
     this.setupDefaultHandlers();
   }
 
@@ -1224,6 +2031,52 @@ export class MockIPC {
     this.registerHandler('activate_ultimate_performance_power_plan', async () => {
       return this.hardwareTelemetry.enableUltimatePerformance();
     });
+
+    // Subsystem 5: Disk Space Analyzer & Filesystem Tree Explorer
+    this.registerHandler('get_disk_drives', async () => {
+      return this.vfs.getDrives();
+    });
+
+    this.registerHandler('scan_disk_space', async ({ target_path, max_depth } = {}) => {
+      this.diskAnalyzer.isCancelled = false;
+      return this.diskAnalyzer.scan(target_path, { maxDepth: max_depth, ipc: this });
+    });
+
+    this.registerHandler('cancel_disk_scan', async () => {
+      return { cancelled: this.diskAnalyzer.cancelScan() };
+    });
+
+    this.registerHandler('delete_filesystem_item', async ({ path, permanent } = {}) => {
+      return this.diskDeletion.deleteItem(path, { permanent: !!permanent, dryRun: this.isDryRun || false });
+    });
+
+    this.registerHandler('delete_filesystem_items', async ({ paths, permanent } = {}) => {
+      return this.diskDeletion.deleteItems(paths || [], { permanent: !!permanent, dryRun: this.isDryRun || false });
+    });
+
+    this.registerHandler('check_path_protection', async ({ path } = {}) => {
+      return this.diskDeletion.checkPathProtection(path);
+    });
+
+    this.registerHandler('open_path_in_explorer', async ({ path } = {}) => {
+      this.explorerInvocations.push(path);
+      return { launched: true, path, command: 'explorer.exe' };
+    });
+
+    this.registerHandler('open_in_file_explorer', async ({ path } = {}) => {
+      this.explorerInvocations.push(path);
+      return { launched: true, path, command: 'explorer.exe' };
+    });
+
+    this.registerHandler('copy_path_to_clipboard', async ({ path } = {}) => {
+      this.clipboardContent = path;
+      return { copied: true, content: path };
+    });
+
+    this.registerHandler('copy_to_clipboard', async ({ text } = {}) => {
+      this.clipboardContent = text;
+      return { copied: true, content: text };
+    });
   }
 
   registerHandler(command, handler) {
@@ -1313,6 +2166,22 @@ export class AppStateSimulator {
         storageDevices: [],
         batteryAnalytics: null,
         activePowerScheme: '381b4222-f694-41f0-9685-ff5bb260df2e'
+      },
+      storageAnalyzer: {
+        drives: [],
+        selectedDrive: 'C:\\',
+        scanResult: null,
+        isScanning: false,
+        selectedNode: null,
+        expandedNodes: new Set(),
+        searchFilter: '',
+        extensionFilter: '',
+        minSizeFilter: 0,
+        deletionModal: {
+          isOpen: false,
+          targetItem: null,
+          deletionMode: 'recycle_bin'
+        }
       },
       terminalLogs: [],
       currentLanguage: 'en'

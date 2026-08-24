@@ -93,6 +93,7 @@ export * from './gaming';
 export * from './smartRam';
 export * from './networkShield';
 export * from './hardwareHealth';
+export * from './diskAnalyzer';
 
 export type TabType =
   | 'dashboard'

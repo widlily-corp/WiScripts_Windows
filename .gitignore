@@ -32,5 +32,6 @@ yarn-error.log*
 # Scratch & Temporary Folders
 scratch/
 .agents/
+.ctxcut/
 .DS_Store
 Thumbs.db

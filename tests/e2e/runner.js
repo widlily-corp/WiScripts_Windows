@@ -11,20 +11,22 @@ import { buildTier1Suite } from './tier1_feature_coverage.test.js';
 import { buildTier2Suite } from './tier2_boundary_edge.test.js';
 import { buildTier3Suite } from './tier3_cross_feature.test.js';
 import { buildTier4Suite } from './tier4_real_world.test.js';
+import { buildDiskSpaceAnalyzerSuite } from './disk_space_analyzer.test.js';
 
 export async function runAllE2ETests() {
   console.log(`================================================================`);
-  console.log(` WiScripts Windows v1.3.0 — Comprehensive E2E Test Runner`);
+  console.log(` WiScripts Windows v1.3.0/v1.4.0 — Comprehensive E2E Test Runner`);
   console.log(` Date: ${new Date().toISOString()}`);
   console.log(` Architecture: Rust Tauri v2 + React 18 + TypeScript + Refined Minimal`);
-  console.log(` Subsystems: Gaming Latency, Smart RAM, Network Shield, Hardware Health`);
+  console.log(` Subsystems: Gaming, RAM, Network, Hardware, Disk Space Analyzer`);
   console.log(`================================================================\n`);
 
   const suites = [
     buildTier1Suite(),
     buildTier2Suite(),
     buildTier3Suite(),
-    buildTier4Suite()
+    buildTier4Suite(),
+    buildDiskSpaceAnalyzerSuite()
   ];
 
   let grandTotal = 0;

@@ -22,7 +22,9 @@ import {
   CheckSquare,
   Square,
   ShieldAlert,
+  PieChart,
 } from 'lucide-react';
+import { DiskSpaceAnalyzerView } from './DiskSpaceAnalyzer/DiskSpaceAnalyzerView';
 import { getErrorMessage } from '../utils';
 
 function formatBytes(bytes: number): string {
@@ -45,7 +47,7 @@ export function StorageUtilities() {
   const addToast = useAppStore((s) => s.addToast);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
 
-  const [activeTab, setActiveTab] = useState<'duplicates' | 'large'>('duplicates');
+  const [activeTab, setActiveTab] = useState<'analyzer' | 'duplicates' | 'large'>('analyzer');
 
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -248,47 +250,65 @@ export function StorageUtilities() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {activeTab === 'duplicates' ? (
-              <button
-                type="button"
-                onClick={handleScanDuplicates}
-                disabled={isScanning || isDeleting}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanForDuplicates')}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleScanLargeFiles}
-                disabled={isScanning || isDeleting}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanLargeFiles')}</span>
-              </button>
-            )}
+          {activeTab !== 'analyzer' && (
+            <div className="flex items-center gap-2">
+              {activeTab === 'duplicates' ? (
+                <button
+                  type="button"
+                  onClick={handleScanDuplicates}
+                  disabled={isScanning || isDeleting}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                  <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanForDuplicates')}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleScanLargeFiles}
+                  disabled={isScanning || isDeleting}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-brand text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+                  <span>{isScanning ? t('storageUtilities.scanning') : t('storageUtilities.scanLargeFiles')}</span>
+                </button>
+              )}
 
-            <button
-              type="button"
-              onClick={() => setShowConfirmModal(true)}
-              disabled={selectedPaths.size === 0 || isScanning || isDeleting}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-status-error text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>
-                {isDeleting
-                  ? t('storageUtilities.deleting')
-                  : t('storageUtilities.deleteSelected', { count: selectedPaths.size })}
-              </span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(true)}
+                disabled={selectedPaths.size === 0 || isScanning || isDeleting}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-[6px] bg-status-error text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>
+                  {isDeleting
+                    ? t('storageUtilities.deleting')
+                    : t('storageUtilities.deleteSelected', { count: selectedPaths.size })}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tab Switcher */}
         <div className="flex items-center gap-2 border-t border-border-subtle pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('analyzer');
+              setSelectedPaths(new Set());
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
+              activeTab === 'analyzer'
+                ? 'bg-surface-active text-brand border border-border-focus/40'
+                : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+            }`}
+          >
+            <PieChart className="h-4 w-4" />
+            <span>{t('diskAnalyzer.tabTitle')}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -324,7 +344,9 @@ export function StorageUtilities() {
       </div>
 
       {/* Main Content Body */}
-      {activeTab === 'duplicates' ? (
+      {activeTab === 'analyzer' ? (
+        <DiskSpaceAnalyzerView />
+      ) : activeTab === 'duplicates' ? (
         <div className="space-y-4">
           {duplicateGroups ? (
             duplicateGroups.length > 0 ? (

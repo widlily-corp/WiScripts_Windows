@@ -27,7 +27,7 @@ export function buildStaticAnalysisSuite() {
     assert.equal(report.manifest.scripts.length, 45, 'Manifest catalogs exactly 45 scripts');
     assert.match(report.manifest.schemaVersion, /^\d+\.\d+\.\d+$/, 'schemaVersion is semver');
     assert.match(report.manifest.version, /^\d+\.\d+\.\d+$/, 'version is semver');
-    assert.equal(report.manifest.version, '1.6.0', 'Manifest version is 1.6.0');
+    assert.equal(report.manifest.version, '1.6.1', 'Manifest version is 1.6.1');
     assert.ok(report.manifest.repositoryUrl.startsWith('https://'), 'repositoryUrl is https');
     assert.ok(report.manifest.rawBaseUrl.startsWith('https://'), 'rawBaseUrl is https');
   });

@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.0 Production Release — Automated CommonJS E2E Test Suite Runner
+ * WiScripts Windows v1.6.0 — Automated CommonJS E2E Test Suite Runner
  * Runnable via: node tests/e2e/run_all_e2e.cjs
  * Integrates Tiers 1 through 4 with diagnostic reporting and exit codes.
  */

@@ -22,7 +22,7 @@ pub mod storage;
 pub use self::storage::*;
 pub use crate::script_runner::{
     cancel_running_script, execute_custom_script, get_cached_scripts_library, read_library_script,
-    sync_scripts_library,
+    run_script_elevated, sync_scripts_library,
 };
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -41,7 +41,7 @@ pub struct SystemInfo {
     pub telemetry_status: String,
 }
 
-fn check_is_elevated() -> bool {
+pub fn check_is_elevated() -> bool {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::Foundation::HANDLE;
@@ -74,6 +74,12 @@ fn check_is_elevated() -> bool {
     {
         false
     }
+}
+
+/// Lightweight Tauri IPC command querying elevation state
+#[tauri::command]
+pub fn is_elevated() -> bool {
+    check_is_elevated()
 }
 
 fn probe_telemetry_status() -> String {

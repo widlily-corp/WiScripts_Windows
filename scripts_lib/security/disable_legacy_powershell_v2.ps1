@@ -2,7 +2,8 @@
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    throw "Disabling Windows optional features requires Administrator privileges. Please run PowerShell as Administrator."
+    Write-Host "[ERROR] This script requires Administrator privileges. Please run as Administrator."
+    exit 1
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan

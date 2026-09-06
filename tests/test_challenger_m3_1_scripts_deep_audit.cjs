@@ -1,8 +1,8 @@
 /**
  * CHALLENGER 1 (M3): Deep Script Library Audit
  * Verifies:
- * 1. All 27 scripts in scripts_lib/ match SHA-256 in manifest.json
- * 2. All 27 scripts start with valid param() header
+ * 1. All 45 scripts in scripts_lib/ match SHA-256 in manifest.json
+ * 2. All 45 scripts start with valid param() header
  * 3. Zero non-ASCII characters inside <# ... #> block comments
  * 4. PowerShell 5.1 AST syntax validation on each script
  * 5. UTF-8 with BOM presence for Cyrillic / non-ASCII characters outside block comments
@@ -40,7 +40,7 @@ function assert(condition, message) {
 }
 
 // 1. Script Count & Uniqueness
-assert(manifest.scripts.length === 40, `Manifest contains exactly 40 scripts (got ${manifest.scripts.length})`);
+assert(manifest.scripts.length === 45, `Manifest contains exactly 45 scripts (got ${manifest.scripts.length})`);
 const scriptIds = new Set();
 const scriptPaths = new Set();
 
@@ -63,7 +63,7 @@ function getPs1Files(dir) {
 }
 
 const onDiskPs1 = getPs1Files(scriptsLibDir);
-assert(onDiskPs1.length === 40, `Physical scripts_lib directory contains exactly 40 .ps1 files (got ${onDiskPs1.length})`);
+assert(onDiskPs1.length === 45, `Physical scripts_lib directory contains exactly 45 .ps1 files (got ${onDiskPs1.length})`);
 
 console.log('\n--- SECTION 1: SHA-256 Cryptographic & Path Verification ---');
 for (const script of manifest.scripts) {
@@ -144,5 +144,5 @@ if (failed > 0) {
   console.error(`VERDICT: FAILED with ${failed} issues`);
   process.exit(1);
 } else {
-  console.log('🎉 VERDICT: SUCCESS — All 40 scripts passed SHA-256, param(), ASCII comment, and AST checks.');
+  console.log('🎉 VERDICT: SUCCESS — All 45 scripts passed SHA-256, param(), ASCII comment, and AST checks.');
 }

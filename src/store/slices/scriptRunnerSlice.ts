@@ -24,6 +24,82 @@ export interface ScriptOutputLinePayload {
   stream: 'stdout' | 'stderr';
 }
 
+/**
+ * Extracts the top-level param(...) header block from a PowerShell script,
+ * including any preceding comments (<# ... #>, #) or attributes ([CmdletBinding()]),
+ * properly tracking nested parentheses within parameter attributes and default values.
+ */
+function extractParamBlockHeader(code: string): string | null {
+  const clean = code.replace(/^\uFEFF/, '');
+  const paramRegex = /(?:^|\s)(param\s*\()/i;
+  const match = paramRegex.exec(clean);
+  if (!match) {
+    return null;
+  }
+
+  const startIndex = match.index + (match[0].length - match[1].length);
+  const openParenIndex = clean.indexOf('(', startIndex);
+  if (openParenIndex === -1) {
+    return null;
+  }
+
+  let depth = 1;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = openParenIndex + 1; i < clean.length; i++) {
+    const char = clean[i];
+    const prev = clean[i - 1];
+
+    if (char === "'" && !inDoubleQuote) {
+      if (inSingleQuote && clean[i + 1] === "'") {
+        i++; // skip escaped single quote ''
+      } else {
+        inSingleQuote = !inSingleQuote;
+      }
+      continue;
+    }
+    if (char === '"' && !inSingleQuote) {
+      if (prev !== '`') {
+        inDoubleQuote = !inDoubleQuote;
+      }
+      continue;
+    }
+    if (inSingleQuote || inDoubleQuote) {
+      continue;
+    }
+
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+      if (depth === 0) {
+        // Return everything from script start (after BOM) up to end of param(...)
+        return clean.substring(0, i + 1).trim();
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Synthesizes a clean PowerShell param(...) block for scripts that lack one,
+ * ensuring root AST ParamBlock preservation.
+ */
+function synthesizeParamBlock(parameters: ScriptParameter[]): string {
+  const paramDecls = parameters.map((p) => {
+    if (p.type === 'boolean') {
+      return `  [switch]$${p.name}`;
+    } else if (p.type === 'number') {
+      return `  [double]$${p.name}`;
+    } else {
+      return `  [string]$${p.name}`;
+    }
+  });
+  return `param(\n${paramDecls.join(',\n')}\n)`;
+}
+
 export function formatScriptWithParameters(
   rawContent: string,
   parameters: ScriptParameter[],
@@ -33,6 +109,10 @@ export function formatScriptWithParameters(
     return rawContent;
   }
 
+  // 1. Strip UTF-8 BOM if present at start
+  const cleanContent = rawContent.replace(/^\uFEFF/, '').trim();
+
+  // 2. Build PowerShell CLI arguments with strict typing and injection protection
   const args: string[] = [];
   for (const param of parameters) {
     const val = values[param.name];
@@ -41,24 +121,60 @@ export function formatScriptWithParameters(
     }
 
     if (param.type === 'boolean') {
-      args.push(`-${param.name}:${Boolean(val)}`);
+      // Use -$name:$true or -$name:$false (prevents ParameterBindingArgumentTransformationException)
+      const boolToken = Boolean(val) ? '$true' : '$false';
+      args.push(`-${param.name}:${boolToken}`);
     } else if (param.type === 'number') {
       const numVal = Number(val);
       if (!Number.isNaN(numVal) && Number.isFinite(numVal)) {
         args.push(`-${param.name} ${numVal}`);
       }
     } else {
+      // Escape single quotes for PowerShell single-quoted literal: ' -> ''
       const strVal = String(val).replace(/'/g, "''");
       args.push(`-${param.name} '${strVal}'`);
     }
   }
 
   if (args.length === 0) {
-    return rawContent;
+    return cleanContent;
   }
 
-  const trimmed = rawContent.trim();
-  return `& {\n${trimmed}\n} ${args.join(' ')}\n`;
+  // 3. Preserve root AST ParamBlock to ensure PowerShell 5.1/7 AST and static analyzer compliance
+  const existingHeader = extractParamBlockHeader(cleanContent);
+  const rootParamBlock = existingHeader || synthesizeParamBlock(parameters);
+
+  return `${rootParamBlock}\n\n& {\n${cleanContent}\n} ${args.join(' ')}\n`;
+}
+
+export type ExecutionStatus = 'success' | 'failed' | 'cancelled';
+
+export interface ScriptExecutionRecord {
+  id: string;
+  scriptId?: string;
+  scriptName: string;
+  scriptType: 'ps1' | 'bat' | 'cmd';
+  timestamp: string; // ISO 8601
+  durationMs: number;
+  exitCode: number;
+  status: ExecutionStatus;
+  elevated: boolean;
+  isDryRun: boolean;
+  rawContent: string;
+  parameters?: Record<string, ScriptParameterValue>;
+  logLines: ScriptOutputLine[];
+}
+
+export const MAX_HISTORY_ENTRIES = 50;
+export const MAX_HISTORY_LOG_LINES = 300;
+
+export interface ExecuteScriptOptions {
+  runAsAdmin?: boolean;
+  dryRun?: boolean;
+  timeoutSeconds?: number;
+  scriptId?: string;
+  scriptName?: string;
+  parameters?: Record<string, ScriptParameterValue>;
 }
 
 export interface ScriptRunnerSlice {
@@ -67,17 +183,24 @@ export interface ScriptRunnerSlice {
   uploadedFileName: string | null;
   outputLogs: ScriptOutputLine[];
   isExecutingScript: boolean;
+  isElevatedRunning: boolean;
   activeExecutionId: string | null;
   isCancellingScript: boolean;
   executionStartTime: number | null;
   unlistenScriptOutput: UnlistenFn | null;
+
+  // Editor Elevation State
+  editorRunAsAdmin: boolean;
+  setEditorRunAsAdmin: (runAsAdmin: boolean) => void;
+  defaultRunAsAdmin?: boolean;
+  setDefaultRunAsAdmin?: (enabled: boolean) => void;
 
   // Online Library State
   libraryManifest: ScriptsLibraryManifest | null;
   isLoadingLibrary: boolean;
   libraryError: string | null;
   lastSyncTimestamp: string | null;
-  activeRunnerTab: 'editor' | 'library';
+  activeRunnerTab: 'editor' | 'library' | 'history';
   librarySelectedCategory: ScriptCategory;
   librarySearchQuery: string;
   librarySelectedRisk: 'all' | ScriptRiskLevel;
@@ -89,6 +212,22 @@ export interface ScriptRunnerSlice {
   parameterDialogScript: ScriptManifestEntry | null;
   parameterValues: Record<string, ScriptParameterValue>;
   parameterValidationErrors: Record<string, string>;
+  parameterRunAsAdmin: boolean;
+  setParameterRunAsAdmin: (runAsAdmin: boolean) => void;
+
+  // Execution History State & Actions
+  executionHistory: ScriptExecutionRecord[];
+  addHistoryEntry: (entry: ScriptExecutionRecord) => void;
+  clearHistory: () => void;
+  deleteHistoryEntry: (id: string) => void;
+  rerunHistoryEntry: (record: ScriptExecutionRecord) => Promise<void>;
+
+  // Impact Simulator State & Actions
+  isImpactSimulatorOpen: boolean;
+  impactSimulatorScript: ScriptManifestEntry | null;
+  impactSimulatorContent: string | null;
+  openImpactSimulator: (script?: ScriptManifestEntry, customContent?: string) => Promise<void>;
+  closeImpactSimulator: () => void;
 
   // Actions
   setScriptContent: (content: string) => void;
@@ -96,14 +235,19 @@ export interface ScriptRunnerSlice {
   setUploadedFileName: (name: string | null) => void;
   addOutputLine: (payload: { line: string; stream: 'stdout' | 'stderr' }) => void;
   clearOutputLogs: () => void;
-  executeScript: (customContent?: string, customType?: 'ps1' | 'bat' | 'cmd') => Promise<CommandOutput | null>;
+  executeScript: (
+    customContent?: string,
+    customType?: 'ps1' | 'bat' | 'cmd',
+    runAsAdminOrOptions?: boolean | ExecuteScriptOptions
+  ) => Promise<CommandOutput | null>;
   cancelRunningScript: () => Promise<void>;
+  cancelCurrentScript: () => Promise<void>;
   downloadOutputLog: () => void;
   setupScriptOutputListener: () => Promise<UnlistenFn>;
   cleanupScriptOutputListener: () => void;
 
   // Library Actions
-  setActiveRunnerTab: (tab: 'editor' | 'library') => void;
+  setActiveRunnerTab: (tab: 'editor' | 'library' | 'history') => void;
   setLibrarySelectedCategory: (category: ScriptCategory) => void;
   setLibrarySearchQuery: (query: string) => void;
   setLibrarySelectedRisk: (risk: 'all' | ScriptRiskLevel) => void;
@@ -111,15 +255,22 @@ export interface ScriptRunnerSlice {
   openScriptPreview: (script: ScriptManifestEntry) => Promise<void>;
   closeScriptPreview: () => void;
   loadScriptToEditor: (script: ScriptManifestEntry) => Promise<void>;
-  runLibraryScriptDirectly: (script: ScriptManifestEntry) => Promise<void>;
+  runLibraryScriptDirectly: (
+    script: ScriptManifestEntry,
+    runAsAdminOrOptions?: boolean | ExecuteScriptOptions
+  ) => Promise<void>;
 
   // Parameter Dialog Actions
-  openParameterDialog: (script: ScriptManifestEntry) => void;
+  openParameterDialog: (script: ScriptManifestEntry, initialRunAsAdmin?: boolean) => void;
   closeParameterDialog: () => void;
   setParameterValue: (paramName: string, value: ScriptParameterValue) => void;
   resetParameterValues: () => void;
   validateParameters: () => boolean;
-  executeScriptWithParameters: (script: ScriptManifestEntry, values?: Record<string, ScriptParameterValue>) => Promise<CommandOutput | null>;
+  executeScriptWithParameters: (
+    script: ScriptManifestEntry,
+    values?: Record<string, ScriptParameterValue>,
+    runAsAdminOrOptions?: boolean | ExecuteScriptOptions
+  ) => Promise<CommandOutput | null>;
 }
 
 const MAX_SCRIPT_LOG_LINES = 2000;
@@ -138,10 +289,17 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   uploadedFileName: null,
   outputLogs: [],
   isExecutingScript: false,
+  isElevatedRunning: false,
   activeExecutionId: null,
   isCancellingScript: false,
   executionStartTime: null,
   unlistenScriptOutput: null,
+
+  // Editor Elevation State
+  editorRunAsAdmin: false,
+  setEditorRunAsAdmin: (runAsAdmin) => set({ editorRunAsAdmin: runAsAdmin }),
+  defaultRunAsAdmin: false,
+  setDefaultRunAsAdmin: (enabled) => set({ defaultRunAsAdmin: enabled, editorRunAsAdmin: enabled }),
 
   // Online Library initial state
   libraryManifest: null,
@@ -156,10 +314,85 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   previewContent: null,
   isLoadingPreview: false,
 
+  // Execution History initial state
+  executionHistory: [],
+
+  // Impact Simulator initial state
+  isImpactSimulatorOpen: false,
+  impactSimulatorScript: null,
+  impactSimulatorContent: null,
+
   // Parameter Configuration Dialog State
   parameterDialogScript: null,
   parameterValues: {},
   parameterValidationErrors: {},
+  parameterRunAsAdmin: false,
+  setParameterRunAsAdmin: (runAsAdmin) => set({ parameterRunAsAdmin: runAsAdmin }),
+
+  // Execution History Actions
+  addHistoryEntry: (entry) => {
+    const boundedEntry: ScriptExecutionRecord = {
+      ...entry,
+      logLines: (entry.logLines || []).slice(-MAX_HISTORY_LOG_LINES),
+    };
+    set((state) => ({
+      executionHistory: [boundedEntry, ...(state.executionHistory || [])].slice(0, MAX_HISTORY_ENTRIES),
+    }));
+  },
+  clearHistory: () => set({ executionHistory: [] }),
+  deleteHistoryEntry: (id) =>
+    set((state) => ({
+      executionHistory: (state.executionHistory || []).filter((e) => e.id !== id),
+    })),
+  rerunHistoryEntry: async (record) => {
+    set({
+      scriptContent: record.rawContent,
+      scriptType: record.scriptType,
+      uploadedFileName: record.scriptName,
+      activeRunnerTab: 'editor',
+      editorRunAsAdmin: record.elevated,
+    });
+    await get().executeScript(record.rawContent, record.scriptType, {
+      runAsAdmin: record.elevated,
+      dryRun: record.isDryRun,
+      scriptId: record.scriptId,
+      scriptName: record.scriptName,
+      parameters: record.parameters,
+    });
+  },
+
+  // Impact Simulator Actions
+  openImpactSimulator: async (script, customContent) => {
+    if (script && !customContent) {
+      try {
+        const code = await invoke<string>('read_library_script', { scriptId: script.id });
+        set({
+          impactSimulatorScript: script,
+          impactSimulatorContent: code,
+          isImpactSimulatorOpen: true,
+        });
+      } catch (err) {
+        get().addToast({
+          type: 'error',
+          title: 'Impact Simulator Error',
+          message: `Could not load script code: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    } else {
+      set({
+        impactSimulatorScript: script || null,
+        impactSimulatorContent: customContent || get().scriptContent,
+        isImpactSimulatorOpen: true,
+      });
+    }
+  },
+  closeImpactSimulator: () => {
+    set({
+      isImpactSimulatorOpen: false,
+      impactSimulatorScript: null,
+      impactSimulatorContent: null,
+    });
+  },
 
   setScriptContent: (content) => set({ scriptContent: content }),
   setScriptType: (type) => set({ scriptType: type }),
@@ -209,10 +442,24 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     }
   },
 
-  executeScript: async (customContent, customType) => {
-    const { dryRunMode, addLog, addToast } = get();
+  executeScript: async (customContent, customType, runAsAdminOrOptions) => {
+    const { dryRunMode, addLog, addToast, editorRunAsAdmin } = get();
     const content = customContent ?? get().scriptContent;
     const type = customType ?? get().scriptType;
+
+    const shouldElevate = typeof runAsAdminOrOptions === 'boolean'
+      ? runAsAdminOrOptions
+      : runAsAdminOrOptions?.runAsAdmin !== undefined
+        ? Boolean(runAsAdminOrOptions.runAsAdmin)
+        : Boolean(editorRunAsAdmin);
+
+    const isDryRun = typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.dryRun !== undefined
+      ? runAsAdminOrOptions.dryRun
+      : dryRunMode;
+
+    const timeoutSeconds = typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.timeoutSeconds !== undefined
+      ? runAsAdminOrOptions.timeoutSeconds
+      : 300;
 
     if (!content || !content.trim()) {
       addToast({
@@ -227,6 +474,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     set({
       isExecutingScript: true,
+      isElevatedRunning: shouldElevate,
       activeExecutionId: executionId,
       executionStartTime: Date.now(),
       isCancellingScript: false,
@@ -237,24 +485,72 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     addLog({
       level: 'cmd',
-      message: `Executing script (${type}, id: ${executionId}, dryRun: ${dryRunMode})`,
+      message: `Executing script (${type}, id: ${executionId}, dryRun: ${isDryRun}, elevated: ${shouldElevate})`,
     });
 
     try {
       const output = await invoke<CommandOutput>('execute_custom_script', {
         scriptContent: content,
         scriptType: type,
-        dryRun: dryRunMode,
+        dryRun: isDryRun,
         executionId,
+        timeoutSeconds,
+        elevate: shouldElevate,
       });
 
       const exitCode = output.exitCode ?? output.exit_code ?? 0;
+      const durationMs = Date.now() - (get().executionStartTime || Date.now());
+      const capturedLogs = get().outputLogs.slice(-MAX_HISTORY_LOG_LINES);
+      const executionStatus: ExecutionStatus =
+        exitCode === 0 ? 'success' : exitCode === 1223 ? 'cancelled' : 'failed';
+
+      const scriptName =
+        typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.scriptName
+          ? runAsAdminOrOptions.scriptName
+          : get().uploadedFileName || 'Custom Script';
+
+      const scriptId =
+        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.scriptId : undefined;
+
+      const parameters =
+        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.parameters : undefined;
+
+      get().addHistoryEntry({
+        id: executionId,
+        scriptId,
+        scriptName,
+        scriptType: type,
+        timestamp: new Date().toISOString(),
+        durationMs,
+        exitCode,
+        status: executionStatus,
+        elevated: shouldElevate,
+        isDryRun,
+        rawContent: content,
+        parameters,
+        logLines: capturedLogs,
+      });
 
       if (exitCode === 0) {
         addToast({
           type: 'success',
           title: 'Execution Complete',
           message: `Script finished successfully (exit code ${exitCode}).`,
+        });
+      } else if (exitCode === 1223) {
+        // Win32 ERROR_CANCELLED (1223) returned when user dismisses UAC prompt
+        addLog({
+          level: 'warn',
+          message: `UAC elevation prompt was cancelled by the user for script '${executionId}'.`,
+        });
+        addToast({
+          type: 'warning',
+          title: 'UAC Elevation Cancelled',
+          message: 'The Windows UAC administrator elevation prompt was declined or cancelled.',
+        });
+        get().addOutputLine({
+          line: '[UAC] Administrator elevation prompt was declined or cancelled by the user.',
+          stream: 'stderr',
         });
       } else {
         addToast({
@@ -267,22 +563,97 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       return output;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      const isCancelled = errorMsg.toLowerCase().includes('cancelled');
+      const lowerError = errorMsg.toLowerCase();
 
-      addLog({
-        level: isCancelled ? 'warn' : 'error',
-        message: isCancelled
-          ? `Script execution was cancelled: ${errorMsg}`
-          : `Script execution failed: ${errorMsg}`,
+      // Differentiate UAC cancellation (single 'l' / double 'l' / code 1223 / Russian locale) from crashes
+      const isUacDecline =
+        lowerError.includes('canceled by the user') ||
+        lowerError.includes('cancelled by the user') ||
+        lowerError.includes('declined by user') ||
+        lowerError.includes('declined by the user') ||
+        lowerError.includes('операция отменена пользователем') ||
+        lowerError.includes('отменена пользователем') ||
+        lowerError.includes('отменено пользователем') ||
+        lowerError.includes('error_cancelled') ||
+        lowerError.includes('1223') ||
+        lowerError.includes('0x800704c7') ||
+        (lowerError.includes('uac') && (lowerError.includes('cancel') || lowerError.includes('decline')));
+
+      const isProcessCancelled =
+        lowerError.includes('cancelled') ||
+        lowerError.includes('canceled') ||
+        lowerError.includes('отменен') ||
+        lowerError.includes('отменена') ||
+        lowerError.includes('отменено') ||
+        isUacDecline;
+
+      const durationMs = Date.now() - (get().executionStartTime || Date.now());
+      const capturedLogs = get().outputLogs.slice(-MAX_HISTORY_LOG_LINES);
+      const executionStatus: ExecutionStatus =
+        isUacDecline || isProcessCancelled ? 'cancelled' : 'failed';
+      const exitCode = isUacDecline ? 1223 : isProcessCancelled ? -1 : 1;
+
+      const scriptName =
+        typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.scriptName
+          ? runAsAdminOrOptions.scriptName
+          : get().uploadedFileName || 'Custom Script';
+
+      const scriptId =
+        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.scriptId : undefined;
+
+      const parameters =
+        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.parameters : undefined;
+
+      get().addHistoryEntry({
+        id: executionId,
+        scriptId,
+        scriptName,
+        scriptType: type,
+        timestamp: new Date().toISOString(),
+        durationMs,
+        exitCode,
+        status: executionStatus,
+        elevated: shouldElevate,
+        isDryRun,
+        rawContent: content,
+        parameters,
+        logLines: capturedLogs,
       });
 
-      addToast({
-        type: isCancelled ? 'warning' : 'error',
-        title: isCancelled ? 'Execution Cancelled' : 'Script Execution Error',
-        message: errorMsg,
-      });
-
-      if (!isCancelled) {
+      if (isUacDecline) {
+        addLog({
+          level: 'warn',
+          message: `UAC elevation prompt was cancelled by user: ${errorMsg}`,
+        });
+        addToast({
+          type: 'warning',
+          title: 'UAC Elevation Cancelled',
+          message: 'The Windows UAC administrator elevation prompt was declined or cancelled.',
+        });
+        get().addOutputLine({
+          line: '[UAC] Administrator elevation prompt was declined or cancelled by the user.',
+          stream: 'stderr',
+        });
+      } else if (isProcessCancelled) {
+        addLog({
+          level: 'warn',
+          message: `Script execution was cancelled: ${errorMsg}`,
+        });
+        addToast({
+          type: 'warning',
+          title: 'Execution Cancelled',
+          message: errorMsg,
+        });
+      } else {
+        addLog({
+          level: 'error',
+          message: `Script execution failed: ${errorMsg}`,
+        });
+        addToast({
+          type: 'error',
+          title: 'Script Execution Error',
+          message: errorMsg,
+        });
         get().addOutputLine({
           line: `[ERROR] ${errorMsg}`,
           stream: 'stderr',
@@ -293,6 +664,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     } finally {
       set({
         isExecutingScript: false,
+        isElevatedRunning: false,
         activeExecutionId: null,
         executionStartTime: null,
         isCancellingScript: false,
@@ -301,7 +673,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   },
 
   cancelRunningScript: async () => {
-    const { activeExecutionId, isExecutingScript, isCancellingScript, addLog, addToast } = get();
+    const { activeExecutionId, isExecutingScript, isCancellingScript, isElevatedRunning, addLog, addToast } = get();
     if (!isExecutingScript || !activeExecutionId || isCancellingScript) {
       return;
     }
@@ -310,13 +682,15 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     addLog({
       level: 'warn',
-      message: `Requesting cancellation for script execution '${activeExecutionId}'...`,
+      message: `Requesting cancellation for ${isElevatedRunning ? 'elevated ' : ''}script execution '${activeExecutionId}'...`,
     });
 
     addToast({
       type: 'info',
       title: 'Cancelling Script',
-      message: 'Sending termination signal to process tree...',
+      message: isElevatedRunning
+        ? 'Sending cancellation signal to elevated process watcher...'
+        : 'Sending termination signal to process tree...',
     });
 
     try {
@@ -325,6 +699,10 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.warn('[ScriptRunner] cancel_running_script notice:', errorMsg);
     }
+  },
+
+  cancelCurrentScript: async () => {
+    return get().cancelRunningScript();
   },
 
   downloadOutputLog: () => {
@@ -473,9 +851,15 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     }
   },
 
-  runLibraryScriptDirectly: async (script) => {
+  runLibraryScriptDirectly: async (script, runAsAdminOrOptions) => {
+    const shouldElevate = typeof runAsAdminOrOptions === 'boolean'
+      ? runAsAdminOrOptions
+      : runAsAdminOrOptions?.runAsAdmin !== undefined
+        ? runAsAdminOrOptions.runAsAdmin
+        : Boolean(script.requiresAdmin || script.riskLevel === 'elevated' || script.riskLevel === 'critical');
+
     if (script.parameters && script.parameters.length > 0) {
-      get().openParameterDialog(script);
+      get().openParameterDialog(script, shouldElevate);
       return;
     }
 
@@ -489,13 +873,18 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         activeRunnerTab: 'editor',
         previewScript: null,
         previewContent: null,
+        editorRunAsAdmin: shouldElevate,
       });
       addToast({
         type: 'info',
         title: 'Starting Execution',
-        message: `Executing "${script.name}" with live output stream...`,
+        message: `Executing "${script.name}"${shouldElevate ? ' (Elevated)' : ''} with live output stream...`,
       });
-      await executeScript(code, 'ps1');
+      await executeScript(code, 'ps1', {
+        runAsAdmin: shouldElevate,
+        scriptId: script.id,
+        scriptName: script.name,
+      });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       addLog({
@@ -511,7 +900,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   },
 
   // Parameter Dialog Actions
-  openParameterDialog: (script) => {
+  openParameterDialog: (script, initialRunAsAdmin) => {
     const initialValues: Record<string, ScriptParameterValue> = {};
     if (script.parameters) {
       for (const param of script.parameters) {
@@ -527,10 +916,15 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       }
     }
 
+    const shouldElevate = initialRunAsAdmin !== undefined
+      ? initialRunAsAdmin
+      : Boolean(script.requiresAdmin || script.riskLevel === 'elevated' || script.riskLevel === 'critical');
+
     set({
       parameterDialogScript: script,
       parameterValues: initialValues,
       parameterValidationErrors: {},
+      parameterRunAsAdmin: shouldElevate,
     });
   },
 
@@ -539,6 +933,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       parameterDialogScript: null,
       parameterValues: {},
       parameterValidationErrors: {},
+      parameterRunAsAdmin: false,
     });
   },
 
@@ -604,14 +999,19 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     return Object.keys(errors).length === 0;
   },
 
-  executeScriptWithParameters: async (script, customValues) => {
+  executeScriptWithParameters: async (script, customValues, runAsAdminOrOptions) => {
     const isValid = get().validateParameters();
     if (!isValid) {
       return null;
     }
 
-    const { addLog, addToast, executeScript } = get();
+    const { addLog, addToast, executeScript, parameterRunAsAdmin } = get();
     const values = customValues ?? get().parameterValues;
+    const shouldElevate = typeof runAsAdminOrOptions === 'boolean'
+      ? runAsAdminOrOptions
+      : runAsAdminOrOptions?.runAsAdmin !== undefined
+        ? runAsAdminOrOptions.runAsAdmin
+        : (parameterRunAsAdmin ?? Boolean(script.requiresAdmin || script.riskLevel === 'elevated' || script.riskLevel === 'critical'));
 
     try {
       const rawCode = await invoke<string>('read_library_script', { scriptId: script.id });
@@ -627,15 +1027,21 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         parameterValidationErrors: {},
         previewScript: null,
         previewContent: null,
+        editorRunAsAdmin: shouldElevate,
       });
 
       addToast({
         type: 'info',
         title: 'Starting Execution',
-        message: `Executing "${script.name}" with custom parameters...`,
+        message: `Executing "${script.name}"${shouldElevate ? ' (Elevated)' : ''} with custom parameters...`,
       });
 
-      return await executeScript(formattedCode, 'ps1');
+      return await executeScript(formattedCode, 'ps1', {
+        runAsAdmin: shouldElevate,
+        scriptId: script.id,
+        scriptName: script.name,
+        parameters: values,
+      });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       addLog({

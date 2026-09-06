@@ -69,7 +69,7 @@ async function main() {
     assert(typeof manifest.repositoryUrl === 'string' && manifest.repositoryUrl.includes('WiScripts_Windows'), 'manifest.repositoryUrl is valid');
     assert(typeof manifest.rawBaseUrl === 'string' && manifest.rawBaseUrl.includes('raw.githubusercontent.com'), 'manifest.rawBaseUrl is valid');
     assert(Array.isArray(manifest.scripts), 'manifest.scripts is an array');
-    assert(manifest.scripts.length === 40, `manifest contains all 40 scripts (got ${manifest.scripts.length})`);
+    assert(manifest.scripts.length === 45, `manifest contains exactly 45 scripts (got ${manifest.scripts.length})`);
 
     const validCategories = new Set(['maintenance', 'network', 'security', 'performance', 'diagnostics']);
     const validRisks = new Set(['safe', 'elevated', 'critical']);

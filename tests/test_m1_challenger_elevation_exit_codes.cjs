@@ -33,10 +33,10 @@ const adminScripts = manifest.scripts.filter(s => s.requiresAdmin);
 const nonAdminScripts = manifest.scripts.filter(s => !s.requiresAdmin);
 
 console.log(`Found ${adminScripts.length} scripts requiring admin and ${nonAdminScripts.length} non-admin scripts.\n`);
-assert(adminScripts.length === 33, `Exactly 33 scripts require admin privileges (got ${adminScripts.length})`);
-assert(nonAdminScripts.length === 7, `Exactly 7 scripts do NOT require admin privileges (got ${nonAdminScripts.length})`);
+assert(adminScripts.length === 37, `Expected exactly 37 admin scripts (got ${adminScripts.length})`);
+assert(nonAdminScripts.length === 8, `Expected exactly 8 non-admin scripts (got ${nonAdminScripts.length})`);
 
-console.log('--- 1. Testing Non-Admin Simulation on All 33 Admin Scripts ---');
+console.log('--- 1. Testing Non-Admin Simulation on All 37 Admin Scripts ---');
 
 const tempDir = path.join('.agents', 'teamwork_preview_challenger_m1_2');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -88,7 +88,7 @@ for (const script of adminScripts) {
     if (fs.existsSync(tempTestFile)) fs.unlinkSync(tempTestFile);
 }
 
-console.log('\n--- 2. Testing 7 Non-Admin Scripts Run Without Admin Checks ---');
+console.log('\n--- 2. Testing 8 Non-Admin Scripts Run Without Admin Checks ---');
 
 for (const script of nonAdminScripts) {
     const scriptPath = path.join('scripts_lib', script.path.split('/').join(path.sep));

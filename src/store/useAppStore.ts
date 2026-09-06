@@ -62,6 +62,7 @@ export const useAppStore = create<AppState>()(
           selectedDrive: state.selectedDrive,
           customPath: state.customPath,
           viewMode: state.viewMode,
+          executionHistory: state.executionHistory,
         }),
       }
     )

@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.3.0 / v1.4.0 — Disk Space Analyzer & Filesystem Tree Explorer E2E Test Suite
+ * WiScripts Windows v1.6.0 — Disk Space Analyzer & Filesystem Tree Explorer E2E Test Suite
  * Comprehensive 56-test specification covering:
  * - Tier 1: Feature Coverage (20 tests)
  * - Tier 2: Boundary & Corner Cases (20 tests)

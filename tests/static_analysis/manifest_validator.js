@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.5.1 — Manifest Schema & Integrity Validator
+ * WiScripts Windows v1.6.0 — Manifest Schema & Integrity Validator
  * 
  * Validates scripts_lib/manifest.json against:
  * 1. Root JSON schema (schemaVersion, version, lastUpdated, repositoryUrl, rawBaseUrl, scripts)
@@ -254,7 +254,7 @@ export function validateManifest(options = {}) {
 // Standalone execution entrypoint
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   console.log('================================================================');
-  console.log(' WiScripts Windows v1.5.1 — Manifest Schema & Integrity Validator');
+  console.log(' WiScripts Windows v1.6.0 — Manifest Schema & Integrity Validator');
   console.log('================================================================\n');
 
   try {

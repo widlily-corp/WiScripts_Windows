@@ -31,9 +31,14 @@ import {
   Timer,
   Sliders,
   RotateCcw,
+  History,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
+import { ScriptDetailsModal } from './ScriptDetailsModal';
+import { ScriptRunnerModal } from './ScriptRunnerModal';
+import { ScriptExecutionHistoryView } from './ScriptExecutionHistoryView';
+import { ImpactSimulatorModal } from './ImpactSimulatorModal';
 import type { ScriptCategory, ScriptRiskLevel } from '../types';
 
 export function ScriptRunnerView() {
@@ -44,6 +49,9 @@ export function ScriptRunnerView() {
 
   // Store state
   const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
+  const isElevatedRunning = useAppStore((s) => s.isElevatedRunning);
+  const editorRunAsAdmin = useAppStore((s) => s.editorRunAsAdmin);
+  const setEditorRunAsAdmin = useAppStore((s) => s.setEditorRunAsAdmin);
   const scriptContent = useAppStore((s) => s.scriptContent);
   const scriptType = useAppStore((s) => s.scriptType);
   const uploadedFileName = useAppStore((s) => s.uploadedFileName);
@@ -70,6 +78,14 @@ export function ScriptRunnerView() {
   const parameterDialogScript = useAppStore((s) => s.parameterDialogScript);
   const parameterValues = useAppStore((s) => s.parameterValues);
   const parameterValidationErrors = useAppStore((s) => s.parameterValidationErrors);
+
+  // Execution History & Impact Simulator State
+  const executionHistory = useAppStore((s) => s.executionHistory || []);
+  const isImpactSimulatorOpen = useAppStore((s) => s.isImpactSimulatorOpen);
+  const impactSimulatorScript = useAppStore((s) => s.impactSimulatorScript);
+  const impactSimulatorContent = useAppStore((s) => s.impactSimulatorContent);
+  const openImpactSimulator = useAppStore((s) => s.openImpactSimulator);
+  const closeImpactSimulator = useAppStore((s) => s.closeImpactSimulator);
 
   // Actions
   const setScriptContent = useAppStore((s) => s.setScriptContent);
@@ -101,6 +117,7 @@ export function ScriptRunnerView() {
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [editorDryRun, setEditorDryRun] = useState<boolean>(false);
 
   // Timer tracking active execution
   useEffect(() => {
@@ -383,6 +400,26 @@ export function ScriptRunnerView() {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveRunnerTab('history')}
+            className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-[4px] text-xs font-medium transition-colors ${
+              activeRunnerTab === 'history'
+                ? 'bg-brand text-white shadow-xs font-semibold'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <History className="h-4 w-4" />
+            <span>{t('script_runner.tab_history', 'Execution History')}</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+                activeRunnerTab === 'history'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-surface-card border border-border text-text-secondary'
+              }`}
+            >
+              {executionHistory.length}
+            </span>
+          </button>
         </div>
 
         {activeRunnerTab === 'library' && (
@@ -504,11 +541,11 @@ export function ScriptRunnerView() {
               />
             </div>
 
-            {/* Footer Bar (File & Line Info + Execution Trigger / Cancel Trigger) */}
-            <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-text-secondary">
+            {/* Footer Bar (File & Line Info + Execution Controls Toolbar) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border text-xs text-text-secondary">
               <div className="flex items-center gap-3">
                 {uploadedFileName && (
-                  <span className="font-mono text-[11px] text-brand truncate max-w-[180px]">
+                  <span className="font-mono text-[11px] text-brand truncate max-w-[180px]" title={uploadedFileName}>
                     {uploadedFileName}
                   </span>
                 )}
@@ -517,35 +554,108 @@ export function ScriptRunnerView() {
                 </span>
               </div>
 
-              {isExecutingScript ? (
-                <button
-                  onClick={() => cancelRunningScript()}
-                  disabled={isCancellingScript}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-status-error hover:bg-status-error/90 text-white transition-colors disabled:opacity-50 shadow-sm"
-                  title={t('script_runner.cancel_tooltip', 'Terminate script process tree immediately')}
+              {/* Right: Controls & Execution Triggers */}
+              <div className="flex items-center gap-3">
+                {/* Dry-Run Toggle */}
+                <label
+                  className="inline-flex items-center gap-1.5 cursor-pointer select-none text-xs text-text-secondary hover:text-text-primary transition-colors"
+                  title={t('script_runner.dry_run_disclaimer', 'Simulates system modifications without mutating your operating system.')}
                 >
-                  {isCancellingScript ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>{t('script_runner.cancelling', 'Cancelling...')}</span>
-                    </>
+                  <input
+                    type="checkbox"
+                    checked={editorDryRun}
+                    onChange={(e) => setEditorDryRun(e.target.checked)}
+                    disabled={isExecutingScript}
+                    className="rounded border-border text-brand focus:ring-brand bg-surface-subtle h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
+                  />
+                  <span className="font-medium">{t('script_runner.dry_run', 'Dry Run')}</span>
+                </label>
+
+                {/* Run as Administrator / UAC Elevation Checkbox */}
+                <label
+                  className={`inline-flex items-center gap-1.5 cursor-pointer select-none text-xs transition-colors ${
+                    isElevated ? 'text-status-success' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                  title={
+                    isElevated
+                      ? t('script_runner.already_elevated_tooltip', 'Process is already running with administrative privileges')
+                      : t('script_runner.uac_elevation_tooltip', 'Execute script with elevated administrator privileges via Windows UAC prompt')
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={isElevated || editorRunAsAdmin}
+                    disabled={isElevated || isExecutingScript}
+                    onChange={(e) => setEditorRunAsAdmin(e.target.checked)}
+                    className="rounded border-border text-brand focus:ring-brand bg-surface-subtle h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
+                  />
+                  {isElevated ? (
+                    <ShieldCheck className="h-3.5 w-3.5 text-status-success" />
                   ) : (
-                    <>
-                      <Square className="h-4 w-4 fill-current" />
-                      <span>{t('script_runner.cancel_execution', 'Cancel Execution')}</span>
-                    </>
+                    <Shield className="h-3.5 w-3.5 text-status-warning" />
                   )}
-                </button>
-              ) : (
+                  <span className="font-medium">
+                    {t('script_runner.run_as_admin', 'Run as Administrator')}
+                  </span>
+                </label>
+
+                {/* Simulate Impact Button */}
                 <button
-                  onClick={() => executeScript()}
-                  disabled={!scriptContent.trim()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  type="button"
+                  onClick={() => openImpactSimulator(undefined, scriptContent)}
+                  disabled={!scriptContent.trim() || isExecutingScript}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] font-medium text-xs bg-surface-subtle hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border transition-colors disabled:opacity-50 shadow-xs"
+                  title={t('script_runner.simulate_impact_tooltip', 'Preview affected registry keys, services, tasks, and files before execution')}
                 >
-                  <Play className="h-4 w-4 fill-current" />
-                  <span>{t('script_runner.execute', 'Execute Script')}</span>
+                  <Sliders className="h-3.5 w-3.5" />
+                  <span>{t('script_runner.simulate_impact', 'Simulate Impact')}</span>
                 </button>
-              )}
+
+                {/* Execute or Cancel Button */}
+                {isExecutingScript ? (
+                  <button
+                    onClick={() => cancelRunningScript()}
+                    disabled={isCancellingScript}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs bg-status-error hover:bg-status-error/90 text-white transition-colors disabled:opacity-50 shadow-sm"
+                    title={t('script_runner.cancel_tooltip', 'Terminate script process tree immediately')}
+                  >
+                    {isCancellingScript ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>{t('script_runner.cancelling', 'Cancelling...')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Square className="h-4 w-4 fill-current" />
+                        <span>{t('script_runner.cancel_execution', 'Cancel Execution')}</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => executeScript(undefined, undefined, { runAsAdmin: editorRunAsAdmin, dryRun: editorDryRun })}
+                    disabled={!scriptContent.trim()}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-[6px] font-medium text-xs text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm ${
+                      editorRunAsAdmin && !isElevated
+                        ? 'bg-status-warning hover:bg-status-warning/90'
+                        : 'bg-brand hover:bg-brand-hover'
+                    }`}
+                  >
+                    {editorRunAsAdmin && !isElevated ? (
+                      <ShieldAlert className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4 fill-current" />
+                    )}
+                    <span>
+                      {editorDryRun
+                        ? t('script_runner.execute_dry_run', 'Dry Run Script')
+                        : editorRunAsAdmin && !isElevated
+                        ? t('script_runner.execute_as_admin', 'Execute Elevated')
+                        : t('script_runner.execute', 'Execute Script')}
+                    </span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -562,6 +672,12 @@ export function ScriptRunnerView() {
               <div className="flex items-center gap-2">
                 {isExecutingScript && (
                   <div className="flex items-center gap-1.5 mr-1">
+                    {isElevatedRunning && (
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-status-warning bg-status-warning/15 px-2 py-0.5 rounded border border-status-warning/30 font-semibold" title="Running with elevated Administrator privileges">
+                        <ShieldAlert className="h-3 w-3 animate-pulse" />
+                        <span>ELEVATED</span>
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 font-mono text-[11px] text-brand bg-brand/10 px-2 py-0.5 rounded border border-brand/30">
                       <Timer className="h-3 w-3 animate-pulse" />
                       <span>{formattedElapsed}</span>
@@ -813,10 +929,11 @@ export function ScriptRunnerView() {
                       {getRiskBadge(script.riskLevel)}
                       {script.requiresAdmin && (
                         <span
-                          className="p-1 rounded-[4px] bg-surface-subtle text-text-secondary border border-border"
-                          title={t('script_runner.requires_admin', 'Admin Required')}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-mono font-semibold bg-status-warning/15 text-status-warning border border-status-warning/30"
+                          title={t('script_runner.requires_admin_tooltip', 'This script requires administrative elevation. Click to execute with UAC.')}
                         >
-                          <Lock className="h-3 w-3" />
+                          <ShieldAlert className="h-3 w-3" />
+                          <span>UAC</span>
                         </span>
                       )}
                     </div>
@@ -850,14 +967,24 @@ export function ScriptRunnerView() {
 
                 {/* Footer Action Buttons */}
                 <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => openScriptPreview(script)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
-                    title={t('script_runner.preview_code', 'Preview Code')}
-                  >
-                    <FileText className="h-3.5 w-3.5 text-text-secondary" />
-                    <span>{t('script_runner.preview_code', 'Preview')}</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => openScriptPreview(script)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
+                      title={t('script_runner.preview_code', 'Preview Code')}
+                    >
+                      <FileText className="h-3.5 w-3.5 text-text-secondary" />
+                      <span>{t('script_runner.preview_code', 'Preview')}</span>
+                    </button>
+                    <button
+                      onClick={() => openImpactSimulator(script)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
+                      title={t('script_runner.simulate_impact_tooltip', 'Preview affected registry keys, services, tasks, and files before execution')}
+                    >
+                      <Sliders className="h-3.5 w-3.5 text-text-secondary" />
+                      <span>{t('script_runner.simulate_impact', 'Simulate Impact')}</span>
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1.5">
                     <button
@@ -869,15 +996,27 @@ export function ScriptRunnerView() {
                       <span>{t('script_runner.load_to_editor', 'Load')}</span>
                     </button>
 
-                    <button
-                      onClick={() => runLibraryScriptDirectly(script)}
-                      disabled={isExecutingScript}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-xs"
-                      title={t('script_runner.run_directly', 'Run Directly')}
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      <span>{t('script_runner.run_directly', 'Run')}</span>
-                    </button>
+                    {script.requiresAdmin || script.riskLevel === 'elevated' || script.riskLevel === 'critical' ? (
+                      <button
+                        onClick={() => runLibraryScriptDirectly(script, { runAsAdmin: true })}
+                        disabled={isExecutingScript}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-status-warning/20 hover:bg-status-warning/30 text-status-warning border border-status-warning/40 transition-colors disabled:opacity-50 shadow-xs"
+                        title={t('script_runner.run_as_admin_tooltip', 'Run this script with elevated administrator privileges (UAC prompt)')}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        <span>{t('script_runner.run_as_admin_short', 'Run Admin')}</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => runLibraryScriptDirectly(script, { runAsAdmin: false })}
+                        disabled={isExecutingScript}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-xs"
+                        title={t('script_runner.run_directly', 'Run Directly')}
+                      >
+                        <Play className="h-3.5 w-3.5 fill-current" />
+                        <span>{t('script_runner.run_directly', 'Run')}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -886,261 +1025,63 @@ export function ScriptRunnerView() {
         </div>
       )}
 
-      {/* Code Preview Modal */}
-      {previewScript && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-[6px] bg-brand/10 border border-brand/30 text-brand">
-                  <FileCode className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-text-primary tracking-tight">
-                      {previewScript.name}
-                    </h2>
-                    {getRiskBadge(previewScript.riskLevel)}
-                    {previewScript.requiresAdmin && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-card border border-border text-text-secondary">
-                        Admin Required
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    {previewScript.path} | v{previewScript.version} | Author: {previewScript.author}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={closeScriptPreview}
-                className="p-1.5 rounded-[6px] text-text-secondary hover:text-text-primary hover:bg-surface-hover border border-transparent hover:border-border transition-colors"
-                title={t('script_runner.close_preview', 'Close Preview')}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Modal Metadata Header Info */}
-            <div className="p-4 bg-surface-card border-b border-border space-y-2 text-xs">
-              <p className="text-text-secondary leading-relaxed">
-                {previewScript.description}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-text-secondary font-medium">SHA-256:</span>
-                <code className="font-mono text-[11px] bg-surface-subtle text-text-code px-2 py-0.5 rounded border border-border/80">
-                  {previewScript.sha256}
-                </code>
-                <button
-                  onClick={() => handleCopyChecksum(previewScript.sha256)}
-                  className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline"
-                >
-                  {copiedHash ? (
-                    <>
-                      <Check className="h-3 w-3 text-status-success" />
-                      <span className="text-status-success">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      <span>Copy Hash</span>
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Configurable parameters if present */}
-              {previewScript.parameters && previewScript.parameters.length > 0 && (
-                <div className="pt-2">
-                  <span className="font-semibold text-text-primary text-[11px]">
-                    {t('script_runner.parameters_label', 'Configurable Parameters')}:
-                  </span>
-                  <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {previewScript.parameters.map((param) => (
-                      <div
-                        key={param.name}
-                        className="p-2 rounded bg-surface-subtle border border-border text-[11px]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-brand">{param.name}</span>
-                          <span className="font-mono text-text-secondary text-[10px]">
-                            {param.type} (default: {String(param.default)})
-                          </span>
-                        </div>
-                        <p className="text-text-secondary text-[10px] mt-0.5">{param.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Code Viewer */}
-            <div className="flex-1 overflow-y-auto p-4 bg-surface-subtle select-text">
-              {isLoadingPreview ? (
-                <div className="flex flex-col items-center justify-center h-64 text-text-secondary space-y-2">
-                  <Loader2 className="h-6 w-6 animate-spin text-brand" />
-                  <span className="text-xs">Loading verified script code...</span>
-                </div>
-              ) : (
-                <pre className="font-mono text-xs text-text-code leading-relaxed whitespace-pre-wrap break-all">
-                  {previewContent ?? '# Error reading script content'}
-                </pre>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-4 border-t border-border bg-surface-subtle">
-              <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <CheckCircle2 className="h-4 w-4 text-status-success" />
-                <span>SHA-256 Integrity Verified</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => loadScriptToEditor(previewScript)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface-card hover:bg-surface-hover text-text-primary border border-border transition-colors shadow-xs"
-                >
-                  <Code2 className="h-4 w-4" />
-                  <span>{t('script_runner.load_to_editor', 'Load to Editor')}</span>
-                </button>
-
-                <button
-                  onClick={() => runLibraryScriptDirectly(previewScript)}
-                  disabled={isExecutingScript}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-[6px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  <Play className="h-4 w-4 fill-current" />
-                  <span>{t('script_runner.run_directly', 'Run Directly')}</span>
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Execution History Tab */}
+      {activeRunnerTab === 'history' && (
+        <div className="flex-1 min-h-0">
+          <ScriptExecutionHistoryView />
         </div>
       )}
+
+      {/* Code Preview Modal */}
+      <ScriptDetailsModal
+        script={previewScript}
+        content={previewContent}
+        isLoading={isLoadingPreview}
+        isElevated={isElevated}
+        isExecutingScript={isExecutingScript}
+        onClose={closeScriptPreview}
+        onLoadToEditor={loadScriptToEditor}
+        onRunDirectly={(script, opts) => runLibraryScriptDirectly(script, opts)}
+        onSimulateImpact={(script, content) => openImpactSimulator(script, content)}
+      />
 
       {/* Parameter Configuration Modal Dialog */}
-      {parameterDialogScript && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="flex flex-col w-full max-w-xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-[6px] bg-brand/10 border border-brand/30 text-brand">
-                  <Sliders className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-text-primary">
-                    {t('script_runner.param_dialog_title', 'Configure Script Parameters')}
-                  </h2>
-                  <p className="text-xs text-text-secondary">
-                    {parameterDialogScript.name} (v{parameterDialogScript.version})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={closeParameterDialog}
-                className="p-1.5 rounded-[6px] text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      <ScriptRunnerModal
+        script={parameterDialogScript}
+        initialValues={parameterValues}
+        validationErrors={parameterValidationErrors}
+        isElevated={isElevated}
+        isExecutingScript={isExecutingScript}
+        onClose={closeParameterDialog}
+        onExecute={(script, values, options) =>
+          executeScriptWithParameters(script, values, options)
+        }
+      />
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {parameterDialogScript.parameters?.map((param) => {
-                const error = parameterValidationErrors[param.name];
-                const value = parameterValues[param.name];
-                return (
-                  <div
-                    key={param.name}
-                    className={`p-3 rounded-[6px] border bg-surface-subtle space-y-1.5 ${
-                      error ? 'border-status-error/60' : 'border-border'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <label className="font-mono text-xs font-bold text-brand">
-                        ${param.name}
-                      </label>
-                      <span className="text-[10px] text-text-secondary">
-                        Default: {String(param.default)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-text-secondary">
-                      {param.description}
-                    </p>
-                    {param.type === 'boolean' ? (
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setParameterValue(param.name, !value)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none border border-transparent ${
-                            value ? 'bg-brand' : 'bg-surface-card border-border'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-sm mt-0.5 ${
-                              value ? 'translate-x-4' : 'translate-x-0.5'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    ) : (
-                      <input
-                        type={param.type === 'number' ? 'number' : 'text'}
-                        value={value !== undefined && value !== null ? String(value) : ''}
-                        onChange={(e) =>
-                          setParameterValue(
-                            param.name,
-                            param.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value
-                          )
-                        }
-                        className="w-full bg-surface-card border border-border rounded-[4px] px-3 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
-                      />
-                    )}
-                    {error && <p className="text-[11px] text-status-error">{error}</p>}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-between p-4 border-t border-border bg-surface-subtle">
-              <button
-                onClick={resetParameterValues}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>{t('script_runner.param_dialog_reset', 'Reset to Defaults')}</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={closeParameterDialog}
-                  className="px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
-                >
-                  {t('script_runner.cancel', 'Cancel')}
-                </button>
-                <button
-                  onClick={() => executeScriptWithParameters(parameterDialogScript)}
-                  disabled={isExecutingScript}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-[4px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  <span>{t('script_runner.param_dialog_run', 'Run with Parameters')}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Impact Simulator & Dry-Run Preview Modal */}
+      <ImpactSimulatorModal
+        script={impactSimulatorScript}
+        scriptContent={impactSimulatorContent || scriptContent}
+        isOpen={isImpactSimulatorOpen}
+        isElevated={isElevated}
+        isExecutingScript={isExecutingScript}
+        onClose={closeImpactSimulator}
+        onExecuteDryRun={(targetScript, content, shouldElevate) => {
+          if (targetScript) {
+            runLibraryScriptDirectly(targetScript, { runAsAdmin: shouldElevate, dryRun: true });
+          } else {
+            executeScript(content, scriptType, { runAsAdmin: shouldElevate, dryRun: true });
+          }
+        }}
+        onExecuteLive={(targetScript, content, shouldElevate) => {
+          if (targetScript) {
+            runLibraryScriptDirectly(targetScript, { runAsAdmin: shouldElevate, dryRun: false });
+          } else {
+            executeScript(content, scriptType, { runAsAdmin: shouldElevate, dryRun: false });
+          }
+        }}
+        onLoadToEditor={loadScriptToEditor}
+      />
     </div>
   );
 }

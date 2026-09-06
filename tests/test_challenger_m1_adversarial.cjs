@@ -56,13 +56,13 @@ async function main() {
   console.log('================================================================\n');
 
   // ============================================================================
-  // SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 27 Scripts
+  // SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 45 Scripts
   // ============================================================================
-  console.log('--- SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 27 Scripts ---');
+  console.log('--- SECTION 1: SHA-256 Cryptographic Integrity Oracle Across All 45 Scripts ---');
 
-  await runTest('Manifest defines full 40-script catalog across 5 categories', () => {
+  await runTest('Manifest defines full 45-script catalog across 5 categories', () => {
     assert.strictEqual(Array.isArray(manifest.scripts), true, 'manifest.scripts must be an array');
-    assert.strictEqual(manifest.scripts.length === 40, true, `Must contain exactly 40 scripts (got ${manifest.scripts.length})`);
+    assert.strictEqual(manifest.scripts.length, 45, `Must contain exactly 45 scripts (got ${manifest.scripts.length})`);
 
     const expectedCategories = ['maintenance', 'network', 'security', 'performance', 'diagnostics'];
     const actualCategories = [...new Set(manifest.scripts.map((s) => s.category))].sort();
@@ -136,7 +136,7 @@ async function main() {
     }
   });
 
-  await runTest('SHA-256 Oracle: 1-bit / 1-byte tamper detection on all 27 scripts', () => {
+  await runTest('SHA-256 Oracle: 1-bit / 1-byte tamper detection on all 45 scripts', () => {
     for (const entry of manifest.scripts) {
       const scriptFilePath = path.join(scriptsLibDir, entry.path);
       const originalBytes = fs.readFileSync(scriptFilePath);
@@ -450,7 +450,7 @@ async function main() {
     assert.strictEqual(res.manifest.scripts.length, manifest.scripts.length);
   });
 
-  await runTest('Sync Engine: readScript returns verified content for all 27 scripts', async () => {
+  await runTest('Sync Engine: readScript returns verified content for all 45 scripts', async () => {
     const engine = new SyncEngineSimulator();
     await engine.sync(true);
 
@@ -598,7 +598,7 @@ async function main() {
   // ============================================================================
   console.log('\n--- SECTION 6: High-Volume Performance & Throughput Benchmarks ---');
 
-  await runTest('Benchmark: SHA-256 calculation speed across all 27 scripts (1,000 iterations each = 27,000 hashes)', () => {
+  await runTest('Benchmark: SHA-256 calculation speed across all 45 scripts (1,000 iterations each = 45,000 hashes)', () => {
     const scriptBuffers = manifest.scripts.map((s) => fs.readFileSync(path.join(scriptsLibDir, s.path)));
 
     const start = process.hrtime.bigint();
@@ -613,7 +613,7 @@ async function main() {
     const hashesPerSec = (totalHashes / (durationMs / 1000)).toFixed(0);
 
     console.log(`    -> Computed ${totalHashes} SHA-256 hashes in ${durationMs.toFixed(2)}ms (~${hashesPerSec} hashes/sec)`);
-    assert.strictEqual(durationMs < 2000, true, '15,000 hashes should complete in under 2000ms');
+    assert.strictEqual(durationMs < 2000, true, '45,000 hashes should complete in under 2000ms');
   });
 
   await runTest('Benchmark: Filter latency over 10,000 synthetic manifest items', () => {

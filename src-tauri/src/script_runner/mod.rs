@@ -37,6 +37,36 @@ pub struct RunningScriptInfo {
     pub elapsed_ms: u64,
 }
 
+/// Metadata recorded by elevated PowerShell bridge runner in .meta JSON file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ScriptMetaInfo {
+    pub pid: u32,
+    pub status: String, // "running" | "completed"
+    #[serde(default, rename = "exitCode")]
+    pub exit_code: Option<i32>,
+}
+
+/// RAII Guard ensuring all UAC session staging files are deleted when dropped.
+pub struct UacSessionGuard {
+    pub files: Vec<PathBuf>,
+}
+
+impl UacSessionGuard {
+    pub fn new(files: Vec<PathBuf>) -> Self {
+        Self { files }
+    }
+}
+
+impl Drop for UacSessionGuard {
+    fn drop(&mut self) {
+        for path in &self.files {
+            if path.exists() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+}
+
 /// Internal entry in the script execution registry.
 #[derive(Debug, Clone)]
 struct RunningScriptEntry {
@@ -45,6 +75,7 @@ struct RunningScriptEntry {
     pub script_type: String,
     pub start_time: Instant,
     pub cancel_flag: Arc<AtomicBool>,
+    pub cancel_sentinel: Option<PathBuf>,
 }
 
 /// Thread-safe global registry tracking running script processes.
@@ -73,6 +104,17 @@ impl ScriptExecutionRegistry {
         pid: u32,
         script_type: &str,
     ) -> (Arc<AtomicBool>, RunningScriptGuard) {
+        self.register_with_sentinel(execution_id, pid, script_type, None)
+    }
+
+    /// Registers a script process with an optional cancellation sentinel file (for elevated bridge).
+    pub fn register_with_sentinel(
+        &self,
+        execution_id: &str,
+        pid: u32,
+        script_type: &str,
+        cancel_sentinel: Option<PathBuf>,
+    ) -> (Arc<AtomicBool>, RunningScriptGuard) {
         let cancel_flag = Arc::new(AtomicBool::new(false));
         let entry = RunningScriptEntry {
             execution_id: execution_id.to_string(),
@@ -80,6 +122,7 @@ impl ScriptExecutionRegistry {
             script_type: script_type.to_string(),
             start_time: Instant::now(),
             cancel_flag: cancel_flag.clone(),
+            cancel_sentinel,
         };
 
         if let Ok(mut map) = self.entries.lock() {
@@ -99,6 +142,20 @@ impl ScriptExecutionRegistry {
         (cancel_flag, guard)
     }
 
+    /// Updates the PID for an actively running execution (called when elevated PID is discovered via .meta).
+    pub fn update_pid(&self, execution_id: &str, new_pid: u32) {
+        if let Ok(mut map) = self.entries.lock() {
+            if let Some(entry) = map.get_mut(execution_id) {
+                entry.pid = new_pid;
+                log::info!(
+                    "[ScriptRegistry] Updated PID for execution '{}' to {}",
+                    execution_id,
+                    new_pid
+                );
+            }
+        }
+    }
+
     /// Unregisters a finished or terminated script execution.
     pub fn unregister(&self, execution_id: &str) -> Option<u32> {
         if let Ok(mut map) = self.entries.lock() {
@@ -116,7 +173,7 @@ impl ScriptExecutionRegistry {
 
     /// Cancels a running script by execution ID, triggering process tree termination.
     pub fn cancel(&self, execution_id: &str) -> Result<(), AppError> {
-        let (pid, cancel_flag) = {
+        let (pid, cancel_flag, sentinel_path) = {
             let map = self.entries.lock().map_err(|e| {
                 AppError::System(format!("Failed to lock script registry: {}", e))
             })?;
@@ -129,7 +186,7 @@ impl ScriptExecutionRegistry {
 
             if let Some(entry) = map.get(&target_id) {
                 entry.cancel_flag.store(true, Ordering::SeqCst);
-                (entry.pid, entry.cancel_flag.clone())
+                (entry.pid, entry.cancel_flag.clone(), entry.cancel_sentinel.clone())
             } else {
                 return Err(AppError::Execution(format!(
                     "No active running script found with execution ID '{}'",
@@ -139,10 +196,19 @@ impl ScriptExecutionRegistry {
         };
 
         cancel_flag.store(true, Ordering::SeqCst);
-        kill_process_tree(pid);
+
+        // If an elevated sentinel path is registered, create the file to trigger the elevated watcher
+        if let Some(path) = sentinel_path {
+            let _ = std::fs::File::create(&path);
+            log::info!("[ScriptRegistry] Created cancellation sentinel file: {:?}", path);
+        }
+
+        if pid != 0 {
+            kill_process_tree(pid);
+        }
 
         log::warn!(
-            "[ScriptRegistry] Cancelled script execution '{}' (PID {} terminated)",
+            "[ScriptRegistry] Cancelled script execution '{}' (PID {} signaled)",
             execution_id,
             pid
         );
@@ -309,8 +375,394 @@ pub async fn cancel_running_script(execution_id: String) -> Result<(), AppError>
     ScriptExecutionRegistry::global().cancel(&execution_id)
 }
 
+/// Escapes single quotes for embedding paths safely within PowerShell single-quoted string literals.
+fn escape_ps_single_quote(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+/// Generates the elevated PowerShell bridge runner script.
+fn generate_uac_runner_script(
+    payload_path: &std::path::Path,
+    log_path: &std::path::Path,
+    meta_path: &std::path::Path,
+    cancel_path: &std::path::Path,
+) -> String {
+    let payload_str = escape_ps_single_quote(&payload_path.to_string_lossy());
+    let log_str = escape_ps_single_quote(&log_path.to_string_lossy());
+    let meta_str = escape_ps_single_quote(&meta_path.to_string_lossy());
+    let cancel_str = escape_ps_single_quote(&cancel_path.to_string_lossy());
+
+    format!(
+r#"$ErrorActionPreference = 'Continue'
+$InformationPreference = 'Continue'
+$myPid = $PID
+
+$payloadPath = '{payload}'
+$logPath = '{log}'
+$metaPath = '{meta}'
+$cancelPath = '{cancel}'
+
+# 1. Record PID and initial running status in metadata file (no BOM)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+try {{
+    $metaJson = @{{ pid = $myPid; status = "running"; exitCode = $null }} | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText($metaPath, $metaJson, $utf8NoBom)
+}} catch {{}}
+
+# 2. Elevated cancellation watcher runspace
+$cancelWatcher = [powershell]::Create().AddScript({{ param($pidToKill, $cPath) while ($true) {{ if (Test-Path -LiteralPath $cPath) {{ & taskkill /F /T /PID $pidToKill 2>$null; break }} [System.Threading.Thread]::Sleep(50) }} }}).AddArgument($myPid).AddArgument($cancelPath).BeginInvoke()
+
+$exitCode = 0
+try {{
+    # Execute payload and stream all 6 streams (*>&1: stdout, stderr, warnings, Write-Host) to log file
+    & "$payloadPath" *>&1 | ForEach-Object {{
+        $line = $_.ToString()
+        [System.IO.File]::AppendAllText($logPath, "$line`r`n", $utf8NoBom)
+    }}
+    if ($LASTEXITCODE -ne $null) {{
+        $exitCode = $LASTEXITCODE
+    }}
+}} catch {{
+    $err = $_.ToString()
+    [System.IO.File]::AppendAllText($logPath, "[ERROR] $err`r`n", $utf8NoBom)
+    $exitCode = 1
+}} finally {{
+    try {{
+        if ($cancelWatcher -ne $null) {{
+            if ($cancelWatcher -is [System.IDisposable]) {{ $cancelWatcher.Dispose() }}
+            elseif ($cancelWatcher.AsyncWaitHandle -ne $null) {{ $cancelWatcher.AsyncWaitHandle.Close() }}
+        }}
+    }} catch {{}}
+    try {{
+        $metaJson = @{{ pid = $myPid; status = "completed"; exitCode = $exitCode }} | ConvertTo-Json -Compress
+        [System.IO.File]::WriteAllText($metaPath, $metaJson, $utf8NoBom)
+    }} catch {{}}
+}}
+"#,
+        payload = payload_str,
+        log = log_str,
+        meta = meta_str,
+        cancel = cancel_str,
+    )
+}
+
+/// Tails newly written lines from the shared session log file using non-exclusive sharing mode (7).
+fn tail_log_file(
+    log_path: &std::path::Path,
+    offset: &mut u64,
+    app: &tauri::AppHandle,
+    accumulated_stdout: &mut String,
+    accumulated_stderr: &mut String,
+) {
+    if !log_path.exists() {
+        return;
+    }
+
+    use std::fs::OpenOptions;
+    use std::io::{Seek, SeekFrom};
+    #[cfg(target_os = "windows")]
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let mut open_opts = OpenOptions::new();
+    open_opts.read(true);
+    #[cfg(target_os = "windows")]
+    {
+        // FILE_SHARE_READ (1) | FILE_SHARE_WRITE (2) | FILE_SHARE_DELETE (4) = 7
+        open_opts.share_mode(7);
+    }
+
+    let file = match open_opts.open(log_path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    let mut reader = std::io::BufReader::new(file);
+    if reader.seek(SeekFrom::Start(*offset)).is_err() {
+        return;
+    }
+
+    let mut line_buf = Vec::new();
+    loop {
+        line_buf.clear();
+        match reader.read_until(b'\n', &mut line_buf) {
+            Ok(0) => break,
+            Ok(bytes_read) => {
+                *offset += bytes_read as u64;
+                let line_str = decode_bytes(&line_buf);
+                let trimmed = line_str
+                    .strip_suffix("\r\n")
+                    .or_else(|| line_str.strip_suffix('\n'))
+                    .unwrap_or(&line_str);
+
+                let is_err = trimmed.starts_with("[ERROR]") || trimmed.starts_with("[STDERR]");
+                let stream = if is_err { "stderr" } else { "stdout" };
+
+                let payload = ScriptOutputLinePayload {
+                    line: trimmed.to_string(),
+                    stream: stream.to_string(),
+                };
+                let _ = app.emit("script-output-line", &payload);
+
+                if is_err {
+                    accumulated_stderr.push_str(&line_str);
+                } else {
+                    accumulated_stdout.push_str(&line_str);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
+/// Executes a script payload with on-demand UAC Administrator elevation via PowerShell bridge runner.
+async fn execute_script_elevated_bridge(
+    app: tauri::AppHandle,
+    script_content: String,
+    norm_type: String,
+    execution_id: Option<String>,
+    timeout_duration: Duration,
+) -> Result<CommandOutput, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let temp_dir = get_temp_scripts_dir()?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let host_pid = std::process::id();
+        let counter = SCRIPT_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        let base_name = format!("wiscripts_{}_{}_{}", timestamp, host_pid, counter);
+        let payload_path = temp_dir.join(format!("{}.{}", base_name, norm_type));
+        let runner_path = temp_dir.join(format!("{}.runner.ps1", base_name));
+        let log_path = temp_dir.join(format!("{}.log", base_name));
+        let meta_path = temp_dir.join(format!("{}.meta", base_name));
+        let cancel_path = temp_dir.join(format!("{}.cancel", base_name));
+
+        let exec_id = execution_id.unwrap_or_else(|| format!("exec_{}", base_name));
+
+        // 1. Write payload script file (prepend BOM for .ps1)
+        let prepared_bytes = if norm_type == "ps1" {
+            let mut bytes = vec![0xEF, 0xBB, 0xBF];
+            bytes.extend_from_slice(script_content.as_bytes());
+            bytes
+        } else {
+            script_content.into_bytes()
+        };
+
+        std::fs::write(&payload_path, &prepared_bytes).map_err(|e| {
+            AppError::Io(format!("Failed to write payload script: {}", e))
+        })?;
+
+        // 2. Write runner script with UTF-8 BOM
+        let runner_content = generate_uac_runner_script(
+            &payload_path,
+            &log_path,
+            &meta_path,
+            &cancel_path,
+        );
+        let mut runner_bytes = vec![0xEF, 0xBB, 0xBF];
+        runner_bytes.extend_from_slice(runner_content.as_bytes());
+        std::fs::write(&runner_path, &runner_bytes).map_err(|e| {
+            AppError::Io(format!("Failed to write UAC bridge runner script: {}", e))
+        })?;
+
+        // 3. Pre-create empty log file
+        let _ = std::fs::File::create(&log_path);
+
+        // Guard to clean up all 5 session staging files upon drop
+        let _session_guard = UacSessionGuard::new(vec![
+            payload_path.clone(),
+            runner_path.clone(),
+            log_path.clone(),
+            meta_path.clone(),
+            cancel_path.clone(),
+        ]);
+
+        // 4. Invoke Start-Process powershell.exe -Verb RunAs
+        let runner_path_str = runner_path
+            .to_str()
+            .ok_or_else(|| AppError::Execution("Invalid runner path UTF-8".to_string()))?;
+        let escaped_runner_path = escape_ps_single_quote(runner_path_str);
+
+        let mut launcher = std::process::Command::new("powershell.exe");
+        launcher.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &format!(
+                "Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File','\"{}\"')",
+                escaped_runner_path
+            ),
+        ]);
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            launcher.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        log::info!("[ScriptRunner] Prompting UAC elevation for execution '{}'...", exec_id);
+        let launch_res = launcher.output().map_err(|e| {
+            AppError::Execution(format!("Failed to invoke UAC launcher: {}", e))
+        })?;
+
+        if !launch_res.status.success() {
+            let stderr_str = decode_bytes(&launch_res.stderr);
+            let stdout_str = decode_bytes(&launch_res.stdout);
+            let err_combined = format!("{} {}", stdout_str, stderr_str);
+            let err_lower = err_combined.to_lowercase();
+            let is_uac_decline = launch_res.status.code() == Some(1223)
+                || err_lower.contains("1223")
+                || err_lower.contains("canceled by the user")
+                || err_lower.contains("cancelled by the user")
+                || err_lower.contains("declined by user")
+                || err_lower.contains("операция отменена пользователем")
+                || err_lower.contains("отменена пользователем")
+                || err_lower.contains("отменено пользователем")
+                || err_lower.contains("error_cancelled")
+                || err_lower.contains("0x800704c7");
+
+            if is_uac_decline {
+                log::warn!("[ScriptRunner] UAC elevation was declined by user for execution '{}'", exec_id);
+                let payload = ScriptOutputLinePayload {
+                    line: "[UAC] Administrator elevation was declined by user. Script execution cancelled.".to_string(),
+                    stream: "stderr".to_string(),
+                };
+                let _ = app.emit("script-output-line", &payload);
+                return Err(AppError::Execution(
+                    "[UAC] Administrator elevation was declined by user. Script execution cancelled.".to_string(),
+                ));
+            } else {
+                return Err(AppError::Execution(format!(
+                    "Failed to launch elevated script runner: {}",
+                    err_combined.trim()
+                )));
+            }
+        }
+
+        // 5. Register in registry with cancel sentinel
+        let (_cancel_flag, _run_guard) = ScriptExecutionRegistry::global()
+            .register_with_sentinel(&exec_id, 0, &norm_type, Some(cancel_path.clone()));
+
+        let start_time = Instant::now();
+        let poll_interval = Duration::from_millis(40);
+
+        let mut read_offset: u64 = 0;
+        let mut accumulated_stdout = String::new();
+        let mut accumulated_stderr = String::new();
+        let mut registered_elevated_pid = false;
+        let mut final_exit_code: Option<i32> = None;
+        let mut user_cancelled = false;
+        let mut timed_out = false;
+
+        loop {
+            // Check cancellation
+            if _run_guard.is_cancelled() {
+                user_cancelled = true;
+                break;
+            }
+
+            // Check timeout
+            if start_time.elapsed() >= timeout_duration {
+                timed_out = true;
+                break;
+            }
+
+            // Stream any newly available lines from log file
+            tail_log_file(
+                &log_path,
+                &mut read_offset,
+                &app,
+                &mut accumulated_stdout,
+                &mut accumulated_stderr,
+            );
+
+            // Read metadata file if not yet registered PID or if completed
+            if meta_path.exists() {
+                if let Ok(meta_content) = std::fs::read_to_string(&meta_path) {
+                    let clean_meta = meta_content.trim_start_matches('\u{feff}');
+                    if let Ok(meta) = serde_json::from_str::<ScriptMetaInfo>(clean_meta) {
+                        if !registered_elevated_pid && meta.pid != 0 {
+                            ScriptExecutionRegistry::global().update_pid(&exec_id, meta.pid);
+                            registered_elevated_pid = true;
+                        }
+
+                        if meta.status == "completed" {
+                            final_exit_code = Some(meta.exit_code.unwrap_or(0));
+                            break;
+                        }
+                    }
+                }
+            }
+
+            std::thread::sleep(poll_interval);
+        }
+
+        // Final flush of remaining log bytes
+        tail_log_file(
+            &log_path,
+            &mut read_offset,
+            &app,
+            &mut accumulated_stdout,
+            &mut accumulated_stderr,
+        );
+
+        if user_cancelled {
+            log::warn!("[ScriptRunner] Elevated execution '{}' cancelled by user", exec_id);
+            let _ = std::fs::File::create(&cancel_path);
+
+            let payload = ScriptOutputLinePayload {
+                line: "[CANCELLED] Elevated script execution was cancelled by user. Process terminated.".to_string(),
+                stream: "stderr".to_string(),
+            };
+            let _ = app.emit("script-output-line", &payload);
+
+            return Err(AppError::Execution(format!(
+                "Script execution '{}' was cancelled by user",
+                exec_id
+            )));
+        }
+
+        if timed_out {
+            log::error!("[ScriptRunner] Elevated execution '{}' timed out", exec_id);
+            let _ = std::fs::File::create(&cancel_path);
+
+            let payload = ScriptOutputLinePayload {
+                line: format!(
+                    "[TIMEOUT] Elevated script execution timed out after {} seconds. Process terminated.",
+                    timeout_duration.as_secs()
+                ),
+                stream: "stderr".to_string(),
+            };
+            let _ = app.emit("script-output-line", &payload);
+
+            return Err(AppError::Execution(format!(
+                "Script execution timed out after {} seconds",
+                timeout_duration.as_secs()
+            )));
+        }
+
+        let exit_code = final_exit_code.unwrap_or(-1);
+        log::info!(
+            "[ScriptRunner] Elevated execution '{}' completed with exit code {}",
+            exec_id,
+            exit_code
+        );
+
+        Ok(CommandOutput {
+            exit_code,
+            stdout: accumulated_stdout,
+            stderr: accumulated_stderr,
+        })
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Async join error in elevated script execution: {}", e)))?
+}
+
 /// Executes a custom PowerShell (.ps1) or Command (.bat/.cmd) script with live output streaming,
-/// configurable execution timeout (default 300s), and thread-safe cancellation support.
+/// configurable execution timeout (default 300s), thread-safe cancellation, and optional on-demand UAC elevation.
 #[tauri::command]
 pub async fn execute_custom_script(
     app: tauri::AppHandle,
@@ -319,16 +771,21 @@ pub async fn execute_custom_script(
     dry_run: Option<bool>,
     execution_id: Option<String>,
     timeout_seconds: Option<u64>,
+    elevate: Option<bool>,
 ) -> Result<CommandOutput, AppError> {
     let norm_type = validate_script_input(&script_content, &script_type)?;
     let is_dry_run = dry_run.unwrap_or(false);
     let timeout_duration = Duration::from_secs(timeout_seconds.unwrap_or(300));
+    let wants_elevation = elevate.unwrap_or(false);
+    let is_already_elevated = crate::commands::check_is_elevated();
 
     log::info!(
-        "[ScriptRunner] execute_custom_script invoked: type='{}', dry_run={}, timeout_secs={}, content_len={}",
+        "[ScriptRunner] execute_custom_script invoked: type='{}', dry_run={}, timeout_secs={}, elevate={}, is_already_elevated={}, content_len={}",
         norm_type,
         is_dry_run,
         timeout_duration.as_secs(),
+        wants_elevation,
+        is_already_elevated,
         script_content.len()
     );
 
@@ -347,6 +804,17 @@ pub async fn execute_custom_script(
             stdout: format!("[DRY-RUN] Simulated {} script execution", norm_type),
             stderr: String::new(),
         });
+    }
+
+    // Branch to on-demand UAC elevation bridge if elevation requested and not already elevated
+    if wants_elevation && !is_already_elevated {
+        return execute_script_elevated_bridge(
+            app,
+            script_content,
+            norm_type,
+            execution_id,
+            timeout_duration,
+        ).await;
     }
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -612,6 +1080,28 @@ pub async fn execute_custom_script(
     .map_err(|e| AppError::System(format!("Async join error in execute_custom_script: {}", e)))?
 }
 
+/// Dedicated alias for running scripts with on-demand administrator elevation.
+#[tauri::command]
+pub async fn run_script_elevated(
+    app: tauri::AppHandle,
+    script_content: String,
+    script_type: String,
+    dry_run: Option<bool>,
+    execution_id: Option<String>,
+    timeout_seconds: Option<u64>,
+) -> Result<CommandOutput, AppError> {
+    execute_custom_script(
+        app,
+        script_content,
+        script_type,
+        dry_run,
+        execution_id,
+        timeout_seconds,
+        Some(true),
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -821,5 +1311,126 @@ mod tests {
     fn test_kill_process_tree_zero_pid_is_safe_noop() {
         // pid 0 must be handled gracefully without running taskkill
         kill_process_tree(0);
+    }
+
+    #[test]
+    fn test_escape_ps_single_quote() {
+        assert_eq!(escape_ps_single_quote("hello"), "hello");
+        assert_eq!(escape_ps_single_quote("C:\\path's\\name"), "C:\\path''s\\name");
+        assert_eq!(escape_ps_single_quote("''"), "''''");
+    }
+
+    #[test]
+    fn test_script_meta_info_deserialization() {
+        let running_json = r#"{"pid":1234,"status":"running","exitCode":null}"#;
+        let meta: ScriptMetaInfo = serde_json::from_str(running_json).unwrap();
+        assert_eq!(meta.pid, 1234);
+        assert_eq!(meta.status, "running");
+        assert_eq!(meta.exit_code, None);
+
+        let completed_json = r#"{"pid":1234,"status":"completed","exitCode":0}"#;
+        let meta_comp: ScriptMetaInfo = serde_json::from_str(completed_json).unwrap();
+        assert_eq!(meta_comp.pid, 1234);
+        assert_eq!(meta_comp.status, "completed");
+        assert_eq!(meta_comp.exit_code, Some(0));
+    }
+
+    #[test]
+    fn test_generate_uac_runner_script_contains_vital_sections() {
+        let payload = PathBuf::from("C:\\temp\\payload.ps1");
+        let log = PathBuf::from("C:\\temp\\session.log");
+        let meta = PathBuf::from("C:\\temp\\session.meta");
+        let cancel = PathBuf::from("C:\\temp\\session.cancel");
+
+        let script = generate_uac_runner_script(&payload, &log, &meta, &cancel);
+
+        assert!(script.contains("$cancelWatcher = [powershell]::Create()"));
+        assert!(script.contains("taskkill /F /T /PID $pidToKill"));
+        assert!(script.contains("AppendAllText($logPath"));
+        assert!(script.contains("*>&1"));
+        assert!(script.contains("$InformationPreference = 'Continue'"));
+        assert!(script.contains("[System.Text.UTF8Encoding]::new($false)"));
+        assert!(script.contains("status = \"running\""));
+        assert!(script.contains("status = \"completed\""));
+        assert!(script.contains("payload.ps1"));
+    }
+
+    #[test]
+    fn test_script_meta_info_deserialization_with_bom() {
+        let running_json_with_bom = "\u{feff}{\"pid\":1234,\"status\":\"running\",\"exitCode\":null}";
+        let clean_json = running_json_with_bom.trim_start_matches('\u{feff}');
+        let meta: ScriptMetaInfo = serde_json::from_str(clean_json).unwrap();
+        assert_eq!(meta.pid, 1234);
+        assert_eq!(meta.status, "running");
+        assert_eq!(meta.exit_code, None);
+
+        let completed_json_with_bom = "\u{feff}{\"pid\":1234,\"status\":\"completed\",\"exitCode\":0}";
+        let clean_completed = completed_json_with_bom.trim_start_matches('\u{feff}');
+        let meta_completed: ScriptMetaInfo = serde_json::from_str(clean_completed).unwrap();
+        assert_eq!(meta_completed.pid, 1234);
+        assert_eq!(meta_completed.status, "completed");
+        assert_eq!(meta_completed.exit_code, Some(0));
+    }
+
+    #[test]
+    fn test_uac_session_guard_cleans_all_files() {
+        let temp_dir = std::env::temp_dir().join("wiscripts_uac_guard_test");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let file1 = temp_dir.join("test1.ps1");
+        let file2 = temp_dir.join("test2.log");
+        let file3 = temp_dir.join("test3.meta");
+
+        std::fs::write(&file1, "echo 1").unwrap();
+        std::fs::write(&file2, "echo 2").unwrap();
+        std::fs::write(&file3, "echo 3").unwrap();
+
+        assert!(file1.exists());
+        assert!(file2.exists());
+        assert!(file3.exists());
+
+        {
+            let _guard = UacSessionGuard::new(vec![file1.clone(), file2.clone(), file3.clone()]);
+        }
+
+        assert!(!file1.exists());
+        assert!(!file2.exists());
+        assert!(!file3.exists());
+
+        let _ = std::fs::remove_dir(&temp_dir);
+    }
+
+    #[test]
+    fn test_script_registry_with_cancel_sentinel() {
+        let registry = ScriptExecutionRegistry::new();
+        let exec_id = "test_exec_sentinel_001";
+        let sentinel_dir = std::env::temp_dir().join("wiscripts_sentinel_test");
+        let _ = std::fs::create_dir_all(&sentinel_dir);
+        let sentinel_file = sentinel_dir.join("test.cancel");
+
+        if sentinel_file.exists() {
+            let _ = std::fs::remove_file(&sentinel_file);
+        }
+
+        let (cancel_flag, guard) = registry.register_with_sentinel(
+            exec_id,
+            0,
+            "ps1",
+            Some(sentinel_file.clone()),
+        );
+
+        assert!(!sentinel_file.exists());
+        assert!(!cancel_flag.load(Ordering::SeqCst));
+
+        // Registry cancel should touch sentinel_file on disk
+        let res = registry.cancel(exec_id);
+        assert!(res.is_ok());
+        assert!(cancel_flag.load(Ordering::SeqCst));
+        assert!(guard.is_cancelled());
+        assert!(sentinel_file.exists(), "Cancel sentinel file must be created on disk");
+
+        // Clean up
+        let _ = std::fs::remove_file(&sentinel_file);
+        let _ = std::fs::remove_dir(&sentinel_dir);
     }
 }

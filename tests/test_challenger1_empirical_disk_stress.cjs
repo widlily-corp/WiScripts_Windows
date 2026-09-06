@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.5.1 — Empirical Challenger 1 Stress Harness
+ * WiScripts Windows v1.6.0 — Empirical Challenger 1 Stress Harness
  * 
  * Deep Stress Verification:
  * 1. formatBytes exhaustive binary boundary matrix (0 B to 18.44 EB, u64::MAX)
@@ -45,7 +45,7 @@ async function test(name, fn) {
 
 async function runEmpiricalChallengerSuite() {
   console.log('================================================================================');
-  console.log(' WiScripts v1.5.1 — Empirical Challenger 1 Deep Stress Suite');
+  console.log(' WiScripts v1.6.0 — Empirical Challenger 1 Deep Stress Suite');
   console.log('================================================================================\n');
 
   // ===========================================================================

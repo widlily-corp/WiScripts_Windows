@@ -44,6 +44,7 @@ pub fn run() {
         .manage(metrics_collector)
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
+            commands::is_elevated,
             commands::log_frontend_event,
             commands::get_system_info,
             commands::get_system_metrics,
@@ -114,6 +115,7 @@ pub fn run() {
             commands::list_active_rules,
             commands::delete_governor_rule,
             script_runner::execute_custom_script,
+            script_runner::run_script_elevated,
             script_runner::cancel_running_script,
             script_runner::sync::sync_scripts_library,
             script_runner::sync::get_cached_scripts_library,

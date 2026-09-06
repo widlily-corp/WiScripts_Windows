@@ -2,7 +2,7 @@
  * Challenger Empirical Test Suite: PowerShell 5.1 & CP1251 Parser Integrity
  *
  * Tests:
- * 1. AST Validation on all 27 scripts in scripts_lib/
+ * 1. AST Validation on all 45 scripts in scripts_lib/
  * 2. UTF-8 BOM vs CP1251 block comment (<# ... #>) parsing vulnerability
  * 3. param() placement integrity and backend UTF-8 BOM prepending validation
  * 4. Locale-agnostic CLI parsing and absence of hardcoded English/Russian strings in scripts
@@ -27,7 +27,7 @@ function assert(condition, message) {
     }
 }
 
-// 1. Scan and parse all 27 scripts in scripts_lib/
+// 1. Scan and parse all 45 scripts in scripts_lib/
 console.log('--- 1. Testing AST and param() placement for all scripts in scripts_lib/ ---');
 const categories = ['diagnostics', 'maintenance', 'network', 'performance', 'security'];
 let totalScripts = 0;
@@ -70,7 +70,7 @@ for (const cat of categories) {
     }
 }
 
-assert(totalScripts === 40, `Verified exactly 40 scripts in scripts_lib (Found: ${totalScripts})`);
+assert(totalScripts === 45, `Verified exactly 45 scripts in scripts_lib (Found: ${totalScripts})`);
 
 // 2. Adversarial Test: Prepending code vs Prepending UTF-8 BOM
 console.log('\n--- 2. Adversarial Test: param() break on code prepending vs BOM prepending ---');

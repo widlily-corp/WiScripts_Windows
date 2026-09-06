@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.5.1 — Comprehensive Master Test & Verification Runner
+ * WiScripts Windows v1.6.0 — Comprehensive Master Test & Verification Runner
  * 
  * Executes:
  * - Static Analysis: PowerShell 5.1 AST syntax parser, manifest schema, SHA-256 parity & CP1251 encoding checks
@@ -23,7 +23,7 @@ import { buildDiskSpaceAnalyzerSuite } from './disk_space_analyzer.test.js';
 
 export async function runAllE2ETests() {
   console.log(`================================================================`);
-  console.log(` WiScripts Windows v1.5.1 — Master Test & Verification Runner`);
+  console.log(` WiScripts Windows v1.6.0 — Master Test & Verification Runner`);
   console.log(` Date: ${new Date().toISOString()}`);
   console.log(` Architecture: Rust Tauri v2 + React 18 + TypeScript + Refined Minimal`);
   console.log(` Subsystems: Disk Analyzer, Script Library, Gaming, RAM, Network, Hardware`);
@@ -58,7 +58,7 @@ export async function runAllE2ETests() {
   const overallDuration = Date.now() - overallStart;
 
   console.log(`================================================================`);
-  console.log(` OVERALL TEST & VERIFICATION RESULTS (v1.5.1 RELEASE)`);
+  console.log(` OVERALL TEST & VERIFICATION RESULTS (v1.6.0 RELEASE)`);
   console.log(`================================================================`);
   for (const res of suiteResults) {
     const status = res.failed === 0 ? '✓ PASS' : '✗ FAIL';

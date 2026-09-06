@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "1.5.1",
-  "lastUpdated": "2026-08-24T12:00:00Z",
+  "version": "1.6.0",
+  "lastUpdated": "2026-09-06T06:21:49.476Z",
   "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
   "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
   "scripts": [
@@ -21,7 +21,7 @@
         "maintenance",
         "services"
       ],
-      "sha256": "cb961eeb47715e73451f0bdbc3a5a0578a6ccd47d264d44fbe7dc8c4f49a287e",
+      "sha256": "dd6aa85a6e06b8acfe4f0b945f9cf5a6fd6832b8bea4455e59bc902a8acebb49",
       "parameters": []
     },
     {
@@ -59,7 +59,7 @@
         "component-store",
         "disk-cleanup"
       ],
-      "sha256": "d8b74e90b76d586dad1b96d3f35a7a22e02b858ebfb73b783441ae3fd87b3899",
+      "sha256": "4552689416aa26bd17e0421c90788fba4ce8e05da1548d21e407bf0b2155c2fc",
       "parameters": [
         {
           "name": "ResetBase",
@@ -85,7 +85,7 @@
         "network",
         "repair"
       ],
-      "sha256": "1dcab6878837de4c98cc1711f91bb2633650302f51b9d56ad91e7ec4c0e89ba7",
+      "sha256": "a562453cab2422f8f99ff36058c7dbe858c8cccb62c5fae2ae4d450722c055ac",
       "parameters": []
     },
     {
@@ -105,7 +105,7 @@
         "arp",
         "network"
       ],
-      "sha256": "cd910c2b969961d9cc37042abe14ffa26d192b191b59fc883292af6ba7225255",
+      "sha256": "61dfa4480acdbcb0cc1bfb6c808e1452397ed60cf7524b39f6a6352a059a51f5",
       "parameters": []
     },
     {
@@ -125,7 +125,7 @@
         "performance",
         "throughput"
       ],
-      "sha256": "f8270ff6cb9261c8b7e7763ca8b91c2e64734d31729dbf9200f9058db5d1e989",
+      "sha256": "809b8853b5f4927f802b1dc225c2efcbca692f3b7755f310416beab0529bdee2",
       "parameters": [
         {
           "name": "AutoTuningLevel",
@@ -158,7 +158,7 @@
         "security",
         "hardening"
       ],
-      "sha256": "271a8fd1e23483629a8f9ce76a803e8ba982f98d3535c535ca782a3b1fd7dded",
+      "sha256": "7219eddd5831d86480950979885dc750922324de26102bbc260fc7505b37cfbe",
       "parameters": []
     },
     {
@@ -177,7 +177,7 @@
         "logging",
         "amsi"
       ],
-      "sha256": "22062400bd8f75208d62e284cec5c22a0daa2e1a5d39e46f53bdce606ca7781a",
+      "sha256": "f9a0b27cfaea2f92f3bc5e04a0870a4686f80c27406c0a9d30bc6ce96dec14fb",
       "parameters": []
     },
     {
@@ -196,7 +196,7 @@
         "integrity",
         "system-repair"
       ],
-      "sha256": "2d0ac87568868dbbf6ca2cc87caca18296c8a732e53705ba6064887ae54534d0",
+      "sha256": "d8921e79542cea1cbb9d8471755584428bc43e1c09cb0c3dbb184e82f2338003",
       "parameters": [
         {
           "name": "SkipDism",
@@ -222,7 +222,7 @@
         "energy",
         "cpu"
       ],
-      "sha256": "73cf18f34168af82b379ce9ab472b1b0ef4903c4e2b24fab3672437b477baa1c",
+      "sha256": "90e73acae8b17b281a10eb53027b2c5020462989e6147e5a496b1430bb81c2f2",
       "parameters": []
     },
     {
@@ -241,7 +241,7 @@
         "latency",
         "gaming"
       ],
-      "sha256": "931f416464413bd2470230d915cb9758f094c874eb94532d0abcaf0ef1e0c4d9",
+      "sha256": "69c15edda5294499415265b6e6980914027258f5607a819b181c7589cb65de02",
       "parameters": []
     },
     {
@@ -260,7 +260,7 @@
         "disk-io",
         "fsutil"
       ],
-      "sha256": "0a1fd52b7c3bfa1547a8b4fd7efb44d9fcb4e8752539bb0105844a46c102d150",
+      "sha256": "84ffe7be550cb2c6e8c0bb112264be4f5f095ff6c0b572438d0ea5bca1a3d5fb",
       "parameters": []
     },
     {
@@ -279,7 +279,7 @@
         "energy",
         "diagnostics"
       ],
-      "sha256": "4c3a7148b07ce8323679eded87e447fa662944679aafeacd43f6fb63e4b21b30",
+      "sha256": "0a1076f540edcfd209c2b61bc969ce9e221f3458da04e6f0ec01884de275d99c",
       "parameters": [
         {
           "name": "OutputDirectory",
@@ -312,7 +312,7 @@
         "eventlog",
         "diagnostics"
       ],
-      "sha256": "818cbf9e0d95800bba3c2c06801a9535d3881af5179265623b0ae358bfe6ce15",
+      "sha256": "02ab6014868715510c4c1794aea7ce7867f43c8e4b2f43d2126c5d873c072a87",
       "parameters": [
         {
           "name": "MaxEvents",
@@ -339,7 +339,7 @@
         "process",
         "audit"
       ],
-      "sha256": "cf5043977f48cb50f4b5ff5d382dc2efdba38b1bfeb1968ab484421b0f1b5360",
+      "sha256": "ce6f055780bf9ccfcc7cc17a8e3ed7edcd877c978c3bf3463a2abbb8fd32b288",
       "parameters": [
         {
           "name": "StateFilter",
@@ -375,7 +375,7 @@
         "jitter",
         "proxy"
       ],
-      "sha256": "3b407e4ce449f4e9ab1a2de159c803dac3f5125aecbc3c748f4932368f8ad3d1",
+      "sha256": "a8eed6ab0eb5cd76a6094e4b81672862df563c413bac34d99be6669e18dca760",
       "parameters": [
         {
           "name": "TargetHost",
@@ -409,7 +409,7 @@
         "ping",
         "benchmark"
       ],
-      "sha256": "a71ac5283b63b32b466a48bf592da2bae0ce2767fd0b710821d47daf346cbd9a",
+      "sha256": "425e20bb7f529a95efc17fbe7dfe3b7d50b88c93fdf244a0c73592f5af93fee3",
       "parameters": [
         {
           "name": "Count",
@@ -443,7 +443,7 @@
         "dns",
         "repair"
       ],
-      "sha256": "a4022d9290b8acbb7143cd9a1d2e14f00a7c0cf3a041af81ca28fbfe77aa4141",
+      "sha256": "64196ada34b258af82341c9d47ef34b2326e7d55a2ffb9194c71770926f02e7f",
       "parameters": []
     },
     {
@@ -463,7 +463,7 @@
         "security",
         "network"
       ],
-      "sha256": "137ddecff744f2501b3f005bb885327c7c6c23347a2d8393b2af5eb7c3f069ab",
+      "sha256": "f88e81fd46b4dc222b6f7aeee0268e50cbcd41c34ee1be23b9b754e01da2edcc",
       "parameters": []
     },
     {
@@ -483,7 +483,7 @@
         "registry",
         "network"
       ],
-      "sha256": "e4332784cd467ae6e9e5394d95e9ab5b6b8f6388d8e6069a36cc04f305474637",
+      "sha256": "f16f3a00962d82699848904e5a4c2702021cb45c1441c0d18870c778a49547bf",
       "parameters": []
     },
     {
@@ -503,7 +503,7 @@
         "repair",
         "network"
       ],
-      "sha256": "1cb3c760085a20a69a483e7709be9929a3f77c9327dc3666447f47c59ae5a6df",
+      "sha256": "2903c216db9b6584a9048b5e44f56f73bca642028579465487f0f9643942edd8",
       "parameters": []
     },
     {
@@ -523,7 +523,7 @@
         "discovery",
         "network"
       ],
-      "sha256": "164fd33d8f11bd77c8e47898e1316012fb1f93e1afe85cbf3a5acae6c27243be",
+      "sha256": "707ef1bfe42904fd7e4f36e8d752989ff9a3d7e823749621d0f84f41a83bd625",
       "parameters": []
     },
     {
@@ -543,7 +543,7 @@
         "wmi",
         "maintenance"
       ],
-      "sha256": "2e75cf5fa2dd79af8c9c04b50c162b40e42ed2627266a64a2265c39e3d35b844",
+      "sha256": "03548b1bc00916cf6b2157e9da29e2779dce001b3bc398a6633073a08180c891",
       "parameters": []
     },
     {
@@ -563,7 +563,7 @@
         "telemetry",
         "privacy"
       ],
-      "sha256": "5de469c03e68308e8d30200bb17123384d436bc7217bb6194cc34f26fba41bfa",
+      "sha256": "185fa18dac442fcdaeab60273905d346d978b46de917ad607a7253fde6369f34",
       "parameters": [
         {
           "name": "IncludeSystemRepair",
@@ -589,7 +589,7 @@
         "performance",
         "cpu"
       ],
-      "sha256": "75ff90b82eabfc2644cf904b5174357aa5dea424eb159b7e8abe84d316f84535",
+      "sha256": "4f6496c2f15a4e82262a38195fc6c5845048d459671845c5f4bbb2439bbf04d2",
       "parameters": []
     },
     {
@@ -608,7 +608,7 @@
         "energy-saver",
         "efficiency"
       ],
-      "sha256": "1f64ae36b6477405dc6b9ffa3dc77d03523ff6afa2765d1a3199da98da4704df",
+      "sha256": "3c3578c30021cfa37913c0af072fe35bc3077a0becf836a7894a35dfd4115639",
       "parameters": []
     },
     {
@@ -627,7 +627,7 @@
         "automation",
         "battery"
       ],
-      "sha256": "77e60514209ad8e81996d76bfa471745c4fc9e4c6359a565f6eae566ed38c31b",
+      "sha256": "c698ed767e655eeb06df506a4ebeb24f2da85d5570730a5371bdbd98fab26552",
       "parameters": []
     },
     {
@@ -667,7 +667,7 @@
           "description": "Open the generated HTML report in default browser upon completion"
         }
       ],
-      "sha256": "2b877d097378ec1dba54b850acc5d59c956b8b8b22b39569b87305a6a7a1a816"
+      "sha256": "aae008b4d1091942d85be0aac658f23d7a8ba4898c55d8d43959065efe108920"
     },
     {
       "id": "diag-gpu-telemetry",
@@ -723,7 +723,7 @@
           "description": "List partition table and volume drive letters for each physical disk"
         }
       ],
-      "sha256": "21e3b6d89fdafc60b3d9d98e40d34bee06fa3a0c550fb05142a50f2ef3965e97"
+      "sha256": "de31708ddd5a7e8a747342f37274663d9a35172de392d66b5622c27fbdb3af5e"
     },
     {
       "id": "net-flush-dns-renew-ip",
@@ -751,7 +751,7 @@
           "description": "Target specific adapter alias or All for all active network adapters"
         }
       ],
-      "sha256": "9f5ca66aa565745cf259f4a1f1bf72c77fb25da8bccdf9e7a46209a6355b7c27"
+      "sha256": "9b6ccb2b23aabd1591ddd9a4324721f00726a7e4d176ac80f81f89314a071db7"
     },
     {
       "id": "net-latency-diagnostics",
@@ -826,7 +826,7 @@
           "description": "Apply high-throughput TCP window scaling and autotuning"
         }
       ],
-      "sha256": "1e36e5a1ebdd2b640bfb003f47e33a9a668332cec93ff7126e305f983c1a01e8"
+      "sha256": "990c023a1d856fdebf511b89729a7b35316832af8e88b76fc1ffa85c4b68c6a2"
     },
     {
       "id": "maint-clean-windows-update-cache",
@@ -853,7 +853,7 @@
           "description": "Rebuild Windows Update history database (SoftwareDistribution\\\\DataStore)"
         }
       ],
-      "sha256": "8d263142b91406a5e249c5d64c22c1f59d844760ddf7dd8b466da8daefd8824e"
+      "sha256": "fa6a6c35986283bb40c1decc12e0327b7f11e020e53efd655d9f6c0d1a0d9c74"
     },
     {
       "id": "maint-safe-browser-cache-cleaner",
@@ -886,9 +886,15 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically close browser processes before cleaning"
+        },
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate cache cleanup without deleting files or closing processes"
         }
       ],
-      "sha256": "6dcc0916779277678df38f1a176bb6cfae4397cb4c5dc731094499f947be1c52"
+      "sha256": "18016967bc70bac40fff63a030b07af1a222ec4fb93049f24291902221c0fa67"
     },
     {
       "id": "maint-clean-delivery-optimization",
@@ -915,7 +921,7 @@
           "description": "Minimum age in days of cache files to clean (0 = purge all)"
         }
       ],
-      "sha256": "acec4e79e2aeda7135f1a123ffb90a6ac1b81d4a479f568179d91c869ab8a06b"
+      "sha256": "3d8b49c71071f79ae6da97f4c6c99216977eac2b58491d777519189545a3e173"
     },
     {
       "id": "sec-disable-telemetry-tasks",
@@ -954,7 +960,7 @@
           "description": "Set AllowTelemetry=0 in group policy registry"
         }
       ],
-      "sha256": "24854dd6ebacd2c39e5fad5f12f580a0a729157a374b5f958b29dc705ac170ba"
+      "sha256": "6569bb953ac5e5c64ffb85e30cb69b64371090981612fc423c1685c5b8860685"
     },
     {
       "id": "sec-configure-defender-schedule",
@@ -1006,7 +1012,7 @@
           "description": "Check for signature updates before scan"
         }
       ],
-      "sha256": "6278e05c76119a2027e22f7470cf5e8a8ff671b210a14be16121aa94686a1ae2"
+      "sha256": "ed9a0b684dbf3660db3ca09b4c81ef7a1ff62015d616e5d1cc8bb3a2140781d0"
     },
     {
       "id": "perf-clear-ram-standby-list",
@@ -1033,7 +1039,7 @@
           "description": "Target memory pool to purge (StandbyList, WorkingSets, All)"
         }
       ],
-      "sha256": "b2e18c16ccb80210fc73fd6a0231b95a21c1d12a1ee855dbfd6b3df04d1f38f5"
+      "sha256": "37f7d784e86b23e9beef9220ca1b899bbf1bb56e8ed429f7184719e825cd078d"
     },
     {
       "id": "perf-optimize-visual-effects",
@@ -1074,6 +1080,173 @@
         }
       ],
       "sha256": "1a72e36076b401eb7a15bde99aaf5e765759e8c7da1bd96a39c9afc057c0221f"
+    },
+    {
+      "id": "sec-toggle-ai-recall-copilot",
+      "name": "Toggle AI Recall & Copilot Background Features",
+      "category": "security",
+      "path": "security/toggle_ai_recall_copilot.ps1",
+      "description": "Toggles Windows 11 24H2 AI Recall snapshots and Copilot background tasks, user policies, and data analysis telemetry.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "windows-11",
+        "24h2",
+        "recall",
+        "copilot",
+        "ai",
+        "privacy",
+        "security"
+      ],
+      "parameters": [
+        {
+          "name": "Action",
+          "type": "string",
+          "default": "Disable",
+          "description": "Action to perform: Disable (turns off AI Recall and Copilot features) or Enable (restores features)"
+        },
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate AI Recall & Copilot configuration changes without modifying registry or group policies"
+        }
+      ],
+      "sha256": "21865315316a78eae025d5ea51d3f06d8723a5031f43fbe908b8cf19267d7866"
+    },
+    {
+      "id": "sec-disable-modern-telemetry-24h2",
+      "name": "Disable Modern 24H2 Diagnostic Telemetry Tasks",
+      "category": "security",
+      "path": "security/disable_modern_telemetry_24h2.ps1",
+      "description": "Disables modern Windows 11 24H2 diagnostic telemetry scheduled tasks (PcaDataCollector, MareBackup), feedback services, and telemetry policies.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "windows-11",
+        "24h2",
+        "telemetry",
+        "privacy",
+        "data-collection",
+        "security"
+      ],
+      "parameters": [
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate telemetry deactivation without applying modifications to the system"
+        }
+      ],
+      "sha256": "8c27dc69b3d86a84796922dcea37385c31084ccb48c7d4468b7b9f51cb9dd6dc"
+    },
+    {
+      "id": "perf-restore-classic-context-menu",
+      "name": "Restore Classic File Explorer Context Menu",
+      "category": "performance",
+      "path": "performance/restore_classic_context_menu.ps1",
+      "description": "Restores the full legacy Windows 10 style right-click context menu in Windows 11 File Explorer, eliminating the Show More Options click.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "windows-11",
+        "explorer",
+        "context-menu",
+        "ui",
+        "classic",
+        "performance"
+      ],
+      "parameters": [
+        {
+          "name": "Action",
+          "type": "string",
+          "default": "RestoreClassic",
+          "description": "Action to perform: RestoreClassic (Windows 10 style) or RestoreModern (Windows 11 style)"
+        },
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate registry key modification without writing changes or restarting Explorer"
+        }
+      ],
+      "sha256": "3bef6c6c9bc86ce72f953bee36089b066ae22af5f8c5885575e56f96d2950d4f"
+    },
+    {
+      "id": "net-configure-qos-dscp-gaming",
+      "name": "Configure Gaming QoS DSCP 46",
+      "category": "network",
+      "path": "network/configure_qos_dscp_gaming.ps1",
+      "description": "Configures Policy-based Quality of Service (QoS) with DSCP 46 Expedited Forwarding (EF) tagging for low-latency gaming packet prioritization.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "qos",
+        "dscp",
+        "gaming",
+        "low-latency",
+        "network",
+        "priority",
+        "packet-tagging"
+      ],
+      "parameters": [
+        {
+          "name": "Action",
+          "type": "string",
+          "default": "Enable",
+          "description": "Action to perform: Enable (create/update QoS DSCP 46 rule) or Disable (remove rule)"
+        },
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate QoS configuration changes without modifying registry or policy store"
+        }
+      ],
+      "sha256": "45fdd3dbf159f9d2f7c55b7c778a051b20dcaaa6ed9376fa8dd70d128985aece"
+    },
+    {
+      "id": "net-optimize-nagle-algorithm",
+      "name": "Optimize Nagle's Algorithm & TCP Delay",
+      "category": "network",
+      "path": "network/optimize_nagle_algorithm.ps1",
+      "description": "Disables Nagle's buffering algorithm (TCPNoDelay=1) and delayed ACKs (TcpAckFrequency=1) across active network adapters to eliminate multiplayer input latency.",
+      "riskLevel": "elevated",
+      "requiresAdmin": true,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "nagle",
+        "tcp-nodelay",
+        "tcpackfrequency",
+        "gaming",
+        "latency",
+        "network",
+        "throughput"
+      ],
+      "parameters": [
+        {
+          "name": "Action",
+          "type": "string",
+          "default": "Enable",
+          "description": "Action to perform: Enable (disable Nagle and set immediate ACK) or Disable (restore OS defaults)"
+        },
+        {
+          "name": "DryRun",
+          "type": "boolean",
+          "default": false,
+          "description": "Simulate TCP registry changes on active network interfaces without modifying system"
+        }
+      ],
+      "sha256": "a7aea4bf3284c25c1de4bf942a4d9021c932491f57bbfea2fc3a9335b332d2e7"
     }
   ]
 }

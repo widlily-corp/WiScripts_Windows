@@ -41,6 +41,58 @@ function Write-StatusRow([string]$Label, [string]$Status, [string]$Details = "",
     }
 }
 
+# High-performance bounded socket connection prober (3000ms strict timeout)
+function Test-TcpPortFast([string]$HostName, [int]$Port, [int]$TimeoutMs = 3000) {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        $asyncResult = $client.BeginConnect($HostName, $Port, $null, $null)
+        $success = $asyncResult.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
+        if (-not $success) {
+            $client.Close()
+            $sw.Stop()
+            return [PSCustomObject]@{ Success = $false; LatencyMs = $sw.ElapsedMilliseconds; TimedOut = $true }
+        }
+        $client.EndConnect($asyncResult)
+        $sw.Stop()
+        $client.Close()
+        return [PSCustomObject]@{ Success = $true; LatencyMs = $sw.ElapsedMilliseconds; TimedOut = $false }
+    } catch {
+        $sw.Stop()
+        $client.Close()
+        return [PSCustomObject]@{ Success = $false; LatencyMs = $sw.ElapsedMilliseconds; TimedOut = $false; Error = $_.Exception.Message }
+    }
+}
+
+# High-performance bounded ICMP ping helper (1000ms timeout per probe, short-circuit dead target)
+function Test-PingFast([string]$HostTarget, [int]$TimeoutMs = 1000, [int]$MaxAttempts = 3) {
+    $pinger = [System.Net.NetworkInformation.Ping]::new()
+    $replies = [System.Collections.Generic.List[int64]]::new()
+    $consecutiveFails = 0
+
+    for ($i = 0; $i -lt $MaxAttempts; $i++) {
+        try {
+            $reply = $pinger.Send($HostTarget, $TimeoutMs)
+            if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                $replies.Add($reply.RoundtripTime)
+                $consecutiveFails = 0
+            } else {
+                $consecutiveFails++
+            }
+        } catch {
+            $consecutiveFails++
+        }
+        if ($replies.Count -eq 0 -and $consecutiveFails -ge 2) {
+            break
+        }
+        if ($i -lt ($MaxAttempts - 1)) {
+            Start-Sleep -Milliseconds 40
+        }
+    }
+    $pinger.Dispose()
+    return $replies
+}
+
 Write-Host "===============================================================" -ForegroundColor Cyan
 Write-Host "       WINDOWS NETWORK & INTERNET DEEP DIAGNOSTICS SUITE       " -ForegroundColor White
 Write-Host "       Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')    " -ForegroundColor DarkGray
@@ -58,6 +110,13 @@ if (-not $adapters) {
         $speed = if ($adapter.LinkSpeed) { $adapter.LinkSpeed } else { "N/A" }
         $virt = if ($adapter.Virtual -or $adapter.InterfaceDescription -match "Hyper-V|Virtual|TAP|VPN") { " (Virtual/VPN)" } else { "" }
         Write-StatusRow "$($adapter.InterfaceAlias)$virt" "UP" "Speed: $speed | MAC: $($adapter.MacAddress)" "OK"
+    }
+}
+
+if ($Detailed) {
+    $allAdapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -ne "Up" }
+    foreach ($ad in $allAdapters) {
+        Write-StatusRow "$($ad.InterfaceAlias) (Down)" "$($ad.Status)" "MAC: $($ad.MacAddress)" "INFO"
     }
 }
 
@@ -100,11 +159,11 @@ if (-not $primaryRoute) {
     }
     
     if ($gw -and $gw -ne "0.0.0.0") {
-        $gwPing = Test-Connection -ComputerName $gw -Count 3 -ErrorAction SilentlyContinue
-        if ($gwPing) {
-            $avgLatency = [math]::Round(($gwPing | Measure-Object -Property ResponseTime -Average).Average, 1)
+        $replies = Test-PingFast -HostTarget $gw -TimeoutMs 1000 -MaxAttempts 3
+        if ($replies.Count -gt 0) {
+            $avgLatency = [math]::Round(($replies | Measure-Object -Average).Average, 1)
             $gwLevel = if ($avgLatency -lt 5) { "OK" } elseif ($avgLatency -lt 30) { "WARN" } else { "FAIL" }
-            Write-StatusRow "Ping to Gateway ($gw)" "$($avgLatency)ms" "Received 3/3 ICMP replies" $gwLevel
+            Write-StatusRow "Ping to Gateway ($gw)" "$($avgLatency)ms" "Received $($replies.Count)/3 ICMP replies" $gwLevel
         } else {
             Write-StatusRow "Ping to Gateway ($gw)" "FAIL" "Gateway not responding to ICMP ping" "WARN"
             $Warnings.Add("Default gateway $gw did not answer ICMP ping (ICMP may be blocked by router).")
@@ -113,7 +172,7 @@ if (-not $primaryRoute) {
 }
 
 # MTU Test
-$pingDF = & ping.exe 1.1.1.1 -f -l 1472 -n 1 2>$null | Out-String
+$pingDF = & ping.exe 1.1.1.1 -f -l 1472 -n 1 -w 2000 2>$null | Out-String
 if ($pingDF -match "Packet needs to be fragmented|fragmented|фрагментация") {
     Write-StatusRow "MTU 1500 (Don't Fragment)" "WARN" "Packet 1472+28 bytes requires fragmentation (MSS Clamping)" "WARN"
 } elseif ($pingDF -match "bytes=|байт=") {
@@ -133,7 +192,14 @@ if ($configuredDns) {
     $Issues.Add("No DNS servers configured in the system.")
 }
 
-$benchDomains = @("google.com", "cloudflare.com", "yandex.ru")
+$benchDomains = [System.Collections.Generic.List[string]]::new()
+if (-not [string]::IsNullOrWhiteSpace($TargetHost)) {
+    $benchDomains.Add($TargetHost)
+}
+foreach ($d in @("google.com", "cloudflare.com", "yandex.ru")) {
+    if (-not $benchDomains.Contains($d)) { $benchDomains.Add($d) }
+}
+
 $testServers = @(
     @{ Name = "System DNS"; IP = $null },
     @{ Name = "Cloudflare"; IP = "1.1.1.1" },
@@ -184,7 +250,8 @@ Write-Header "4. Internet Services & TCP Handshakes (L7)"
 # Captive portal check
 try {
     $req = [System.Net.HttpWebRequest]::Create("http://www.msftconnecttest.com/connecttest.txt")
-    $req.Timeout = 4000
+    $req.Timeout = 3000
+    $req.ReadWriteTimeout = 3000
     $req.AllowAutoRedirect = $false
     $resp = $req.GetResponse()
     if ($resp.StatusCode -eq "OK") {
@@ -195,24 +262,25 @@ try {
     }
     $resp.Close()
 } catch {
-    Write-StatusRow "Captive Portal" "INFO" "msftconnecttest passed" "INFO"
+    Write-StatusRow "Captive Portal" "INFO" "msftconnecttest passed or skipped" "INFO"
 }
 
-$endpoints = @(
-    @{ Name = "Cloudflare CDN"; Host = "1.1.1.1"; Port = 443 },
-    @{ Name = "Google Services"; Host = "8.8.8.8"; Port = 53 },
-    @{ Name = "Microsoft Web";  Host = "www.microsoft.com"; Port = 443 },
-    @{ Name = "Yandex Infra";   Host = "77.88.8.8"; Port = 443 }
-)
+$endpoints = [System.Collections.Generic.List[PSCustomObject]]::new()
+if (-not [string]::IsNullOrWhiteSpace($TargetHost) -and $TargetHost -ne "cloudflare.com") {
+    $endpoints.Add([PSCustomObject]@{ Name = "Target ($TargetHost)"; Host = $TargetHost; Port = 443 })
+}
+$endpoints.Add([PSCustomObject]@{ Name = "Cloudflare CDN"; Host = "1.1.1.1"; Port = 443 })
+$endpoints.Add([PSCustomObject]@{ Name = "Google Services"; Host = "8.8.8.8"; Port = 53 })
+$endpoints.Add([PSCustomObject]@{ Name = "Microsoft Web";  Host = "www.microsoft.com"; Port = 443 })
+$endpoints.Add([PSCustomObject]@{ Name = "Yandex Infra";   Host = "77.88.8.8"; Port = 443 })
 
 foreach ($ep in $endpoints) {
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $tcp = Test-NetConnection -ComputerName $ep.Host -Port $ep.Port -InformationLevel Quiet -WarningAction SilentlyContinue
-    $sw.Stop()
-    if ($tcp) {
-        Write-StatusRow "$($ep.Name):$($ep.Port)" "OK" "TCP Handshake: $($sw.ElapsedMilliseconds)ms" "OK"
+    $tcp = Test-TcpPortFast -HostName $ep.Host -Port $ep.Port -TimeoutMs 3000
+    if ($tcp.Success) {
+        Write-StatusRow "$($ep.Name):$($ep.Port)" "OK" "TCP Handshake: $($tcp.LatencyMs)ms" "OK"
     } else {
-        Write-StatusRow "$($ep.Name):$($ep.Port)" "FAIL" "Connection failed or port blocked" "FAIL"
+        $reason = if ($tcp.TimedOut) { "Timed out (>3000ms)" } else { "Connection failed / blocked" }
+        Write-StatusRow "$($ep.Name):$($ep.Port)" "FAIL" $reason "FAIL"
         $Warnings.Add("TCP connection to $($ep.Name) ($($ep.Host):$($ep.Port)) failed.")
     }
 }
@@ -282,3 +350,5 @@ if ($Issues.Count -eq 0 -and $Warnings.Count -eq 0) {
 Write-Host "===============================================================" -ForegroundColor Cyan
 Write-Host " Diagnostics Complete." -ForegroundColor Cyan
 Write-Host "===============================================================" -ForegroundColor Cyan
+
+exit 0

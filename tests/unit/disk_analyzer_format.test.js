@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.5.1 — Unit Test Suite: Multi-TB / PB Binary Format Scaling
+ * WiScripts Windows v1.6.0 — Unit Test Suite: Multi-TB / PB Binary Format Scaling
  * 
  * Verifies formatBytes and formatTabularBytes behavior:
  * - 0 B, negative, NaN

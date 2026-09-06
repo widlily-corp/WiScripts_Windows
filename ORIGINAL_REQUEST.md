@@ -115,3 +115,138 @@ Integrity mode: development
 - [ ] Frontend builds cleanly with zero TypeScript errors (`tsc && vite build`).
 - [ ] Backend passes Rust compilation and unit tests (`cargo test`).
 - [ ] Release notes `RELEASE_NOTES_1.5.1.md` and version `1.5.1` increments are properly documented.
+
+## Follow-up — 2026-09-05T17:13:54Z
+
+# Teamwork Project Prompt
+
+Stabilize script execution and expand WiScripts Windows to v1.6.0 by fixing runtime failures across all PowerShell scripts (clean elevation handling, eliminated stalls and timeouts, robust parameter wrapping), adding on-demand UAC administrator execution from the UI, and delivering new performance, privacy (Windows 11 24H2), and diagnostic features with execution history and dry-run preview.
+
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Integrity mode: development
+
+## Requirements
+
+### R1. Script Runtime Stabilization & Zero-Error Execution
+- All existing and new scripts in the library must execute cleanly to completion without terminating with unhandled exceptions (`throw`), syntax errors, or infinite loops.
+- Scripts that require administrative privileges must handle non-elevated environments gracefully: when run without elevation, they must report structured status indicating elevation requirement and cleanly exit with standard status code (code 1 or 2) without crashing or emitting raw unhandled stack traces.
+- Long-running maintenance and diagnostic scripts (`safe_browser_cache_cleaner.ps1`, `diagnose_network_health.ps1`, `test_network_stability.ps1`) must be bounded: file scanning/deletion must use performant batch operations with progress reporting, and network tests must enforce strict per-target timeouts (maximum 3–5 seconds per target) to prevent runner freezes.
+- Script runner parameter formatting in the frontend (`formatScriptWithParameters`) must generate clean PowerShell invocations compatible with PowerShell 5.1/7 AST without breaking top-level param blocks or UTF-8 BOM headers.
+
+### R2. On-Demand UAC Elevation Execution
+- Implement on-demand administrator elevation for script execution directly from the desktop UI, allowing a user who launched the app without elevation to execute elevated scripts with a single Windows UAC prompt rather than forcing a full application restart.
+- The UI must provide a clear "Run as Administrator" option on scripts with elevated risk levels and show real-time process output and termination controls regardless of elevation state.
+
+### R3. Script Library Expansion (v1.6.0 Release Suite)
+Expand `scripts_lib` and update `scripts_lib/manifest.json` with new production-ready scripts:
+- **Windows 11 24H2 Suite**: Toggle AI Recall / Copilot background agents, disable modern diagnostic telemetry tasks, and restore classic Windows Explorer context menu behavior.
+- **Gaming & Low-Latency Network Suite**: Network QoS DSCP priority tagging for game traffic and optional Nagle's algorithm (TCP_NODELAY) optimization.
+- All new scripts must adhere to library standards: `param()` header as first statement, UTF-8 BOM encoding, valid SHA-256 hashes in `manifest.json`, and safe dry-run parameters.
+
+### R4. Execution History, Log Export & Dry-Run Preview
+- Maintain a local history of executed scripts including timestamp, execution duration, exit code, and terminal logs.
+- Provide log download/export and a 1-click re-run action for past executions.
+- Provide a Dry-Run / Impact Simulator mode that calculates and displays what paths, services, or registry keys will be affected before actual modifications occur.
+
+### R5. Regression Prevention & Test Suite Alignment
+- Update outdated test assertions (such as `test_challenger1_m3_version_verification.cjs`) to reflect the updated version and manifest count.
+- All automated test suites (`npm test`, all `tests/*.cjs`, all `tests/*.js`) and TypeScript build checks (`npm run build`) must pass with 0 failures.
+
+### R6. Strict Host Safety & Environment Isolation
+- Automated test suites and runner verifications must NEVER execute destructive operations against the host system.
+- Disk deletion, registry alteration, or network reset tests must execute strictly against mock objects, isolated sandbox directories (e.g. within `.agents/` or temp paths), or with mock runners.
+- The host laptop's personal user files, live network connection, and running OS services must not be disrupted or deleted during development or testing.
+
+## Verification Resources
+- Test runners: `npm test` and `node tests/e2e/runner.js`.
+- Static AST and manifest validator: `node tests/static_analysis/static_analysis_suite.js`.
+- Test suite files in `tests/*.cjs` verifying disk utilities, elevation codes, parser resilience, and navigation.
+
+## Acceptance Criteria
+
+### Execution Stability
+- [ ] Running all scripts in `scripts_lib` via PowerShell results in zero unhandled exceptions, zero unhandled terminating `throw` crashes, and zero timeouts.
+- [ ] Scripts requiring elevation report clear, user-friendly requirement messages and standard exit codes when run non-elevated.
+- [ ] `maint-safe-browser-cache-cleaner` finishes execution within 15 seconds under real profile paths.
+- [ ] Network diagnostic scripts complete within their allocated bounded timeouts without hanging.
+
+### Feature Completeness
+- [ ] Users can trigger elevated script execution with a UAC prompt directly from the UI.
+- [ ] New scripts (Win11 24H2 debloat, network gaming tweaks) appear in the Script Library with correct categories, tags, parameters, and descriptions.
+- [ ] Execution history captures previous runs with status badges and ability to view/export logs.
+- [ ] Dry-run mode produces accurate previews without mutating the host system.
+
+### Host Safety & Isolation
+- [ ] Zero destructive modifications to the host operating system, active user profiles, or production network adapters during automated test runs.
+- [ ] All filesystem testing is confined to isolated mock/sandbox structures.
+
+### Build & Test Integrity
+- [ ] `npm run build` completes successfully with 0 TypeScript compilation or bundling errors.
+- [ ] `npm test` passes 100% of test cases (0 failures across all suites).
+
+## 2026-09-06T06:36:33Z
+
+# Teamwork Project Prompt — Resume WiScripts Windows v1.6.0
+
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Integrity mode: development
+Requested team: Full team
+
+Resume and complete the WiScripts Windows v1.6.0 release:
+
+## Progress State
+- Milestone 1 (Script Runtime Stabilization & Parameter Formatting): COMPLETED & VERIFIED.
+- Milestone 2 (On-Demand UAC Elevation Bridge in Rust & UI): COMPLETED & VERIFIED.
+- Milestone 3 (Script Library Expansion): 5 new scripts authored (toggle_ai_recall_copilot.ps1, disable_modern_telemetry_24h2.ps1, restore_classic_context_menu.ps1, configure_qos_dscp_gaming.ps1, optimize_nagle_algorithm.ps1), manifest updated to 45 scripts.
+
+## Remaining Milestones to Execute
+### Milestone 4: Execution History, Log Export & Dry-Run Preview
+- Maintain a local execution history of executed scripts (timestamp, duration, exit code, elevated status, log snippet) in Zustand/localStorage (up to 50 entries).
+- Add History tab in ScriptRunnerView with 1-click re-run and log download.
+- Implement Impact Simulator / Dry-run preview modal (scriptImpactAnalyzer) to inspect target registry keys, services, and paths prior to execution.
+- Add complete bilingual i18n keys in en.json and ru.json.
+
+### Milestone 5: Regression Prevention, Test Suite Alignment & v1.6.0 Release
+- Align tests in tests/ (e.g. test_challenger1_m3_version_verification.cjs, test_challenger_m3_1_scripts_deep_audit.cjs, test_m1_challenger_elevation_exit_codes.cjs) to 45 scripts and v1.6.0.
+- Synchronize version string 1.6.0 across package.json, Cargo.toml, Cargo.lock, tauri.conf.json, updaterSlice.ts, and manifest.json.
+- Run complete verification: npm test, npm run build, cargo test --lib.
+- Publish RELEASE_NOTES_1.6.0.md and complete final Victory Audit.
+
+## Strict Host Safety & Environment Isolation
+- Automated test suites and runner verifications must NEVER execute destructive operations against the host system.
+- Disk deletion, registry alteration, or network reset tests must execute strictly against mock objects, isolated sandbox directories (e.g. within .agents/ or temp paths), or with mock runners.
+- Zero disruption to host user files, live network connection, or OS services.
+
+## 2026-09-06T07:26:53Z
+
+# Teamwork Project Prompt — WiScripts Windows v1.6.0 Final Release
+
+Working directory: c:\Users\Widlily\Documents\projects\WiScripts_Windows
+Integrity mode: development
+Requested team: Full team
+
+Finalize WiScripts Windows v1.6.0 Release:
+
+## Milestones State
+- Milestone 1 (Script Runtime Stabilization & Zero Throw Errors): COMPLETED.
+- Milestone 2 (On-Demand UAC Elevation Execution in Rust & UI): COMPLETED.
+- Milestone 3 (Script Library Expansion to 45 Scripts): COMPLETED & VERIFIED.
+- Milestone 4 (Execution History & Impact Simulator UI): COMPLETED.
+
+## Milestone 5 Tasks (Final Polish & Release)
+1. Synchronize version string 1.6.0 across all 7 manifests:
+   - package.json ("version": "1.6.0")
+   - package-lock.json ("version": "1.6.0")
+   - src-tauri/Cargo.toml (version = "1.6.0")
+   - src-tauri/Cargo.lock (version = "1.6.0")
+   - src-tauri/tauri.conf.json ("version": "1.6.0")
+   - src/store/slices/updaterSlice.ts (appVersion: '1.6.0')
+   - scripts_lib/manifest.json ("version": "1.6.0")
+2. Align tests in tests/ (such as test_challenger1_m3_version_verification.cjs, static_analysis_suite.js) to 45 scripts and v1.6.0.
+3. Run verification: npm test, npm run build, cargo test --lib.
+4. Author RELEASE_NOTES_1.6.0.md documenting all new features (UAC elevation, Win11 24H2 suite, Gaming suite, Execution History, Impact Simulator).
+5. Conduct final Victory Audit.
+
+## Strict Host Safety
+- Zero destructive operations on the host PC. All tests run in isolated sandboxes.
+

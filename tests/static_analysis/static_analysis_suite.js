@@ -1,5 +1,5 @@
 /**
- * WiScripts Windows v1.5.1 — Static AST & Schema Verification Suite
+ * WiScripts Windows v1.6.0 — Static AST & Schema Verification Suite
  * 
  * Exposes a comprehensive TestRunner suite for:
  * 1. Manifest schema, types, fields, and URL verification
@@ -9,6 +9,8 @@
  * 5. Multi-byte CP1251 safety and absence of interactive cmdlets
  */
 
+import path from 'path';
+import { pathToFileURL } from 'url';
 import { TestRunner, assert } from '../e2e/harness.js';
 import { validateManifest } from './manifest_validator.js';
 import { runPowerShellAstValidation } from './ps_ast_validator.js';
@@ -22,9 +24,10 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     assert.isTrue(report.manifest !== null, 'Manifest parsed into memory');
-    assert.greaterThanOrEqual(report.manifest.scripts.length, 27, 'Manifest has at least 27 scripts');
+    assert.equal(report.manifest.scripts.length, 45, 'Manifest catalogs exactly 45 scripts');
     assert.match(report.manifest.schemaVersion, /^\d+\.\d+\.\d+$/, 'schemaVersion is semver');
     assert.match(report.manifest.version, /^\d+\.\d+\.\d+$/, 'version is semver');
+    assert.equal(report.manifest.version, '1.6.0', 'Manifest version is 1.6.0');
     assert.ok(report.manifest.repositoryUrl.startsWith('https://'), 'repositoryUrl is https');
     assert.ok(report.manifest.rawBaseUrl.startsWith('https://'), 'rawBaseUrl is https');
   });
@@ -53,7 +56,7 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     const diskParityChecks = report.assertions.filter(a => a.name.startsWith('Disk File Tracked') || a.name === 'Disk & Manifest Count Parity');
-    assert.greaterThanOrEqual(diskParityChecks.length, 27, 'All disk files tracked');
+    assert.greaterThanOrEqual(diskParityChecks.length, 45, 'All 45 disk files tracked');
     for (const check of diskParityChecks) {
       assert.isTrue(check.passed, `Parity check passed: ${check.name} (${check.detail})`);
     }
@@ -65,7 +68,7 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     const shaChecks = report.assertions.filter(a => a.name.includes('SHA-256 Integrity'));
-    assert.greaterThanOrEqual(shaChecks.length, 27, 'All scripts have SHA-256 integrity check');
+    assert.equal(shaChecks.length, 45, 'All 45 scripts have SHA-256 integrity check');
     for (const check of shaChecks) {
       assert.isTrue(check.passed, `SHA-256 verified: ${check.name}`);
     }
@@ -76,7 +79,7 @@ export function buildStaticAnalysisSuite() {
     const summary = runPowerShellAstValidation();
 
     // Assert
-    assert.greaterThanOrEqual(summary.totalScripts, 27, 'At least 27 scripts parsed by AST');
+    assert.equal(summary.totalScripts, 45, 'All 45 scripts parsed by AST');
     for (const res of summary.results) {
       const astCheck = res.checks.find(c => c.name === 'AST Syntax Parsing');
       assert.ok(astCheck, `AST check present for ${res.scriptPath}`);
@@ -133,4 +136,18 @@ export function buildStaticAnalysisSuite() {
   });
 
   return runner;
+}
+
+// Standalone execution entrypoint
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  const suite = buildStaticAnalysisSuite();
+  suite.run().then(res => {
+    if (res.failed > 0) {
+      process.exit(1);
+    }
+    process.exit(0);
+  }).catch(e => {
+    console.error('Fatal Static Analysis Suite Error:', e);
+    process.exit(1);
+  });
 }

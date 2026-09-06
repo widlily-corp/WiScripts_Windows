@@ -1,4 +1,4 @@
-﻿/**
+/**
  * WiScripts Windows — Milestone 2 Challenger 2 Empirical Test Suite
  * Exhaustive Empirical Verification & Stress Test:
  * 1. Keyboard Navigation, Focus Management & ARIA Landmarks
@@ -325,6 +325,8 @@ async function testI18nLabelLengthsAndTypography() {
 
     assert.strictEqual(formatVersion(enTmpl, '1.4.0'), 'Windows Utility v1.4.0');
     assert.strictEqual(formatVersion(ruTmpl, '1.4.0'), 'Утилита Windows v1.4.0');
+    assert.strictEqual(formatVersion(enTmpl, '1.6.0'), 'Windows Utility v1.6.0');
+    assert.strictEqual(formatVersion(ruTmpl, '1.6.0'), 'Утилита Windows v1.6.0');
 
     assert.strictEqual(formatVersion(enTmpl, null), 'Windows Utility v1.0.0');
     assert.strictEqual(formatVersion(ruTmpl, null), 'Утилита Windows v1.0.0');

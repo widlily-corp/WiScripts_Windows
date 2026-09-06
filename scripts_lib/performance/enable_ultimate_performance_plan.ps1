@@ -13,11 +13,21 @@ Write-Host "==========================================================" -Foregro
 $ultimateGuid = "e9a42b02-d5df-448d-aa00-03f14749eb61"
 $highPerfGuid = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
 
-Write-Host "Duplicating built-in Ultimate Performance power scheme..." -ForegroundColor Yellow
-$targetGuid = $ultimateGuid
-$dupOutput = powercfg -duplicatescheme $ultimateGuid 2>&1 | Out-String
-if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+Write-Host "Resolving Ultimate Performance power scheme..." -ForegroundColor Yellow
+$targetGuid = $null
+$existingSchemes = powercfg /list 2>&1 | Out-String
+
+if ($existingSchemes -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s+\([^\)]*(?:Ultimate|Максимальн)[^\)]*\)') {
     $targetGuid = $matches[1]
+    Write-Host "  Found existing Ultimate Performance plan: $targetGuid" -ForegroundColor Green
+} else {
+    Write-Host "  Duplicating template Ultimate Performance scheme..." -ForegroundColor Yellow
+    $dupOutput = powercfg -duplicatescheme $ultimateGuid 2>&1 | Out-String
+    if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+        $targetGuid = $matches[1]
+    } else {
+        $targetGuid = $highPerfGuid
+    }
 }
 
 Write-Host "Activating Ultimate Performance plan ($targetGuid)..." -ForegroundColor Cyan

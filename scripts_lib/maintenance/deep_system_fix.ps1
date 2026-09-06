@@ -14,12 +14,28 @@ Write-Host "[1/5] Disabling IPv6 protocol..."
 New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters" -Name "DisabledComponents" -PropertyType DWord -Value 255 -Force -ErrorAction SilentlyContinue | Out-Null
 
 Write-Host "[2/5] Setting interface metrics..."
-$WiFi = Get-NetAdapter | Where-Object {$_.InterfaceDescription -like '*Qualcomm FastConnect*' -or $_.Name -like '*Wi-Fi*' -or $_.InterfaceAlias -like '*Wi-Fi*'} | Select-Object -First 1
+$WiFi = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
+    $_.PhysicalMediaType -eq 'Native 802.11' -or
+    $_.MediaType -like '*802.11*' -or
+    $_.InterfaceDescription -like '*Qualcomm FastConnect*' -or
+    $_.InterfaceDescription -like '*Wireless*' -or
+    $_.InterfaceDescription -like '*Wi-Fi*' -or
+    $_.Name -like '*Wi-Fi*' -or
+    $_.Name -like '*Беспроводная*' -or
+    $_.InterfaceAlias -like '*Wi-Fi*' -or
+    $_.InterfaceAlias -like '*Беспроводная*'
+} | Select-Object -First 1
+
+if (-not $WiFi) {
+    $WiFi = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
+}
+
 if ($WiFi) {
-    Set-NetIPInterface -InterfaceIndex $WiFi.ifIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue
-    $OtherAdapters = Get-NetAdapter | Where-Object {$_.ifIndex -ne $WiFi.ifIndex}
+    Write-Host "  Detected primary adapter: $($WiFi.Name) ($($WiFi.InterfaceDescription))" -ForegroundColor DarkGray
+    Set-NetIPInterface -InterfaceIndex $WiFi.InterfaceIndex -InterfaceMetric 1 -ErrorAction SilentlyContinue
+    $OtherAdapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceIndex -ne $WiFi.InterfaceIndex }
     foreach ($Adapter in $OtherAdapters) {
-        Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -InterfaceMetric 100 -ErrorAction SilentlyContinue
+        Set-NetIPInterface -InterfaceIndex $Adapter.InterfaceIndex -InterfaceMetric 100 -ErrorAction SilentlyContinue
     }
 }
 
@@ -33,12 +49,12 @@ New-ItemProperty -Path $EdgePath -Name "EncryptedClientHelloEnabled" -PropertyTy
 
 Write-Host "[4/5] Configuring reliable DNS endpoints..."
 if ($WiFi) {
-    Set-DnsClientServerAddress -InterfaceIndex $WiFi.ifIndex -ServerAddresses ("8.8.8.8","77.88.8.8") -ErrorAction SilentlyContinue
+    Set-DnsClientServerAddress -InterfaceIndex $WiFi.InterfaceIndex -ServerAddresses ("8.8.8.8","77.88.8.8") -ErrorAction SilentlyContinue
 }
 
 Write-Host "[5/5] Resetting Winsock and TCP/IP stack..."
 netsh winsock reset 2>$null | Out-Null
-netsh int ip reset 2>$null | Out-Null
+netsh int ip reset "$env:TEMP\netsh_reset.log" 2>$null | Out-Null
 ipconfig /flushdns 2>$null | Out-Null
 
 Write-Host "==========================================================" -ForegroundColor Green

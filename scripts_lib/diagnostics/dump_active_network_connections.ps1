@@ -5,8 +5,7 @@
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Host "[ERROR] This script requires Administrator privileges. Please run as Administrator."
-    exit 1
+    Write-Host "[INFO] Running in Standard User mode. Socket telemetry is fully functional without elevation." -ForegroundColor Cyan
 }
 
 $ErrorActionPreference = "SilentlyContinue"

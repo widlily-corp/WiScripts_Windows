@@ -13,11 +13,7 @@ Write-Host "==========================================================" -Foregro
 $EveryoneID = New-Object System.Security.Principal.SecurityIdentifier("S-1-1-0")
 $EveryoneName = $EveryoneID.Translate([System.Security.Principal.NTAccount]).Value
 
-Write-Host "Configuring LanmanWorkstation guest authentication..."
-$GuestAcc = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True AND SID LIKE '%-501'" -ErrorAction SilentlyContinue
-if ($GuestAcc) {
-    net user $($GuestAcc.Name) /active:yes 2>$null | Out-Null
-}
+Write-Host "Configuring LanmanWorkstation network sharing parameters..." -ForegroundColor Cyan
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "AllowInsecureGuestAuth" -Value 1 -Force -ErrorAction SilentlyContinue
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Lsa" -Name "everyoneincludesanonymous" -Value 1 -Force -ErrorAction SilentlyContinue
 Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Lsa" -Name "restrictanonymous" -Value 0 -Force -ErrorAction SilentlyContinue
@@ -44,7 +40,12 @@ if (-not (Test-Path $sharePath)) {
 }
 
 Remove-SmbShare -Name "LocalShare" -Force -ErrorAction SilentlyContinue
-New-SmbShare -Name "LocalShare" -Path $sharePath -FullAccess $EveryoneName -Description "Shared Folder" -ErrorAction SilentlyContinue | Out-Null
+try {
+    New-SmbShare -Name "LocalShare" -Path $sharePath -FullAccess $EveryoneName -Description "Shared Folder" -ErrorAction Stop | Out-Null
+    Write-Host "  [OK] Network share 'LocalShare' published." -ForegroundColor Green
+} catch {
+    Write-Host "  [WARN] Failed to publish SMB share: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
 $acl = Get-Acl $sharePath -ErrorAction SilentlyContinue
 if ($acl) {

@@ -21,7 +21,7 @@
         "maintenance",
         "services"
       ],
-      "sha256": "dd6aa85a6e06b8acfe4f0b945f9cf5a6fd6832b8bea4455e59bc902a8acebb49",
+      "sha256": "e89df6df9a7250d498b995456fd06e9f02efafcd40aafd423e2eb188e6eafefa",
       "parameters": []
     },
     {
@@ -105,7 +105,7 @@
         "arp",
         "network"
       ],
-      "sha256": "61dfa4480acdbcb0cc1bfb6c808e1452397ed60cf7524b39f6a6352a059a51f5",
+      "sha256": "f778a3e2584b1a8255a9abfa070575cfe52df284a387b28f1e4b2c596de6d567",
       "parameters": []
     },
     {
@@ -222,7 +222,7 @@
         "energy",
         "cpu"
       ],
-      "sha256": "90e73acae8b17b281a10eb53027b2c5020462989e6147e5a496b1430bb81c2f2",
+      "sha256": "5795ff01b840aa5dd4a85b3ea5c5e5c053f8a3b06395b788f04a3597bcd4ea5d",
       "parameters": []
     },
     {
@@ -260,7 +260,7 @@
         "disk-io",
         "fsutil"
       ],
-      "sha256": "84ffe7be550cb2c6e8c0bb112264be4f5f095ff6c0b572438d0ea5bca1a3d5fb",
+      "sha256": "0b7667067e07909efb0bd83c14dfc2c0b4d4f6db98731d1abb2d00148c33b803",
       "parameters": []
     },
     {
@@ -270,7 +270,7 @@
       "path": "diagnostics/export_battery_energy_report.ps1",
       "description": "Generates HTML battery capacity health and 60-second system energy efficiency audit reports.",
       "riskLevel": "safe",
-      "requiresAdmin": true,
+      "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
       "tags": [
@@ -279,7 +279,7 @@
         "energy",
         "diagnostics"
       ],
-      "sha256": "0a1076f540edcfd209c2b61bc969ce9e221f3458da04e6f0ec01884de275d99c",
+      "sha256": "209152a466ce8673530cbb2d03469a1de58d77840aae6e8d4bbdd4a98f9996e6",
       "parameters": [
         {
           "name": "OutputDirectory",
@@ -302,7 +302,7 @@
       "path": "diagnostics/analyze_bsod_crash_dumps.ps1",
       "description": "Inspects Minidump files, MEMORY.DMP headers, and queries System Event Log for BugCheck crash events.",
       "riskLevel": "safe",
-      "requiresAdmin": true,
+      "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
       "tags": [
@@ -312,7 +312,7 @@
         "eventlog",
         "diagnostics"
       ],
-      "sha256": "02ab6014868715510c4c1794aea7ce7867f43c8e4b2f43d2126c5d873c072a87",
+      "sha256": "232dd984449f4c669909bbcc912b25d5606be215bf86f0a1c250f80a88e6ebe3",
       "parameters": [
         {
           "name": "MaxEvents",
@@ -329,7 +329,7 @@
       "path": "diagnostics/dump_active_network_connections.ps1",
       "description": "Retrieves active TCP/UDP sockets, remote endpoints, and maps owning PID to process names and binary paths.",
       "riskLevel": "safe",
-      "requiresAdmin": true,
+      "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
       "tags": [
@@ -339,7 +339,7 @@
         "process",
         "audit"
       ],
-      "sha256": "ce6f055780bf9ccfcc7cc17a8e3ed7edcd877c978c3bf3463a2abbb8fd32b288",
+      "sha256": "b7b54476aa9e5fa1655506cf228a8bab1526905bd79e1481fbb6ffbb7a6a25e7",
       "parameters": [
         {
           "name": "StateFilter",
@@ -443,7 +443,7 @@
         "dns",
         "repair"
       ],
-      "sha256": "64196ada34b258af82341c9d47ef34b2326e7d55a2ffb9194c71770926f02e7f",
+      "sha256": "6320f1932e2c6dc4845df991ac05e6f4f7196b7c46e3a9607853b66031f83ba5",
       "parameters": []
     },
     {
@@ -463,7 +463,7 @@
         "security",
         "network"
       ],
-      "sha256": "f88e81fd46b4dc222b6f7aeee0268e50cbcd41c34ee1be23b9b754e01da2edcc",
+      "sha256": "8a15b5cbddc07fc1e48e6bf0a26e786dc2b4db1495d636efa731bbca47fbb54c",
       "parameters": []
     },
     {
@@ -503,7 +503,7 @@
         "repair",
         "network"
       ],
-      "sha256": "2903c216db9b6584a9048b5e44f56f73bca642028579465487f0f9643942edd8",
+      "sha256": "7d37345533ed8d1a11c7f155d9dbec89553dac786197dc922674dd0890df2158",
       "parameters": []
     },
     {
@@ -523,7 +523,7 @@
         "discovery",
         "network"
       ],
-      "sha256": "707ef1bfe42904fd7e4f36e8d752989ff9a3d7e823749621d0f84f41a83bd625",
+      "sha256": "f74ff1f19ea2069103c9f5551d1378220c82cc5cefac8e21724fc88431a74706",
       "parameters": []
     },
     {
@@ -543,7 +543,7 @@
         "wmi",
         "maintenance"
       ],
-      "sha256": "03548b1bc00916cf6b2157e9da29e2779dce001b3bc398a6633073a08180c891",
+      "sha256": "92814295e555b3e1bfb62e1d86bd14870c94b4ce55b6ea2891125371ce837d4c",
       "parameters": []
     },
     {
@@ -563,7 +563,7 @@
         "telemetry",
         "privacy"
       ],
-      "sha256": "185fa18dac442fcdaeab60273905d346d978b46de917ad607a7253fde6369f34",
+      "sha256": "0c43f56e7d30fa2f57e2c7a25add261d1ae5818f17642f87c31727dba211eac1",
       "parameters": [
         {
           "name": "IncludeSystemRepair",
@@ -589,7 +589,7 @@
         "performance",
         "cpu"
       ],
-      "sha256": "4f6496c2f15a4e82262a38195fc6c5845048d459671845c5f4bbb2439bbf04d2",
+      "sha256": "d335e5cbbd6fc8fdca94f57ca6a4492d57ebca4dcf9427946b97c0a4d6503544",
       "parameters": []
     },
     {
@@ -627,7 +627,7 @@
         "automation",
         "battery"
       ],
-      "sha256": "c698ed767e655eeb06df506a4ebeb24f2da85d5570730a5371bdbd98fab26552",
+      "sha256": "00a00449e6e47475f061518dc186806476a18de6d31daaf4551c95edc3a5c891",
       "parameters": []
     },
     {
@@ -637,7 +637,7 @@
       "path": "diagnostics/battery_health_report.ps1",
       "description": "Analyzes battery design capacity, full charge capacity, wear level percentage, cycle count, and exports an official HTML battery diagnostics report.",
       "riskLevel": "safe",
-      "requiresAdmin": true,
+      "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
       "tags": [
@@ -667,7 +667,7 @@
           "description": "Open the generated HTML report in default browser upon completion"
         }
       ],
-      "sha256": "aae008b4d1091942d85be0aac658f23d7a8ba4898c55d8d43959065efe108920"
+      "sha256": "207630a5a7de6a748c91504641716802af31eda79a3ea8304192a859acf759e1"
     },
     {
       "id": "diag-gpu-telemetry",
@@ -704,7 +704,7 @@
       "path": "diagnostics/disk_smart_health_summary.ps1",
       "description": "Inspects physical disk hardware health, Media Type (NVMe/SSD/HDD), Bus Type, SMART predictive failure status, wear level, and partition layouts.",
       "riskLevel": "safe",
-      "requiresAdmin": true,
+      "requiresAdmin": false,
       "author": "WiScripts Core Team",
       "version": "1.0.0",
       "tags": [
@@ -723,7 +723,7 @@
           "description": "List partition table and volume drive letters for each physical disk"
         }
       ],
-      "sha256": "de31708ddd5a7e8a747342f37274663d9a35172de392d66b5622c27fbdb3af5e"
+      "sha256": "ac8a2bc6fe504080a84f5c8bd3dc7457e2f3c3fb9c931a7c9ac27641c0c37243"
     },
     {
       "id": "net-flush-dns-renew-ip",

@@ -10,13 +10,20 @@ Write-Host "==========================================================" -Foregro
 Write-Host " WiScripts: Yandex Browser & DNS Routing Fix" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-Write-Host "Stopping running browser instances..."
-Stop-Process -Name "browser" -Force -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 500
+$targets = @(
+    "HKLM:\SOFTWARE\Policies\Yandex\Browser",
+    "HKCU:\SOFTWARE\Policies\Yandex\Browser"
+)
 
-$YandexPath = "HKLM:\SOFTWARE\Policies\Yandex\Browser"
-if (!(Test-Path $YandexPath)) { New-Item -Path $YandexPath -Force -ErrorAction SilentlyContinue | Out-Null }
-New-ItemProperty -Path $YandexPath -Name "QuicAllowed" -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
+Write-Host "Configuring Yandex Browser QUIC policy (QuicAllowed = 0)..." -ForegroundColor Yellow
+foreach ($path in $targets) {
+    if (!(Test-Path $path)) {
+        New-Item -Path $path -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+    New-ItemProperty -Path $path -Name "QuicAllowed" -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
+}
 
-Write-Host "Yandex Browser QUIC workaround applied." -ForegroundColor Green
+Write-Host "==========================================================" -ForegroundColor Green
+Write-Host " Yandex Browser QUIC workaround applied." -ForegroundColor Green
+Write-Host " Please restart Yandex Browser for changes to take effect." -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Green

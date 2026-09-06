@@ -106,7 +106,7 @@ $dataCollectionKey = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
 if (-not (Test-Path $dataCollectionKey)) {
     New-Item -Path $dataCollectionKey -Force -ErrorAction SilentlyContinue | Out-Null
 }
-Set-ItemProperty -Path $dataCollectionKey -Name "AllowTelemetry" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
+Set-ItemProperty -Path $dataCollectionKey -Name "AllowTelemetry" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue | Out-Null
 
 $desktopKey = "HKCU:\Control Panel\Desktop"
 Set-ItemProperty -Path $desktopKey -Name "MenuShowDelay" -Value "100" -Force -ErrorAction SilentlyContinue | Out-Null

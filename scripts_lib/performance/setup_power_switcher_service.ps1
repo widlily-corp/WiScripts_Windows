@@ -37,10 +37,17 @@ if ($status -eq "Offline") {
     powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 95 2>$null
     powercfg /setactive SCHEME_CURRENT 2>$null
 } else {
-    $targetGuid = $ultimatePerfGUID
-    $dupOutput = powercfg -duplicatescheme $ultimatePerfGUID 2>&1 | Out-String
-    if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+    $existingSchemes = powercfg /list 2>&1 | Out-String
+    $targetGuid = $null
+    if ($existingSchemes -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s+\([^\)]*(?:Ultimate|Максимальн)[^\)]*\)') {
         $targetGuid = $matches[1]
+    } else {
+        $dupOutput = powercfg -duplicatescheme $ultimatePerfGUID 2>&1 | Out-String
+        if ($dupOutput -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') {
+            $targetGuid = $matches[1]
+        } else {
+            $targetGuid = $highPerfGUID
+        }
     }
     $res = powercfg /setactive $targetGuid 2>&1
     if ($LASTEXITCODE -ne 0) {

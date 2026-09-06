@@ -36,10 +36,32 @@ $defaultHosts = @"
 #	::1             localhost
 "@
 
-Write-Host "Writing clean default hosts file..."
-$defaultHosts | Set-Content $hostsPath -Force -ErrorAction SilentlyContinue
+Write-Host "Preparing hosts file..." -ForegroundColor Cyan
+if (Test-Path $hostsPath) {
+    # 1. Remove Read-Only attribute if set
+    Set-ItemProperty -Path $hostsPath -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+    
+    # 2. Safely create backup before modification
+    $backupPath = "$hostsPath.bak"
+    try {
+        Copy-Item -Path $hostsPath -Destination $backupPath -Force -ErrorAction Stop
+        Write-Host "  [OK] Created backup at: $backupPath" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "  [WARN] Could not create backup file: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 
-Write-Host "Flushing DNS resolver cache..."
+Write-Host "Writing clean default hosts file..." -ForegroundColor Yellow
+try {
+    $defaultHosts | Set-Content -Path $hostsPath -Encoding UTF8 -Force -ErrorAction Stop
+    Write-Host "  [OK] Successfully written Microsoft default hosts configuration." -ForegroundColor Green
+} catch {
+    Write-Host "  [ERROR] Failed to write hosts file: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  Please check if your antivirus is locking the file." -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host "Flushing DNS resolver cache..." -ForegroundColor Cyan
 ipconfig /flushdns 2>$null | Out-Null
 
 Write-Host "==========================================================" -ForegroundColor Green

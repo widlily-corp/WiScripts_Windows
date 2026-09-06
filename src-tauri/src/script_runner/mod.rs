@@ -540,13 +540,14 @@ async fn execute_script_elevated_bridge(
 
         let exec_id = execution_id.unwrap_or_else(|| format!("exec_{}", base_name));
 
-        // 1. Write payload script file (prepend BOM for .ps1)
+        // 1. Write payload script file (prepend UTF-8 BOM for .ps1, stripping any existing BOM to prevent double-BOM parser errors)
+        let clean_content = script_content.trim_start_matches('\u{feff}');
         let prepared_bytes = if norm_type == "ps1" {
             let mut bytes = vec![0xEF, 0xBB, 0xBF];
-            bytes.extend_from_slice(script_content.as_bytes());
+            bytes.extend_from_slice(clean_content.as_bytes());
             bytes
         } else {
-            script_content.into_bytes()
+            clean_content.as_bytes().to_vec()
         };
 
         std::fs::write(&payload_path, &prepared_bytes).map_err(|e| {
@@ -773,6 +774,7 @@ pub async fn execute_custom_script(
     timeout_seconds: Option<u64>,
     elevate: Option<bool>,
 ) -> Result<CommandOutput, AppError> {
+    let script_content = script_content.trim_start_matches('\u{feff}').to_string();
     let norm_type = validate_script_input(&script_content, &script_type)?;
     let is_dry_run = dry_run.unwrap_or(false);
     let timeout_duration = Duration::from_secs(timeout_seconds.unwrap_or(300));
@@ -830,13 +832,14 @@ pub async fn execute_custom_script(
 
         let exec_id = execution_id.unwrap_or_else(|| format!("exec_{}_{}_{}", timestamp, pid, counter));
 
+        let clean_content = script_content.trim_start_matches('\u{feff}');
         let prepared_bytes = if norm_type == "ps1" {
             // Prepend UTF-8 BOM so PowerShell 5.1/7 parses encoding correctly without breaking param() AST position
             let mut bytes = vec![0xEF, 0xBB, 0xBF];
-            bytes.extend_from_slice(script_content.as_bytes());
+            bytes.extend_from_slice(clean_content.as_bytes());
             bytes
         } else {
-            script_content.into_bytes()
+            clean_content.as_bytes().to_vec()
         };
 
         std::fs::write(&temp_path, &prepared_bytes).map_err(|e| {

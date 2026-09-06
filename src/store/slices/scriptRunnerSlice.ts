@@ -366,9 +366,10 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     if (script && !customContent) {
       try {
         const code = await invoke<string>('read_library_script', { scriptId: script.id });
+        const cleanCode = (code || '').replace(/^\uFEFF+/, '');
         set({
           impactSimulatorScript: script,
-          impactSimulatorContent: code,
+          impactSimulatorContent: cleanCode,
           isImpactSimulatorOpen: true,
         });
       } catch (err) {
@@ -444,7 +445,8 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
   executeScript: async (customContent, customType, runAsAdminOrOptions) => {
     const { dryRunMode, addLog, addToast, editorRunAsAdmin } = get();
-    const content = customContent ?? get().scriptContent;
+    const rawContent = customContent ?? get().scriptContent;
+    const content = (rawContent || '').replace(/^\uFEFF+/, '');
     const type = customType ?? get().scriptType;
 
     const shouldElevate = typeof runAsAdminOrOptions === 'boolean'
@@ -800,7 +802,8 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     try {
       const code = await invoke<string>('read_library_script', { scriptId: script.id });
-      set({ previewContent: code, isLoadingPreview: false });
+      const cleanCode = (code || '').replace(/^\uFEFF+/, '');
+      set({ previewContent: cleanCode, isLoadingPreview: false });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       set({ isLoadingPreview: false });
@@ -824,8 +827,9 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     const { addLog, addToast } = get();
     try {
       const code = await invoke<string>('read_library_script', { scriptId: script.id });
+      const cleanCode = (code || '').replace(/^\uFEFF+/, '');
       set({
-        scriptContent: code,
+        scriptContent: cleanCode,
         scriptType: 'ps1',
         uploadedFileName: `${script.name} (${script.path})`,
         activeRunnerTab: 'editor',
@@ -866,8 +870,9 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     const { addLog, addToast, executeScript } = get();
     try {
       const code = await invoke<string>('read_library_script', { scriptId: script.id });
+      const cleanCode = (code || '').replace(/^\uFEFF+/, '');
       set({
-        scriptContent: code,
+        scriptContent: cleanCode,
         scriptType: 'ps1',
         uploadedFileName: `${script.name} (${script.path})`,
         activeRunnerTab: 'editor',
@@ -1015,7 +1020,8 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
     try {
       const rawCode = await invoke<string>('read_library_script', { scriptId: script.id });
-      const formattedCode = formatScriptWithParameters(rawCode, script.parameters ?? [], values);
+      const cleanCode = (rawCode || '').replace(/^\uFEFF+/, '');
+      const formattedCode = formatScriptWithParameters(cleanCode, script.parameters ?? [], values);
 
       set({
         scriptContent: formattedCode,

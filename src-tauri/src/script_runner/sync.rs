@@ -614,6 +614,7 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
         if let Ok(bytes) = fs::read(&cached_path) {
             if verify_script_hash(&bytes, &entry.sha256) {
                 return String::from_utf8(bytes)
+                    .map(|s| s.trim_start_matches('\u{feff}').to_string())
                     .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
             } else {
                 log::warn!(
@@ -637,6 +638,7 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
                     }
                     let _ = fs::write(&cached_path, &bytes);
                     return String::from_utf8(bytes)
+                        .map(|s| s.trim_start_matches('\u{feff}').to_string())
                         .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
                 }
             }
@@ -650,6 +652,7 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
             .map_err(|e| AppError::Io(format!("Failed to read cached script file after sync: {}", e)))?;
         if verify_script_hash(&bytes, &entry.sha256) {
             return String::from_utf8(bytes)
+                .map(|s| s.trim_start_matches('\u{feff}').to_string())
                 .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
         }
         let hash = compute_sha256(&bytes);

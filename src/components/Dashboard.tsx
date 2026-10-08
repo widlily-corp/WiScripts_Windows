@@ -19,6 +19,8 @@ import {
   Gauge,
   Wifi,
   Disc,
+  Zap,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 function formatBytesPerSec(bytes: number): string {

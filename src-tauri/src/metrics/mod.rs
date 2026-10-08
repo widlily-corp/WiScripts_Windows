@@ -490,17 +490,19 @@ pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
     push_sensors(&mut sensor_items, &mut existing_ids, query_lhm_wmi_sensors());
     push_sensors(&mut sensor_items, &mut existing_ids, query_ohm_wmi_sensors());
 
-    // Tier 3: ACPI / Laptop Thermal Zones (root\wmi & root\cimv2)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_acpi_wmi_sensors());
-    push_sensors(&mut sensor_items, &mut existing_ids, query_perf_thermal_zone_sensors());
+    // Tier 3: Consolidated ACPI / Laptop Thermal Zones (root\wmi & root\cimv2)
+    push_sensors(&mut sensor_items, &mut existing_ids, query_all_acpi_thermal_zones());
 
-    // Tier 4: CLI GPU Fallbacks (only if no GPU sensor found yet)
+    // Tier 4: Physical Storage Drives (NVMe / SSD / SMART)
+    push_sensors(&mut sensor_items, &mut existing_ids, query_physical_storage_sensors());
+
+    // Tier 5: CLI GPU Fallbacks (only if no GPU sensor found yet)
     if !sensor_items.iter().any(|s| s.sensor_type == "gpu") {
         push_sensors(&mut sensor_items, &mut existing_ids, query_nvidia_smi_sensors());
         push_sensors(&mut sensor_items, &mut existing_ids, query_amd_smi_sensors());
     }
 
-    // Tier 5: sysinfo Components fallback
+    // Tier 6: sysinfo Components fallback
     push_sensors(&mut sensor_items, &mut existing_ids, query_sysinfo_sensors());
 
     // Primary CPU & GPU temperature selection with priority heuristics

@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ExternalLink,
   Package,
+  Ghost,
 } from 'lucide-react';
 
 export function formatAppSize(sizeKb?: number | null): string {
@@ -89,11 +90,13 @@ export function UninstallerView() {
   const isAppsLoading = useAppStore((s) => s.isAppsLoading);
   const fetchInstalledApps = useAppStore((s) => s.fetchInstalledApps);
   const uninstallApp = useAppStore((s) => s.uninstallApp);
+  const removeInstalledAppEntry = useAppStore((s) => s.removeInstalledAppEntry);
   const openSafetyModal = useAppStore((s) => s.openSafetyModal);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [hideSystemApps, setHideSystemApps] = useState(true);
+  const [onlyGhostApps, setOnlyGhostApps] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
@@ -101,8 +104,13 @@ export function UninstallerView() {
     fetchInstalledApps();
   }, [fetchInstalledApps]);
 
+  const ghostAppsCount = useMemo(() => {
+    return installedApps.filter((app) => app.isGhost).length;
+  }, [installedApps]);
+
   const filteredAndSortedApps = useMemo(() => {
     let result = installedApps.filter((app) => {
+      if (onlyGhostApps && !app.isGhost) return false;
       if (hideSystemApps && app.isSystemComponent) return false;
       if (!searchQuery.trim()) return true;
 
@@ -134,13 +142,40 @@ export function UninstallerView() {
     });
 
     return result;
-  }, [installedApps, searchQuery, hideSystemApps, sortField, sortOrder]);
+  }, [installedApps, searchQuery, hideSystemApps, onlyGhostApps, sortField, sortOrder]);
 
   const totalStorageKb = useMemo(() => {
     return filteredAndSortedApps.reduce((acc, app) => acc + (app.estimatedSizeKb || 0), 0);
   }, [filteredAndSortedApps]);
 
+  const handleRemoveGhostEntry = (app: InstalledApp) => {
+    openSafetyModal({
+      title: t('uninstaller.removeGhostTitle', {
+        name: app.name,
+        defaultValue: `Удалить запись «${app.name}» из реестра`,
+      }),
+      description: t('uninstaller.removeGhostDesc', {
+        name: app.name,
+        defaultValue: `Файлы деинсталлятора не найдены на диске. Это действие безопасно сотрет осиротевшую запись из реестра Windows.`,
+      }),
+      riskLevel: 'low',
+      commandsToRun: [
+        `${t('uninstaller.targetAppLabel', 'Target Application:')} ${app.name}`,
+        `${t('uninstaller.regPathLabel', 'Registry Path:')} ${app.registryPath}`,
+        `${t('uninstaller.actionLabel', 'Action:')} RegDeleteKey (${app.registryPath})`,
+      ],
+      onConfirmAction: async () => {
+        await removeInstalledAppEntry(app.registryPath);
+      },
+    });
+  };
+
   const handleUninstallClick = (app: InstalledApp) => {
+    if (app.isGhost) {
+      handleRemoveGhostEntry(app);
+      return;
+    }
+
     const isSystem = app.isSystemComponent;
     const commandToRun = app.uninstallString || app.quietUninstallString || t('uninstaller.noCommand', '# No uninstall command specified');
 
@@ -159,7 +194,21 @@ export function UninstallerView() {
         `${t('uninstaller.cmdLabel', 'Uninstaller Executable Command:')} ${commandToRun}`,
       ],
       onConfirmAction: async () => {
-        await uninstallApp(app);
+        try {
+          await uninstallApp(app);
+        } catch (err) {
+          const errMsg = String(err);
+          const isFileNotFound =
+            errMsg.toLowerCase().includes('filenotfound') ||
+            errMsg.toLowerCase().includes('not found') ||
+            errMsg.toLowerCase().includes('os error 2');
+
+          if (isFileNotFound) {
+            setTimeout(() => {
+              handleRemoveGhostEntry(app);
+            }, 300);
+          }
+        }
       },
     });
   };
@@ -202,7 +251,7 @@ export function UninstallerView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] font-mono uppercase text-text-muted">{t('uninstaller.totalApps')}</div>
@@ -221,6 +270,29 @@ export function UninstallerView() {
             </div>
           </div>
           <Package className="h-6 w-6 text-brand opacity-80" />
+        </div>
+
+        <div
+          onClick={() => {
+            if (ghostAppsCount > 0) {
+              setOnlyGhostApps((prev) => !prev);
+            }
+          }}
+          className={`rounded-[6px] border p-4 flex items-center justify-between transition-colors ${
+            ghostAppsCount > 0
+              ? 'border-amber-500/30 bg-amber-500/5 cursor-pointer hover:bg-amber-500/10'
+              : 'border-border bg-surface'
+          }`}
+        >
+          <div>
+            <div className="text-[10px] font-mono uppercase text-text-muted">
+              {t('uninstaller.ghostAppsCard', 'Осиротевшие / Ghost')}
+            </div>
+            <div className={`text-xl font-bold font-mono mt-1 ${ghostAppsCount > 0 ? 'text-amber-400' : 'text-text-muted'}`}>
+              {ghostAppsCount}
+            </div>
+          </div>
+          <Ghost className={`h-6 w-6 ${ghostAppsCount > 0 ? 'text-amber-400' : 'text-text-muted opacity-50'}`} />
         </div>
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
@@ -250,6 +322,19 @@ export function UninstallerView() {
         </div>
 
         <div className="flex items-center gap-4">
+          {ghostAppsCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-amber-400 font-medium cursor-pointer select-none bg-amber-500/10 px-2.5 py-1 rounded-[6px] border border-amber-500/30 hover:bg-amber-500/20 transition-colors">
+              <input
+                type="checkbox"
+                checked={onlyGhostApps}
+                onChange={(e) => setOnlyGhostApps(e.target.checked)}
+                className="rounded border-amber-500/40 bg-surface-subtle text-amber-400 focus:ring-0"
+              />
+              <Ghost className="h-3.5 w-3.5 text-amber-400" />
+              <span>{t('uninstaller.onlyGhostFilter', { count: ghostAppsCount, defaultValue: `Осиротевшие (${ghostAppsCount})` })}</span>
+            </label>
+          )}
+
           <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
             <input
               type="checkbox"
@@ -321,14 +406,30 @@ export function UninstallerView() {
                 className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-surface-hover/50 transition-colors"
               >
                 <div className="col-span-5 min-w-0 flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-[6px] bg-surface-subtle border border-border-subtle flex items-center justify-center shrink-0">
-                    <Package className="h-4 w-4 text-brand" />
+                  <div
+                    className={`h-8 w-8 rounded-[6px] border flex items-center justify-center shrink-0 ${
+                      app.isGhost
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                        : 'bg-surface-subtle border-border-subtle text-brand'
+                    }`}
+                  >
+                    {app.isGhost ? (
+                      <Ghost className="h-4 w-4 text-amber-400" />
+                    ) : (
+                      <Package className="h-4 w-4 text-brand" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-text-primary truncate">
                         {app.name}
                       </span>
+                      {app.isGhost && (
+                        <span className="text-[9px] font-mono bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 font-semibold shrink-0">
+                          <Ghost className="h-2.5 w-2.5" />
+                          <span>{t('uninstaller.ghostBadge', 'Осиротевшая запись / Ghost')}</span>
+                        </span>
+                      )}
                       {app.isSystemComponent && (
                         <span className="text-[9px] font-mono bg-status-dangerSubtle text-status-danger px-1.5 py-0.5 rounded border border-status-danger/20">
                           {t('uninstaller.systemBadge')}
@@ -349,14 +450,25 @@ export function UninstallerView() {
                   {formatAppSize(app.estimatedSizeKb)}
                 </div>
 
-                <div className="col-span-2 flex justify-end">
-                  <button
-                    onClick={() => handleUninstallClick(app)}
-                    className="flex items-center gap-1.5 rounded-[6px] border border-status-danger/30 bg-status-dangerSubtle px-2.5 py-1 text-xs font-mono text-status-danger hover:bg-status-danger hover:text-white transition-all shadow-sm"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>{t('uninstaller.uninstall')}</span>
-                  </button>
+                <div className="col-span-2 flex justify-end items-center gap-1.5">
+                  {app.isGhost ? (
+                    <button
+                      onClick={() => handleRemoveGhostEntry(app)}
+                      className="flex items-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-mono text-amber-300 hover:bg-amber-500 hover:text-black transition-all shadow-sm"
+                      title={t('uninstaller.eraseFromRegistryTooltip', 'Стереть осиротевшую запись из реестра')}
+                    >
+                      <Ghost className="h-3 w-3" />
+                      <span>{t('uninstaller.eraseFromRegistry', 'Стереть из реестра')}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleUninstallClick(app)}
+                      className="flex items-center gap-1.5 rounded-[6px] border border-status-danger/30 bg-status-dangerSubtle px-2.5 py-1 text-xs font-mono text-status-danger hover:bg-status-danger hover:text-white transition-all shadow-sm"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>{t('uninstaller.uninstall')}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

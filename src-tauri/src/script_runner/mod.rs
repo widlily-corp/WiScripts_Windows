@@ -446,6 +446,85 @@ try {{
     )
 }
 
+/// Sanitizes a decoded terminal output line by handling carriage return ('\r') in-place update semantics.
+/// If the line contains '\r', extracts the active terminal segment after the last '\r',
+/// or returns the line if no preceding '\r' overwrite exists.
+pub fn sanitize_terminal_line(raw_line: &str) -> String {
+    let trimmed = raw_line
+        .strip_suffix("\r\n")
+        .or_else(|| raw_line.strip_suffix('\n'))
+        .or_else(|| raw_line.strip_suffix('\r'))
+        .unwrap_or(raw_line);
+
+    if trimmed.contains('\r') {
+        let segments: Vec<&str> = trimmed.split('\r').collect();
+        if let Some(last) = segments.iter().rev().find(|s| !s.is_empty()) {
+            return (*last).to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
+/// Reads bytes from a buffered reader until either '\n' or a standalone '\r' (carriage return).
+/// Handles Windows CRLF ("\r\n") as a single line terminator, while treating standalone '\r'
+/// as an in-place line boundary so interactive progress bars stream without hanging.
+pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+    let mut total_read = 0;
+    loop {
+        let available = match reader.fill_buf() {
+            Ok(n) => n,
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+
+        if available.is_empty() {
+            break;
+        }
+
+        let mut found_delimiter = None;
+        for (i, &b) in available.iter().enumerate() {
+            if b == b'\n' || b == b'\r' {
+                found_delimiter = Some((i, b));
+                break;
+            }
+        }
+
+        if let Some((idx, b)) = found_delimiter {
+            if b == b'\n' {
+                let take = idx + 1;
+                buf.extend_from_slice(&available[..take]);
+                reader.consume(take);
+                total_read += take;
+                break;
+            } else {
+                // b == b'\r'
+                if idx + 1 < available.len() && available[idx + 1] == b'\n' {
+                    // CRLF sequence
+                    let take = idx + 2;
+                    buf.extend_from_slice(&available[..take]);
+                    reader.consume(take);
+                    total_read += take;
+                    break;
+                } else {
+                    // Standalone '\r'
+                    let take = idx + 1;
+                    buf.extend_from_slice(&available[..take]);
+                    reader.consume(take);
+                    total_read += take;
+                    break;
+                }
+            }
+        } else {
+            let take = available.len();
+            buf.extend_from_slice(&available[..take]);
+            reader.consume(take);
+            total_read += take;
+        }
+    }
+    Ok(total_read)
+}
+
 /// Tails newly written lines from the shared session log file using non-exclusive sharing mode (7).
 fn tail_log_file(
     log_path: &std::path::Path,
@@ -484,29 +563,32 @@ fn tail_log_file(
     let mut line_buf = Vec::new();
     loop {
         line_buf.clear();
-        match reader.read_until(b'\n', &mut line_buf) {
+        match read_line_or_cr(&mut reader, &mut line_buf) {
             Ok(0) => break,
             Ok(bytes_read) => {
                 *offset += bytes_read as u64;
                 let line_str = decode_bytes(&line_buf);
-                let trimmed = line_str
-                    .strip_suffix("\r\n")
-                    .or_else(|| line_str.strip_suffix('\n'))
-                    .unwrap_or(&line_str);
+                let cleaned = sanitize_terminal_line(&line_str);
 
-                let is_err = trimmed.starts_with("[ERROR]") || trimmed.starts_with("[STDERR]");
+                if cleaned.is_empty() && line_buf.iter().all(|&b| b == b'\r') {
+                    continue;
+                }
+
+                let is_err = cleaned.starts_with("[ERROR]") || cleaned.starts_with("[STDERR]");
                 let stream = if is_err { "stderr" } else { "stdout" };
 
                 let payload = ScriptOutputLinePayload {
-                    line: trimmed.to_string(),
+                    line: cleaned.clone(),
                     stream: stream.to_string(),
                 };
                 let _ = app.emit("script-output-line", &payload);
 
                 if is_err {
-                    accumulated_stderr.push_str(&line_str);
+                    accumulated_stderr.push_str(&cleaned);
+                    accumulated_stderr.push('\n');
                 } else {
-                    accumulated_stdout.push_str(&line_str);
+                    accumulated_stdout.push_str(&cleaned);
+                    accumulated_stdout.push('\n');
                 }
             }
             Err(_) => break,
@@ -907,22 +989,24 @@ pub async fn execute_custom_script(
 
             loop {
                 raw_buf.clear();
-                match reader.read_until(b'\n', &mut raw_buf) {
+                match read_line_or_cr(&mut reader, &mut raw_buf) {
                     Ok(0) => break,
                     Ok(_) => {
                         let line_str = decode_bytes(&raw_buf);
-                        let trimmed = line_str
-                            .strip_suffix("\r\n")
-                            .or_else(|| line_str.strip_suffix('\n'))
-                            .unwrap_or(&line_str);
+                        let cleaned = sanitize_terminal_line(&line_str);
+
+                        if cleaned.is_empty() && raw_buf.iter().all(|&b| b == b'\r') {
+                            continue;
+                        }
 
                         let payload = ScriptOutputLinePayload {
-                            line: trimmed.to_string(),
+                            line: cleaned.clone(),
                             stream: "stdout".to_string(),
                         };
                         let _ = app_handle_out.emit("script-output-line", &payload);
 
-                        accumulated.push_str(&line_str);
+                        accumulated.push_str(&cleaned);
+                        accumulated.push('\n');
                     }
                     Err(e) => {
                         log::error!("[ScriptRunner] Error reading stdout stream: {}", e);
@@ -941,22 +1025,24 @@ pub async fn execute_custom_script(
 
             loop {
                 raw_buf.clear();
-                match reader.read_until(b'\n', &mut raw_buf) {
+                match read_line_or_cr(&mut reader, &mut raw_buf) {
                     Ok(0) => break,
                     Ok(_) => {
                         let line_str = decode_bytes(&raw_buf);
-                        let trimmed = line_str
-                            .strip_suffix("\r\n")
-                            .or_else(|| line_str.strip_suffix('\n'))
-                            .unwrap_or(&line_str);
+                        let cleaned = sanitize_terminal_line(&line_str);
+
+                        if cleaned.is_empty() && raw_buf.iter().all(|&b| b == b'\r') {
+                            continue;
+                        }
 
                         let payload = ScriptOutputLinePayload {
-                            line: trimmed.to_string(),
+                            line: cleaned.clone(),
                             stream: "stderr".to_string(),
                         };
                         let _ = app_handle_err.emit("script-output-line", &payload);
 
-                        accumulated.push_str(&line_str);
+                        accumulated.push_str(&cleaned);
+                        accumulated.push('\n');
                     }
                     Err(e) => {
                         log::error!("[ScriptRunner] Error reading stderr stream: {}", e);
@@ -1435,5 +1521,96 @@ mod tests {
         // Clean up
         let _ = std::fs::remove_file(&sentinel_file);
         let _ = std::fs::remove_dir(&sentinel_dir);
+    }
+
+    #[test]
+    fn test_sanitize_terminal_line_plain_and_newlines() {
+        assert_eq!(sanitize_terminal_line("Hello world\r\n"), "Hello world");
+        assert_eq!(sanitize_terminal_line("Hello world\n"), "Hello world");
+        assert_eq!(sanitize_terminal_line("Hello world\r"), "Hello world");
+        assert_eq!(sanitize_terminal_line("Hello world"), "Hello world");
+        assert_eq!(sanitize_terminal_line("\r\n"), "");
+        assert_eq!(sanitize_terminal_line("\n"), "");
+        assert_eq!(sanitize_terminal_line("\r"), "");
+    }
+
+    #[test]
+    fn test_sanitize_terminal_line_carriage_return_overwrites() {
+        let multi_cr = "Download 10%\rDownload 20%\rDownload 30%\r\n";
+        assert_eq!(sanitize_terminal_line(multi_cr), "Download 30%");
+
+        let trailing_cr = "Download 50%\r";
+        assert_eq!(sanitize_terminal_line(trailing_cr), "Download 50%");
+
+        let intermediate_cr = "Old Status\rNew Status";
+        assert_eq!(sanitize_terminal_line(intermediate_cr), "New Status");
+    }
+
+    #[test]
+    fn test_read_line_or_cr_crlf_and_lf() {
+        use std::io::Cursor;
+        let data = b"line 1\r\nline 2\nline 3";
+        let mut cursor = Cursor::new(data);
+        let mut line_buf = Vec::new();
+
+        let n1 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n1, 8); // "line 1\r\n"
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "line 1");
+
+        line_buf.clear();
+        let n2 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n2, 7); // "line 2\n"
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "line 2");
+
+        line_buf.clear();
+        let n3 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n3, 6); // "line 3" (EOF)
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "line 3");
+
+        line_buf.clear();
+        let n4 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n4, 0); // EOF
+    }
+
+    #[test]
+    fn test_read_line_or_cr_standalone_cr() {
+        use std::io::Cursor;
+        let data = b"Progress 10%\rProgress 20%\rProgress 30%\r\n";
+        let mut cursor = Cursor::new(data);
+        let mut line_buf = Vec::new();
+
+        let n1 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n1, 13); // "Progress 10%\r"
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "Progress 10%");
+
+        line_buf.clear();
+        let n2 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n2, 13); // "Progress 20%\r"
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "Progress 20%");
+
+        line_buf.clear();
+        let n3 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n3, 14); // "Progress 30%\r\n"
+        assert_eq!(sanitize_terminal_line(&String::from_utf8_lossy(&line_buf)), "Progress 30%");
+
+        line_buf.clear();
+        let n4 = read_line_or_cr(&mut cursor, &mut line_buf).unwrap();
+        assert_eq!(n4, 0); // EOF
+    }
+
+    #[test]
+    fn test_powershell_staging_bom_encoding_invariant() {
+        // AGENTS.md Invariant 1:
+        // Temporary .ps1 script files written for execution must contain EXACTLY ONE UTF-8 BOM at byte offset 0.
+        // Strips any in-memory BOM before prepending file BOM, preventing double-BOM parser crashes.
+        let raw_script_with_bom = "\u{feff}param([string]$Arg1)\nWrite-Host $Arg1";
+        let clean = raw_script_with_bom.trim_start_matches('\u{feff}');
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice(clean.as_bytes());
+
+        assert_eq!(&bytes[0..3], &[0xEF, 0xBB, 0xBF]);
+        // Ensure no second BOM was written
+        assert_ne!(&bytes[3..6], &[0xEF, 0xBB, 0xBF]);
+        assert_eq!(&bytes[3..8], b"param");
     }
 }

@@ -200,9 +200,21 @@ fn test_adversarial_sensor_classification_precedence() {
         );
     }
 
+    let storage_cases = [
+        ("/hdd/0/temperature/0", "Samsung 990 Pro 2TB", "/hdd/0"),
+    ];
+
+    for (id, name, parent) in &storage_cases {
+        assert_eq!(
+            classify_sensor(id, name, parent),
+            "storage",
+            "Failed Storage classification for id='{}', name='{}', parent='{}'",
+            id, name, parent
+        );
+    }
+
     let other_cases = [
         ("/lpc/nct6798d/temperature/0", "Motherboard", "/lpc/nct6798d"),
-        ("/hdd/0/temperature/0", "Samsung 990 Pro 2TB", "/hdd/0"),
         ("fan_speed_0", "Chassis Fan 1", ""),
         ("pump_0", "AIO Liquid Pump", ""),
         ("psu_0", "Corsair AX1600i", ""),

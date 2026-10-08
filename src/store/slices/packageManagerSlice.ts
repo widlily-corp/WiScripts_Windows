@@ -25,6 +25,7 @@ export interface PackageManagerSlice {
   appsError: string | null;
   fetchInstalledApps: () => Promise<InstalledApp[]>;
   uninstallApp: (app: InstalledApp, dryRun?: boolean) => Promise<ExecutionSummary | null>;
+  removeInstalledAppEntry: (registryPath: string) => Promise<boolean>;
 }
 
 export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageManagerSlice> = (set, get) => ({
@@ -233,10 +234,53 @@ export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageMa
     } catch (err) {
       const errMsg = getErrorMessage(err);
       addLog({ level: 'error', message: `Uninstall command error: ${errMsg}` });
-      addToast({ type: 'error', title: 'Uninstall Error', message: errMsg });
-      return null;
+
+      const isFileNotFound =
+        errMsg.toLowerCase().includes('filenotfound') ||
+        errMsg.toLowerCase().includes('not found') ||
+        errMsg.toLowerCase().includes('os error 2');
+
+      if (isFileNotFound) {
+        addToast({
+          type: 'warning',
+          title: 'Uninstaller Missing',
+          message: `The uninstaller for "${app.name}" was not found on disk. Clean orphaned registry record?`,
+          actionLabel: 'Remove from Registry',
+          onAction: () => {
+            get().removeInstalledAppEntry(app.registryPath);
+          },
+          durationMs: 12000,
+        });
+      } else {
+        addToast({ type: 'error', title: 'Uninstall Error', message: errMsg });
+      }
+      throw err;
     } finally {
       setIsExecuting(false);
+    }
+  },
+
+  removeInstalledAppEntry: async (registryPath: string) => {
+    const { addLog, addToast } = get();
+    addLog({ level: 'cmd', message: `Removing orphaned uninstaller registry entry: "${registryPath}"` });
+    try {
+      await invoke('remove_installed_app_entry', { registryPath });
+      set((state) => ({
+        installedApps: state.installedApps.filter((app) => app.registryPath !== registryPath),
+      }));
+      addLog({ level: 'info', message: `Successfully removed registry entry: "${registryPath}"` });
+      addToast({
+        type: 'success',
+        title: 'Registry Entry Cleaned',
+        message: 'Orphaned uninstaller record removed from registry.',
+      });
+      await get().fetchInstalledApps();
+      return true;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      addLog({ level: 'error', message: `Failed to remove registry entry: ${errMsg}` });
+      addToast({ type: 'error', title: 'Registry Clean Failed', message: errMsg });
+      return false;
     }
   },
 });

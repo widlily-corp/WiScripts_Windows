@@ -86,6 +86,7 @@ pub fn run() {
             commands::restore_system_point,
             commands::get_installed_apps,
             commands::uninstall_app,
+            commands::remove_installed_app_entry,
             commands::scan_system_cleaner,
             commands::clean_system_items,
             commands::scan_duplicate_files,

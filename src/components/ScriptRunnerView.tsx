@@ -917,9 +917,9 @@ export function ScriptRunnerView() {
             {filteredScripts.map((script) => (
               <div
                 key={script.id}
-                className="flex flex-col justify-between rounded-[6px] border border-border bg-surface-card p-4 space-y-3 hover:border-brand/40 transition-colors shadow-sm group"
+                className="flex flex-col justify-between rounded-[6px] border border-border bg-surface-card p-4 space-y-3 hover:border-brand/40 transition-colors shadow-sm group min-w-0"
               >
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   {/* Top Bar: Category & Badges */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-wider text-brand font-semibold px-2 py-0.5 rounded bg-brand/10 border border-brand/20">
@@ -940,7 +940,7 @@ export function ScriptRunnerView() {
                   </div>
 
                   {/* Title & Description */}
-                  <h3 className="text-sm font-semibold text-text-primary group-hover:text-brand transition-colors leading-snug">
+                  <h3 className="text-sm font-semibold text-text-primary group-hover:text-brand transition-colors leading-snug break-words">
                     {script.name}
                   </h3>
                   <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">
@@ -948,7 +948,7 @@ export function ScriptRunnerView() {
                   </p>
 
                   {/* Tags */}
-                  <div className="flex flex-wrap gap-1 pt-1">
+                  <div className="flex flex-wrap gap-1 pt-1 min-w-0">
                     {script.tags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
@@ -965,42 +965,48 @@ export function ScriptRunnerView() {
                   </div>
                 </div>
 
-                {/* Footer Action Buttons */}
-                <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
+                {/* Footer Action Bar */}
+                <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2 min-w-0">
+                  {/* Left: Quick Preview & Simulation (Compact Icon Buttons) */}
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
+                      type="button"
                       onClick={() => openScriptPreview(script)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
+                      className="h-7 w-7 flex items-center justify-center rounded-[4px] bg-surface-subtle hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border transition-colors"
                       title={t('script_runner.preview_code', 'Preview Code')}
+                      aria-label={t('script_runner.preview_code', 'Preview Code')}
                     >
-                      <FileText className="h-3.5 w-3.5 text-text-secondary" />
-                      <span>{t('script_runner.preview_code', 'Preview')}</span>
+                      <FileText className="h-3.5 w-3.5" />
                     </button>
                     <button
+                      type="button"
                       onClick={() => openImpactSimulator(script)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
+                      className="h-7 w-7 flex items-center justify-center rounded-[4px] bg-surface-subtle hover:bg-surface-hover text-text-secondary hover:text-text-primary border border-border transition-colors"
                       title={t('script_runner.simulate_impact_tooltip', 'Preview affected registry keys, services, tasks, and files before execution')}
+                      aria-label={t('script_runner.simulate_impact', 'Simulate Impact')}
                     >
-                      <Sliders className="h-3.5 w-3.5 text-text-secondary" />
-                      <span>{t('script_runner.simulate_impact', 'Simulate Impact')}</span>
+                      <Sliders className="h-3.5 w-3.5" />
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  {/* Right: Load to Editor & Direct Run */}
+                  <div className="flex items-center gap-1.5 shrink-0 min-w-0">
                     <button
+                      type="button"
                       onClick={() => loadScriptToEditor(script)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-medium bg-surface-subtle hover:bg-surface-hover text-text-primary border border-border transition-colors shrink-0"
                       title={t('script_runner.load_to_editor', 'Load to Editor')}
                     >
-                      <Code2 className="h-3.5 w-3.5" />
+                      <Code2 className="h-3.5 w-3.5 text-text-secondary" />
                       <span>{t('script_runner.load_to_editor', 'Load')}</span>
                     </button>
 
                     {script.requiresAdmin || script.riskLevel === 'elevated' || script.riskLevel === 'critical' ? (
                       <button
+                        type="button"
                         onClick={() => runLibraryScriptDirectly(script, { runAsAdmin: true })}
                         disabled={isExecutingScript}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-status-warning/20 hover:bg-status-warning/30 text-status-warning border border-status-warning/40 transition-colors disabled:opacity-50 shadow-xs"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-semibold bg-status-warning/20 hover:bg-status-warning/30 text-status-warning border border-status-warning/40 transition-colors disabled:opacity-50 shadow-xs shrink-0"
                         title={t('script_runner.run_as_admin_tooltip', 'Run this script with elevated administrator privileges (UAC prompt)')}
                       >
                         <ShieldAlert className="h-3.5 w-3.5" />
@@ -1008,9 +1014,10 @@ export function ScriptRunnerView() {
                       </button>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => runLibraryScriptDirectly(script, { runAsAdmin: false })}
                         disabled={isExecutingScript}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-xs"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[4px] text-xs font-semibold bg-brand hover:bg-brand-hover text-white transition-colors disabled:opacity-50 shadow-xs shrink-0"
                         title={t('script_runner.run_directly', 'Run Directly')}
                       >
                         <Play className="h-3.5 w-3.5 fill-current" />

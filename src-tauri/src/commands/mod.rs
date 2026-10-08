@@ -1147,6 +1147,19 @@ pub async fn uninstall_app(
 }
 
 #[tauri::command]
+pub async fn remove_installed_app_entry(registry_path: String) -> Result<(), AppError> {
+    log::info!(
+        "[IPC] remove_installed_app_entry request received: registry_path='{}'",
+        registry_path
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        uninstaller::remove_installed_app_entry(&registry_path)
+    })
+    .await
+    .map_err(|e| AppError::Execution(format!("Join error in remove_installed_app_entry: {}", e)))?
+}
+
+#[tauri::command]
 pub async fn scan_system_cleaner() -> Result<cleaner::CleanerScanResult, AppError> {
     log::info!("[IPC] scan_system_cleaner request received");
     tauri::async_runtime::spawn_blocking(cleaner::scan_system)

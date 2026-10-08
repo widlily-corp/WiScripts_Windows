@@ -237,7 +237,127 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
 }
 
 #[cfg(windows)]
-fn query_fallback_drives() -> Vec<StorageDeviceHealth> {
+fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new("powershell.exe");
+    cmd.creation_flags(0x08000000);
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-PhysicalDisk -ErrorAction SilentlyContinue | ForEach-Object { \
+            $d = $_; \
+            $r = $null; \
+            try { $r = $d | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue } catch {}; \
+            [PSCustomObject]@{ \
+                DeviceId = [string]$d.DeviceId; \
+                FriendlyName = [string]$d.FriendlyName; \
+                MediaType = [string]$d.MediaType; \
+                BusType = [string]$d.BusType; \
+                HealthStatus = [string]$d.HealthStatus; \
+                OperationalStatus = [string]($d.OperationalStatus -join ','); \
+                Size = [int64]$d.Size; \
+                Temperature = if ($r -and $r.Temperature) { [double]$r.Temperature } else { $null }; \
+                PowerOnHours = if ($r -and $r.PowerOnHours) { [int64]$r.PowerOnHours } else { $null }; \
+                Wear = if ($r -and $r.Wear -ne $null) { [int]$r.Wear } else { $null }; \
+                ReadErrorsTotal = if ($r -and $r.ReadErrorsTotal) { [int64]$r.ReadErrorsTotal } else { $null }; \
+                WriteErrorsTotal = if ($r -and $r.WriteErrorsTotal) { [int64]$r.WriteErrorsTotal } else { $null } \
+            } \
+        } | ConvertTo-Json -Compress",
+    ]);
+
+    let output = match cmd.output() {
+        Ok(out) if out.status.success() => crate::runner::decode_bytes(&out.stdout),
+        _ => return Vec::new(),
+    };
+
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    let parsed_val: serde_json::Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let items = match parsed_val {
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::Object(_) => vec![parsed_val],
+        _ => return Vec::new(),
+    };
+
+    let mut drives = Vec::new();
+
+    for item in items {
+        let dev_id_raw = item.get("DeviceId").and_then(|v| v.as_str()).unwrap_or("0").trim().to_string();
+        let friendly_name = item.get("FriendlyName").and_then(|v| v.as_str()).unwrap_or("Storage Device").trim().to_string();
+        let bus_type_raw = item.get("BusType").and_then(|v| v.as_str()).unwrap_or("NVMe").trim().to_string();
+        let media_type_raw = item.get("MediaType").and_then(|v| v.as_str()).unwrap_or("SSD").trim().to_string();
+        let health_status_raw = item.get("HealthStatus").and_then(|v| v.as_str()).unwrap_or("Healthy").trim().to_string();
+
+        let temp_c = item.get("Temperature").and_then(|v| v.as_f64()).map(|v| v as f32).unwrap_or(0.0);
+        let power_on_hours = item.get("PowerOnHours").and_then(|v| v.as_u64()).unwrap_or(0);
+        let wear = item.get("Wear").and_then(|v| v.as_u64()).map(|v| v as u8);
+
+        let dev_num: Option<u32> = dev_id_raw.parse::<u32>().ok();
+
+        // If IOCTL query succeeds (e.g. running as Administrator on NVMe drive),
+        // enrich with low-level NVMe SMART log page while preserving model and bus type.
+        let mut health_info = dev_num.and_then(query_nvme_drive_ioctl);
+
+        if let Some(ref mut hi) = health_info {
+            hi.model = friendly_name.clone();
+            if !bus_type_raw.is_empty() {
+                hi.bus_type = bus_type_raw.clone();
+            }
+            if hi.temperature_celsius <= 0.0 && temp_c > 0.0 {
+                hi.temperature_celsius = temp_c;
+            }
+            drives.push(hi.clone());
+        } else {
+            // Real telemetry from Get-PhysicalDisk & Get-StorageReliabilityCounter
+            let (percentage_used, health_percentage) = if let Some(w) = wear {
+                (w, 100u8.saturating_sub(w))
+            } else {
+                match health_status_raw.to_lowercase().as_str() {
+                    "healthy" => (0, 100),
+                    "warning" => (20, 80),
+                    "unhealthy" => (50, 50),
+                    _ => (0, 100),
+                }
+            };
+
+            let smart_status = if health_status_raw.is_empty() {
+                "Healthy".to_string()
+            } else {
+                health_status_raw
+            };
+
+            drives.push(StorageDeviceHealth {
+                device_id: format!("\\\\.\\PhysicalDrive{}", dev_id_raw),
+                model: friendly_name,
+                bus_type: if !bus_type_raw.is_empty() { bus_type_raw } else { media_type_raw },
+                temperature_celsius: temp_c,
+                health_percentage,
+                critical_warning: 0,
+                available_spare_percent: 100u8.saturating_sub(percentage_used),
+                percentage_used,
+                total_bytes_written_tb: 0.0,
+                total_bytes_read_tb: 0.0,
+                power_on_hours,
+                power_cycles: 0,
+                unsafe_shutdowns: 0,
+                smart_status,
+            });
+        }
+    }
+
+    drives
+}
+
+#[cfg(windows)]
+fn query_sysinfo_fallback_drives() -> Vec<StorageDeviceHealth> {
     let mut drives = Vec::new();
     let mut disks = sysinfo::Disks::new_with_refreshed_list();
     disks.refresh_list();
@@ -245,42 +365,22 @@ fn query_fallback_drives() -> Vec<StorageDeviceHealth> {
     for (i, disk) in disks.iter().enumerate() {
         let name = disk.name().to_string_lossy().to_string();
         let mount = disk.mount_point().to_string_lossy().to_string();
-        let total_gb = (disk.total_space() as f64) / (1024.0 * 1024.0 * 1024.0);
 
         drives.push(StorageDeviceHealth {
             device_id: format!("\\\\.\\PhysicalDrive{}", i),
             model: if name.is_empty() { format!("System Drive ({})", mount) } else { name },
-            bus_type: "SSD/SATA".to_string(),
-            temperature_celsius: 38.0,
-            health_percentage: 98,
+            bus_type: "Storage".to_string(),
+            temperature_celsius: 0.0,
+            health_percentage: 100,
             critical_warning: 0,
             available_spare_percent: 100,
-            percentage_used: 2,
-            total_bytes_written_tb: (total_gb / 20.0).max(1.5),
-            total_bytes_read_tb: (total_gb / 15.0).max(2.0),
-            power_on_hours: 1200,
-            power_cycles: 450,
-            unsafe_shutdowns: 2,
-            smart_status: "Good".to_string(),
-        });
-    }
-
-    if drives.is_empty() {
-        drives.push(StorageDeviceHealth {
-            device_id: "\\\\.\\PhysicalDrive0".to_string(),
-            model: "Primary System NVMe SSD".to_string(),
-            bus_type: "NVMe".to_string(),
-            temperature_celsius: 42.0,
-            health_percentage: 99,
-            critical_warning: 0,
-            available_spare_percent: 100,
-            percentage_used: 1,
-            total_bytes_written_tb: 14.5,
-            total_bytes_read_tb: 18.2,
-            power_on_hours: 2450,
-            power_cycles: 680,
-            unsafe_shutdowns: 4,
-            smart_status: "Good".to_string(),
+            percentage_used: 0,
+            total_bytes_written_tb: 0.0,
+            total_bytes_read_tb: 0.0,
+            power_on_hours: 0,
+            power_cycles: 0,
+            unsafe_shutdowns: 0,
+            smart_status: "Healthy".to_string(),
         });
     }
 
@@ -291,39 +391,15 @@ fn query_fallback_drives() -> Vec<StorageDeviceHealth> {
 pub fn get_storage_devices_health() -> Result<Vec<StorageDeviceHealth>, AppError> {
     #[cfg(windows)]
     {
-        let mut devices = Vec::new();
-
-        // Scan PhysicalDrive0 through PhysicalDrive3
-        for i in 0..4 {
-            if let Some(health) = query_nvme_drive_ioctl(i) {
-                devices.push(health);
-            }
-        }
-
+        let mut devices = query_powershell_physical_disks();
         if devices.is_empty() {
-            devices = query_fallback_drives();
+            devices = query_sysinfo_fallback_drives();
         }
-
         Ok(devices)
     }
     #[cfg(not(windows))]
     {
-        Ok(vec![StorageDeviceHealth {
-            device_id: "/dev/nvme0n1".to_string(),
-            model: "Mock NVMe SSD 1TB".to_string(),
-            bus_type: "NVMe".to_string(),
-            temperature_celsius: 41.5,
-            health_percentage: 99,
-            critical_warning: 0,
-            available_spare_percent: 100,
-            percentage_used: 1,
-            total_bytes_written_tb: 12.8,
-            total_bytes_read_tb: 15.4,
-            power_on_hours: 1800,
-            power_cycles: 320,
-            unsafe_shutdowns: 1,
-            smart_status: "Good".to_string(),
-        }])
+        Ok(Vec::new())
     }
 }
 

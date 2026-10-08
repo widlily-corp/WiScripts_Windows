@@ -176,10 +176,34 @@ pub fn execute_odt_install(
         $configPath = Join-Path $env:TEMP 'configuration.xml'; \
         $setupPath = {}; \
         if (-not (Test-Path -LiteralPath $setupPath)) {{ \
-            Invoke-WebRequest -Uri 'https://config.office.com/api/odt/download' -OutFile $setupPath -UseBasicParsing \
+            $odtDir = Join-Path $env:TEMP 'wiscripts_odt'; \
+            New-Item -ItemType Directory -Force -Path $odtDir | Out-Null; \
+            $extractedSetup = Join-Path $odtDir 'setup.exe'; \
+            if (-not (Test-Path -LiteralPath $extractedSetup)) {{ \
+                $odtExe = Join-Path $odtDir 'officedeploymenttool.exe'; \
+                $fallbackUrl = 'https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe'; \
+                $downloadUrl = $fallbackUrl; \
+                try {{ \
+                    $page = Invoke-WebRequest -Uri 'https://www.microsoft.com/en-us/download/details.aspx?id=49117' -UseBasicParsing -TimeoutSec 7 -ErrorAction Stop; \
+                    $link = ($page.Links | Where-Object {{ $_.href -match 'officedeploymenttool.*\\.exe' }} | Select-Object -First 1).href; \
+                    if ($link -and $link.StartsWith('http')) {{ $downloadUrl = $link; }} \
+                }} catch {{ \
+                    $downloadUrl = $fallbackUrl; \
+                }} \
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $odtExe -UseBasicParsing; \
+                $extractProc = Start-Process -FilePath $odtExe -ArgumentList @(\"/extract:$odtDir\", \"/quiet\") -Wait -PassThru; \
+                if ($extractProc.ExitCode -ne 0) {{ \
+                    Write-Error \"Failed to extract Office Deployment Tool. Exit code: $($extractProc.ExitCode)\"; \
+                    exit $extractProc.ExitCode; \
+                }} \
+            }} \
+            if (Test-Path -LiteralPath $extractedSetup) {{ \
+                $setupPath = $extractedSetup; \
+            }} \
         }}; \
         Set-Content -Path $configPath -Value {} -Encoding UTF8; \
-        Start-Process -FilePath $setupPath -ArgumentList \"/configure `\"$configPath`\"\" -Wait",
+        $proc = Start-Process -FilePath $setupPath -ArgumentList \"/configure `\"$configPath`\"\" -Wait -PassThru; \
+        exit $proc.ExitCode",
         setup_exe_expr, escaped_xml
     );
 

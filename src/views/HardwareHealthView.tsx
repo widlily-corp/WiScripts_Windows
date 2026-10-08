@@ -57,8 +57,13 @@ export function HardwareHealthView() {
     return storageDevices[selectedDiskIndex] || storageDevices[0];
   }, [storageDevices, selectedDiskIndex]);
 
+  const hasSmartTelemetry = useMemo(() => {
+    if (!activeDrive) return false;
+    return activeDrive.powerOnHours > 0 || activeDrive.totalBytesWrittenTb > 0 || activeDrive.powerCycles > 0;
+  }, [activeDrive]);
+
   const driveTempColor = useMemo(() => {
-    if (!activeDrive) return 'text-text-muted';
+    if (!activeDrive || activeDrive.temperatureCelsius <= 0) return 'text-text-muted';
     if (activeDrive.temperatureCelsius < 50) return 'text-status-success';
     if (activeDrive.temperatureCelsius < 65) return 'text-status-warning';
     return 'text-status-danger';
@@ -154,6 +159,11 @@ export function HardwareHealthView() {
               </div>
 
               <div className="flex items-center gap-3">
+                {!hasSmartTelemetry && (
+                  <span className="px-2 py-0.5 rounded-[4px] bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono">
+                    {t('hardwareHealth.storage.admin_required', 'Требуются права админа для SMART')}
+                  </span>
+                )}
                 <div className="text-right">
                   <div className="text-xs text-text-muted">Health</div>
                   <div className="text-lg font-mono font-semibold text-status-success tabular-nums">
@@ -171,42 +181,42 @@ export function HardwareHealthView() {
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.temperature')}</div>
                 <div className={`mt-1.5 text-lg font-mono font-semibold tabular-nums ${driveTempColor}`}>
-                  {activeDrive.temperatureCelsius.toFixed(1)}°C
+                  {activeDrive.temperatureCelsius > 0 ? `${activeDrive.temperatureCelsius.toFixed(1)}°C` : 'N/A'}
                 </div>
               </div>
 
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.tbw_written')}</div>
                 <div className="mt-1.5 text-lg font-mono font-semibold text-text-primary tabular-nums">
-                  {activeDrive.totalBytesWrittenTb.toFixed(1)} TB
+                  {activeDrive.totalBytesWrittenTb > 0 ? `${activeDrive.totalBytesWrittenTb.toFixed(1)} TB` : '—'}
                 </div>
               </div>
 
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.power_on_hours')}</div>
                 <div className="mt-1.5 text-lg font-mono font-semibold text-text-primary tabular-nums">
-                  {activeDrive.powerOnHours.toLocaleString()} h
+                  {activeDrive.powerOnHours > 0 ? `${activeDrive.powerOnHours.toLocaleString()} h` : '—'}
                 </div>
               </div>
 
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.spare_capacity')}</div>
                 <div className="mt-1.5 text-lg font-mono font-semibold text-status-success tabular-nums">
-                  {activeDrive.availableSparePercent}%
+                  {activeDrive.availableSparePercent > 0 ? `${activeDrive.availableSparePercent}%` : '—'}
                 </div>
               </div>
 
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.unsafe_shutdowns')}</div>
                 <div className="mt-1.5 text-lg font-mono font-semibold text-text-primary tabular-nums">
-                  {activeDrive.unsafeShutdowns}
+                  {hasSmartTelemetry ? activeDrive.unsafeShutdowns : '—'}
                 </div>
               </div>
 
               <div className="p-3 rounded-[6px] bg-surface-subtle border border-border-subtle">
                 <div className="text-[11px] text-text-secondary">{t('hardwareHealth.storage.power_cycles')}</div>
                 <div className="mt-1.5 text-lg font-mono font-semibold text-text-primary tabular-nums">
-                  {activeDrive.powerCycles}
+                  {activeDrive.powerCycles > 0 ? activeDrive.powerCycles.toLocaleString() : '—'}
                 </div>
               </div>
             </div>

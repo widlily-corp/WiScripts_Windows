@@ -31,6 +31,214 @@ pub fn parse_perf_thermal_zone_value(val: f32) -> Option<f32> {
     None
 }
 
+/// Queries all ACPI thermal zones and probes in a single consolidated PowerShell execution.
+/// Unifies `MSAcpi_ThermalZoneTemperature`, `Win32_PerfFormattedData_Counters_ThermalZoneInformation`,
+/// and `Win32_TemperatureProbe` to drastically reduce cold-start latency.
+pub fn query_all_acpi_thermal_zones() -> Vec<TemperatureSensorInfo> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("powershell.exe");
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "& { \
+                $res = @{}; \
+                $acpi = Get-CimInstance -Namespace root\\wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | Select-Object InstanceName, CurrentTemperature; \
+                if ($acpi) { $res.acpi = @($acpi) }; \
+                $perf = Get-CimInstance -Namespace root\\cimv2 -ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction SilentlyContinue | Select-Object Name, Temperature; \
+                if ($perf) { $res.perf = @($perf) }; \
+                $probe = Get-CimInstance -Namespace root\\cimv2 -ClassName Win32_TemperatureProbe -ErrorAction SilentlyContinue | Select-Object DeviceID, Name, CurrentReading; \
+                if ($probe) { $res.probe = @($probe) }; \
+                $res | ConvertTo-Json -Compress \
+            }",
+        ]);
+        let output = super::run_command_with_timeout(cmd, std::time::Duration::from_secs(2));
+
+        if let Some(json_str) = output {
+            let mut sensors = Vec::new();
+            let trimmed = json_str.trim();
+            if !trimmed.is_empty() {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                    if let Some(acpi_items) = value.get("acpi").and_then(|v| v.as_array()) {
+                        for (idx, item) in acpi_items.iter().enumerate() {
+                            let instance_name = item.get("InstanceName").and_then(|v| v.as_str()).unwrap_or("ThermalZone");
+                            if let Some(raw_deci_k) = item.get("CurrentTemperature").and_then(|v| v.as_f64()).map(|v| v as f32) {
+                                if (2000.0..=4000.0).contains(&raw_deci_k) {
+                                    let celsius = deci_kelvin_to_celsius(raw_deci_k);
+                                    if is_valid_temperature(celsius) {
+                                        sensors.push(TemperatureSensorInfo {
+                                            id: format!("acpi_thermal_zone_{}", idx),
+                                            name: format!("ACPI Thermal Zone {}", idx),
+                                            label: format!("{} ({:.1}°C)", instance_name, celsius),
+                                            temperature_celsius: celsius,
+                                            sensor_type: "cpu".to_string(),
+                                            provider: "ACPI Thermal Zone".to_string(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(perf_items) = value.get("perf").and_then(|v| v.as_array()) {
+                        for (idx, item) in perf_items.iter().enumerate() {
+                            let raw_name = item.get("Name").and_then(|v| v.as_str()).unwrap_or("ThermalZone");
+                            let clean_name = raw_name
+                                .trim_start_matches("\\Thermal Zone Information(")
+                                .trim_end_matches(")\\Temperature")
+                                .replace(['\\', '/', '(', ')', '"'], "");
+
+                            if let Some(raw_temp) = item.get("Temperature").and_then(|v| v.as_f64()).map(|v| v as f32) {
+                                if let Some(celsius) = parse_perf_thermal_zone_value(raw_temp) {
+                                    sensors.push(TemperatureSensorInfo {
+                                        id: format!("perf_thermal_zone_{}", idx),
+                                        name: format!("Thermal Zone {}", clean_name),
+                                        label: format!("ACPI PerfZone - {} ({:.1}°C)", clean_name, celsius),
+                                        temperature_celsius: celsius,
+                                        sensor_type: "cpu".to_string(),
+                                        provider: "Thermal Zone (root\\cimv2)".to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(probe_items) = value.get("probe").and_then(|v| v.as_array()) {
+                        for (idx, item) in probe_items.iter().enumerate() {
+                            let device_id = item.get("DeviceID").and_then(|v| v.as_str()).unwrap_or("");
+                            let name = item.get("Name").and_then(|v| v.as_str()).unwrap_or("Temperature Probe");
+                            if let Some(reading) = item.get("CurrentReading").and_then(|v| v.as_f64()).map(|v| v as f32) {
+                                let temp_c = if (2000.0..=4000.0).contains(&reading) {
+                                    deci_kelvin_to_celsius(reading)
+                                } else if (200.0..=400.0).contains(&reading) {
+                                    kelvin_to_celsius(reading)
+                                } else if (100.0..=1200.0).contains(&reading) {
+                                    reading / 10.0
+                                } else {
+                                    reading
+                                };
+
+                                if is_valid_temperature(temp_c) {
+                                    sensors.push(TemperatureSensorInfo {
+                                        id: format!("wmi_probe_{}", idx),
+                                        name: name.to_string(),
+                                        label: format!("{} ({:.1}°C)", name, temp_c),
+                                        temperature_celsius: temp_c,
+                                        sensor_type: classify_sensor(device_id, name, ""),
+                                        provider: "Win32_TemperatureProbe".to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return sensors;
+        }
+    }
+    Vec::new()
+}
+
+/// Queries temperature sensors for all physical storage drives (NVMe / SSD / SATA).
+/// Collects temperatures via `Get-PhysicalDisk` + `Get-StorageReliabilityCounter` and `MSStorageDriver_ATAPISmartData`.
+pub fn query_physical_storage_sensors() -> Vec<TemperatureSensorInfo> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("powershell.exe");
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+        cmd.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "& { \
+                $drives = @(); \
+                $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue; \
+                if ($disks) { \
+                    foreach ($d in $disks) { \
+                        $r = $null; \
+                        try { $r = $d | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue } catch {}; \
+                        if ($r -and $r.Temperature -gt 0 -and $r.Temperature -lt 120) { \
+                            $drives += [PSCustomObject]@{ \
+                                Id = 'disk_' + $d.DeviceId; \
+                                Name = [string]$d.FriendlyName; \
+                                BusType = [string]$d.BusType; \
+                                Temp = [double]$r.Temperature; \
+                                Provider = 'StorageReliabilityCounter' \
+                            } \
+                        } \
+                    } \
+                }; \
+                $smart = Get-CimInstance -Namespace root\\wmi -ClassName MSStorageDriver_ATAPISmartData -ErrorAction SilentlyContinue; \
+                if ($smart) { \
+                    foreach ($s in $smart) { \
+                        $bytes = $s.VendorSpecific; \
+                        if ($bytes -and $bytes.Length -ge 362) { \
+                            for ($i = 2; $i -lt 362; $i += 12) { \
+                                $id = $bytes[$i]; \
+                                if ($id -eq 194 -or $id -eq 190) { \
+                                    $temp = $bytes[$i + 5]; \
+                                    if ($temp -gt 5 -and $temp -lt 118) { \
+                                        $drives += [PSCustomObject]@{ \
+                                            Id = 'smart_' + ($s.InstanceName -replace '[^a-zA-Z0-9_]','_'); \
+                                            Name = 'SATA SMART Drive'; \
+                                            BusType = 'SATA'; \
+                                            Temp = [double]$temp; \
+                                            Provider = 'MSStorageDriver_ATAPISmartData' \
+                                        }; \
+                                        break \
+                                    } \
+                                } \
+                            } \
+                        } \
+                    } \
+                }; \
+                $drives | ConvertTo-Json -Compress \
+            }",
+        ]);
+        let output = super::run_command_with_timeout(cmd, std::time::Duration::from_secs(2));
+
+        if let Some(json_str) = output {
+            let mut sensors = Vec::new();
+            let trimmed = json_str.trim();
+            if !trimmed.is_empty() {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                    let items = match value {
+                        serde_json::Value::Array(arr) => arr,
+                        serde_json::Value::Object(_) => vec![value],
+                        _ => vec![],
+                    };
+
+                    for item in items {
+                        let id_raw = item.get("Id").and_then(|v| v.as_str()).unwrap_or("disk_0");
+                        let name = item.get("Name").and_then(|v| v.as_str()).unwrap_or("Storage Drive");
+                        let bus_type = item.get("BusType").and_then(|v| v.as_str()).unwrap_or("Disk");
+                        let provider = item.get("Provider").and_then(|v| v.as_str()).unwrap_or("Storage Reliability");
+
+                        if let Some(temp) = item.get("Temp").and_then(|v| v.as_f64()).map(|v| v as f32) {
+                            if is_valid_temperature(temp) {
+                                sensors.push(TemperatureSensorInfo {
+                                    id: format!("storage_{}", id_raw),
+                                    name: name.to_string(),
+                                    label: format!("{} ({})", name, bus_type),
+                                    temperature_celsius: temp,
+                                    sensor_type: "storage".to_string(),
+                                    provider: provider.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return sensors;
+        }
+    }
+    Vec::new()
+}
+
 /// Queries `MSAcpi_ThermalZoneTemperature` from `root\wmi`.
 pub fn query_acpi_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     #[cfg(target_os = "windows")]

@@ -273,6 +273,113 @@ export interface ScriptRunnerSlice {
   ) => Promise<CommandOutput | null>;
 }
 
+/**
+ * Detects whether a string contains a progress percentage pattern,
+ * such as "50%", "[*] 50%", or "[======] 50%".
+ */
+export function hasPercentagePattern(line: string): boolean {
+  return /(?:\[.*?\]\s*)?\b\d{1,3}(?:\.\d+)?%/.test(line);
+}
+
+/**
+ * Detects whether a string contains an ASCII/Unicode progress bar pattern,
+ * e.g. "[====>   ]", "[#####   ]", "[------  ]".
+ */
+export function hasProgressBarPattern(line: string): boolean {
+  return /\[[=#>*\- ]{3,}\]/.test(line);
+}
+
+/**
+ * Extracts a process/task prefix from a line up to the start of progress markers or percentages.
+ */
+export function extractProcessPrefix(line: string): string {
+  const percentIdx = line.search(/(?:\[.*?\]\s*)?\b\d{1,3}(?:\.\d+)?%/);
+  if (percentIdx > 0) {
+    return line.substring(0, percentIdx).trim();
+  }
+  const barIdx = line.search(/\[[=#>*\- ]{3,}\]/);
+  if (barIdx > 0) {
+    return line.substring(0, barIdx).trim();
+  }
+  return '';
+}
+
+/**
+ * Normalizes a line to compare progress structure by replacing volatile counters/bars.
+ */
+export function normalizeProgressPattern(line: string): string {
+  return line
+    .replace(/\[[=#>*\- ]{3,}\]/g, '[BAR]')
+    .replace(/(?:\[.*?\]\s*)?\b\d{1,3}(?:\.\d+)?%/g, '%')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:MB|GB|KB|B)\b/gi, 'SIZE')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:MB\/s|KB\/s|GB\/s|B\/s)\b/gi, 'SPEED')
+    .replace(/\d+/g, '#')
+    .trim();
+}
+
+/**
+ * Determines whether the incoming line represents an in-place progress update
+ * of the immediately preceding output line.
+ */
+export function isProgressUpdate(
+  prevLine: string,
+  nextLine: string,
+  streamMatches: boolean,
+  hasCarriageReturn: boolean
+): boolean {
+  if (!streamMatches) {
+    return false;
+  }
+
+  // 1. Explicit carriage return indicates in-place update
+  if (hasCarriageReturn) {
+    return true;
+  }
+
+  const p = prevLine.trim();
+  const n = nextLine.trim();
+
+  if (!p || !n) {
+    return false;
+  }
+
+  const pHasPct = hasPercentagePattern(p);
+  const nHasPct = hasPercentagePattern(n);
+  const pHasBar = hasProgressBarPattern(p);
+  const nHasBar = hasProgressBarPattern(n);
+
+  const pIsProgress = pHasPct || pHasBar;
+  const nIsProgress = nHasPct || nHasBar;
+
+  if (pIsProgress && nIsProgress) {
+    // Check 1: Normalized structure matches
+    if (normalizeProgressPattern(p) === normalizeProgressPattern(n)) {
+      return true;
+    }
+
+    // Check 2: Same non-empty process prefix
+    const pPrefix = extractProcessPrefix(p);
+    const nPrefix = extractProcessPrefix(n);
+    if (pPrefix.length >= 3 && pPrefix.toLowerCase() === nPrefix.toLowerCase()) {
+      return true;
+    }
+
+    // Check 3: Common prefix before progress
+    if ((pHasBar && nHasBar) || (pHasPct && nHasPct)) {
+      let commonPrefixLen = 0;
+      const minLen = Math.min(p.length, n.length);
+      while (commonPrefixLen < minLen && p[commonPrefixLen] === n[commonPrefixLen]) {
+        commonPrefixLen++;
+      }
+      if (commonPrefixLen >= 4 && /[a-zA-Z]/.test(p.substring(0, commonPrefixLen))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 const MAX_SCRIPT_LOG_LINES = 2000;
 
 const DEFAULT_SCRIPT_CONTENT = `# WiScripts Windows Custom PowerShell Script
@@ -400,16 +507,61 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   setUploadedFileName: (name) => set({ uploadedFileName: name }),
 
   addOutputLine: (payload) => {
+    const rawLine = payload.line ?? '';
+    const rawHasCarriageReturn = rawLine.includes('\r');
+
+    // Extract the latest segment if \r is present in incoming payload
+    let cleanLine = rawLine;
+    if (rawHasCarriageReturn) {
+      const parts = rawLine.split('\r').filter((p) => p.length > 0);
+      cleanLine = parts.length > 0 ? parts[parts.length - 1] : '';
+    }
+
+    // Strip trailing \n or \r if any
+    cleanLine = cleanLine.replace(/[\r\n]+$/, '');
+
+    // Skip empty updates that have no text and were purely carriage returns
+    if (!cleanLine && rawHasCarriageReturn) {
+      return;
+    }
+
     const timestamp = new Date().toLocaleTimeString();
-    const newEntry: ScriptOutputLine = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      line: payload.line,
-      stream: payload.stream,
-      timestamp,
-    };
-    set((state) => ({
-      outputLogs: [...state.outputLogs, newEntry].slice(-MAX_SCRIPT_LOG_LINES),
-    }));
+
+    set((state) => {
+      const logs = state.outputLogs;
+      const lastEntry = logs.length > 0 ? logs[logs.length - 1] : null;
+
+      if (
+        lastEntry &&
+        isProgressUpdate(
+          lastEntry.line,
+          cleanLine,
+          lastEntry.stream === payload.stream,
+          rawHasCarriageReturn
+        )
+      ) {
+        // In-place replacement of the progress line
+        const updatedLogs = [...logs];
+        updatedLogs[updatedLogs.length - 1] = {
+          ...lastEntry,
+          line: cleanLine,
+          timestamp,
+        };
+        return { outputLogs: updatedLogs };
+      }
+
+      // Standard line append
+      const newEntry: ScriptOutputLine = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        line: cleanLine,
+        stream: payload.stream,
+        timestamp,
+      };
+
+      return {
+        outputLogs: [...logs, newEntry].slice(-MAX_SCRIPT_LOG_LINES),
+      };
+    });
   },
 
   clearOutputLogs: () => set({ outputLogs: [] }),

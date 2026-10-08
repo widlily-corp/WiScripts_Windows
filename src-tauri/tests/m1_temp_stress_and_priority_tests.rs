@@ -341,7 +341,7 @@ fn test_sensor_classification_comprehensive_matrix() {
         ("/intelgpu/0/temperature/0", "Intel Iris Xe Graphics", "/intelgpu/0", "gpu"),
         ("/intelgpu/1/temperature/0", "Intel Arc A770", "/intelgpu/1", "gpu"),
         ("/lpc/nct6798d/temperature/0", "Motherboard", "/lpc/nct6798d", "other"),
-        ("/hdd/0/temperature/0", "Samsung SSD 990 PRO 2TB", "/hdd/0", "other"),
+        ("/hdd/0/temperature/0", "Samsung SSD 990 PRO 2TB", "/hdd/0", "storage"),
         ("fan_0", "Chassis Fan Speed", "", "other"),
     ];
 

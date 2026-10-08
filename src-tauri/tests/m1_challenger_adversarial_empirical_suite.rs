@@ -218,7 +218,7 @@ fn test_cache_corruption_zero_byte_manifest_recovery() {
     );
 
     let loaded = manifest.unwrap();
-    assert_eq!(loaded.scripts.len(), 27, "Expected exactly 27 scripts in library");
+    assert_eq!(loaded.scripts.len(), 45, "Expected exactly 45 scripts in library");
 
     // 3. Verify manifest.json in cache was overwritten with valid JSON
     let new_content = fs::read_to_string(&manifest_file).expect("Failed to read repaired manifest");
@@ -251,7 +251,7 @@ fn test_cache_corruption_truncated_json_recovery() {
     assert!(opt_manifest.is_some());
 
     let m = opt_manifest.unwrap();
-    assert_eq!(m.scripts.len(), 27);
+    assert_eq!(m.scripts.len(), 45);
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn test_cache_corruption_malformed_and_type_mismatched_json() {
             seed_res.err()
         );
         let m = seed_res.unwrap().expect("Manifest should be recovered");
-        assert_eq!(m.scripts.len(), 27);
+        assert_eq!(m.scripts.len(), 45);
     }
 }
 
@@ -453,8 +453,8 @@ fn test_sha256_oracle_all_27_scripts_byte_for_byte_integrity() {
 
     assert_eq!(
         manifest.scripts.len(),
-        27,
-        "Manifest must define exactly 27 production scripts (found {})",
+        45,
+        "Manifest must define exactly 45 production scripts (found {})",
         manifest.scripts.len()
     );
 

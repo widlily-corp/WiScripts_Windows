@@ -36,7 +36,7 @@ pub fn is_dummy_acpi_reading(temp: f32) -> bool {
     (26.7..=27.05).contains(&temp) || (27.7..=28.05).contains(&temp)
 }
 
-/// Classifies a hardware sensor into "cpu", "gpu", or "other".
+/// Classifies a hardware sensor into "cpu", "gpu", "storage", or "other".
 /// GPU patterns are evaluated first to prevent "GPU Core" from being classified as CPU.
 pub fn classify_sensor(identifier: &str, name: &str, parent: &str) -> String {
     let combined = format!("{} {} {}", identifier, name, parent).to_lowercase();
@@ -68,8 +68,30 @@ pub fn classify_sensor(identifier: &str, name: &str, parent: &str) -> String {
         || combined.contains("acpi_thermal_zone")
         || combined.contains("thermal zone")
         || combined.contains("thermalzone")
+        || combined.contains("tz0")
+        || combined.contains("tz1")
+        || combined.contains("_tz.")
+        || combined.contains("soc")
+        || combined.contains("apu")
     {
         "cpu".to_string()
+    } else if combined.contains("nvme")
+        || combined.contains("ssd")
+        || combined.contains("hdd")
+        || combined.contains("disk")
+        || combined.contains("drive")
+        || combined.contains("storage")
+        || combined.contains("physicaldrive")
+        || combined.contains("samsung ssd")
+        || combined.contains("wd pc")
+        || combined.contains("westerndigital")
+        || combined.contains("crucial")
+        || combined.contains("kingston")
+        || combined.contains("sandisk")
+        || combined.contains("seagate")
+        || combined.contains("smart")
+    {
+        "storage".to_string()
     } else {
         "other".to_string()
     }
@@ -229,6 +251,10 @@ mod tests {
 
         assert_eq!(classify_sensor("/lpc/nct6798d/temperature/1", "Motherboard", "/lpc/nct6798d"), "other");
         assert_eq!(classify_sensor("fan_0", "Chassis Fan 1", ""), "other");
+
+        assert_eq!(classify_sensor("disk_0", "Samsung SSD 980 PRO 1TB", "nvme"), "storage");
+        assert_eq!(classify_sensor("/storage/0/temperature/0", "WD PC SN560 NVMe", "/storage/0"), "storage");
+        assert_eq!(classify_sensor("smart_drive_0", "Crucial MX500 SATA SSD", ""), "storage");
     }
 
     #[test]

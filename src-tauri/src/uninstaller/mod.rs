@@ -1,7 +1,6 @@
 use crate::error::AppError;
 use crate::runner::{CommandOutput, ExecutedAction, ExecutionSummary};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -19,6 +18,8 @@ pub struct InstalledApp {
     pub is_system_component: bool,
     pub quiet_uninstall_string: Option<String>,
     pub install_location: Option<String>,
+    #[serde(default)]
+    pub is_ghost: bool,
 }
 
 /// Escapes an argument string according to Windows CommandLineToArgvW rules.
@@ -125,6 +126,88 @@ fn split_arguments(args_str: &str) -> Vec<String> {
     args
 }
 
+/// Expands Windows environment variables like `%ProgramFiles%` in a path string.
+pub fn expand_env_vars(input: &str) -> String {
+    let mut result = String::new();
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let mut var_name = String::new();
+            let mut closed = false;
+            while let Some(&next_c) = chars.peek() {
+                chars.next();
+                if next_c == '%' {
+                    closed = true;
+                    break;
+                }
+                var_name.push(next_c);
+            }
+            if closed && !var_name.is_empty() {
+                if let Ok(val) = std::env::var(&var_name) {
+                    result.push_str(&val);
+                } else {
+                    result.push('%');
+                    result.push_str(&var_name);
+                    result.push('%');
+                }
+            } else {
+                result.push('%');
+                result.push_str(&var_name);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Checks whether an installed application is a ghost entry (orphaned registry item
+/// whose uninstaller executable or installation directory no longer exists on disk).
+pub fn check_is_ghost(
+    uninstall_string: Option<&str>,
+    quiet_uninstall_string: Option<&str>,
+    install_location: Option<&str>,
+) -> bool {
+    // 1. Check install_location if present and non-empty
+    if let Some(loc) = install_location {
+        let trimmed_loc = expand_env_vars(loc.trim().trim_matches('"'));
+        if !trimmed_loc.is_empty() {
+            let p = std::path::Path::new(&trimmed_loc);
+            if p.is_absolute() && !p.exists() {
+                return true;
+            }
+        }
+    }
+
+    // 2. Check uninstaller executable
+    let raw_cmd = uninstall_string.or(quiet_uninstall_string);
+    if let Some(cmd) = raw_cmd {
+        let (prog, _) = parse_uninstall_string(cmd);
+        let prog_lower = prog.to_lowercase();
+        // Skip system helpers and msiexec
+        if !prog_lower.is_empty()
+            && !prog_lower.contains("msiexec")
+            && !prog_lower.contains("rundll32")
+            && !prog_lower.ends_with("cmd.exe")
+            && !prog_lower.ends_with("powershell.exe")
+        {
+            let expanded_prog = expand_env_vars(prog.trim().trim_matches('"'));
+            let path = std::path::Path::new(&expanded_prog);
+            if path.is_absolute() {
+                if !path.exists() && !path.with_extension("exe").exists() {
+                    return true;
+                }
+            } else if expanded_prog.contains('\\') || expanded_prog.contains('/') {
+                if !path.exists() && !path.with_extension("exe").exists() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Scans the Windows Registry across HKLM (64-bit), HKLM (32-bit/WOW64), and HKCU for installed applications.
 pub fn get_installed_apps() -> Result<Vec<InstalledApp>, AppError> {
     #[cfg(target_os = "windows")]
@@ -211,6 +294,12 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, AppError> {
 
                 let id = format!("{}_{}", key_name, clean_name.replace(' ', "_"));
 
+                let is_ghost = check_is_ghost(
+                    uninstall_string.as_deref(),
+                    quiet_uninstall_string.as_deref(),
+                    install_location.as_deref(),
+                );
+
                 apps.push(InstalledApp {
                     id,
                     name: clean_name.to_string(),
@@ -224,21 +313,27 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, AppError> {
                     install_location,
                     registry_path: format!(r"{}\{}", display_base_path, key_name),
                     is_system_component,
+                    is_ghost,
                 });
             }
         }
 
-        // Deduplicate by (name, version)
-        let mut seen = HashSet::new();
-        let mut deduplicated = Vec::new();
+        // Deduplicate by (name, version), preferring non-ghost entries
+        let mut deduplicated: Vec<InstalledApp> = Vec::new();
+        let mut seen_indices: std::collections::HashMap<(String, String), usize> =
+            std::collections::HashMap::new();
 
         for app in apps {
             let key = (
                 app.name.to_lowercase(),
                 app.version.clone().unwrap_or_default(),
             );
-            if !seen.contains(&key) {
-                seen.insert(key);
+            if let Some(&existing_idx) = seen_indices.get(&key) {
+                if deduplicated[existing_idx].is_ghost && !app.is_ghost {
+                    deduplicated[existing_idx] = app;
+                }
+            } else {
+                seen_indices.insert(key, deduplicated.len());
                 deduplicated.push(app);
             }
         }
@@ -253,6 +348,109 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, AppError> {
     #[cfg(not(target_os = "windows"))]
     {
         Ok(Vec::new())
+    }
+}
+
+/// Safely removes an orphaned application subkey from the Windows registry (HKLM or HKCU Uninstall keys).
+pub fn remove_installed_app_entry(registry_path: &str) -> Result<(), AppError> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+
+        let trimmed = registry_path.trim();
+        let trimmed_lower = trimmed.to_lowercase();
+
+        let (root_hive, subpath, flags, key_name) = if trimmed_lower
+            .starts_with(r"hklm\software\wow6432node\microsoft\windows\currentversion\uninstall\")
+        {
+            (
+                HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                KEY_ALL_ACCESS | KEY_WOW64_32KEY,
+                &trimmed[r"hklm\software\wow6432node\microsoft\windows\currentversion\uninstall\".len()..],
+            )
+        } else if trimmed_lower
+            .starts_with(r"hklm\software\microsoft\windows\currentversion\uninstall\")
+        {
+            (
+                HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                KEY_ALL_ACCESS | KEY_WOW64_64KEY,
+                &trimmed[r"hklm\software\microsoft\windows\currentversion\uninstall\".len()..],
+            )
+        } else if trimmed_lower
+            .starts_with(r"hkcu\software\microsoft\windows\currentversion\uninstall\")
+        {
+            (
+                HKEY_CURRENT_USER,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                KEY_ALL_ACCESS,
+                &trimmed[r"hkcu\software\microsoft\windows\currentversion\uninstall\".len()..],
+            )
+        } else {
+            return Err(AppError::InvalidConfig(format!(
+                "Refusing to remove unauthorized registry path: '{}'. Only Uninstall hive entries can be removed.",
+                registry_path
+            )));
+        };
+
+        let key_name = key_name.trim();
+        if key_name.is_empty()
+            || key_name.contains('\\')
+            || key_name.contains('/')
+            || key_name == "."
+            || key_name == ".."
+        {
+            return Err(AppError::InvalidConfig(format!(
+                "Invalid subkey name for uninstaller entry: '{}'",
+                key_name
+            )));
+        }
+
+        let root = RegKey::predef(root_hive);
+        let parent_key = root
+            .open_subkey_with_flags(subpath, flags)
+            .map_err(|e| {
+                AppError::Execution(format!(
+                    "Failed to open parent uninstall registry key with write permissions: {}",
+                    e
+                ))
+            })?;
+
+        match parent_key.delete_subkey_all(key_name) {
+            Ok(_) => {
+                log::info!(
+                    "[Uninstaller] Successfully removed orphan registry entry: '{}'",
+                    registry_path
+                );
+                Ok(())
+            }
+            Err(e) if e.raw_os_error() == Some(2) => {
+                log::warn!(
+                    "[Uninstaller] Registry entry was already deleted or not found: '{}'",
+                    registry_path
+                );
+                Ok(())
+            }
+            Err(e) => {
+                log::error!(
+                    "[Uninstaller] Failed to delete registry subkey '{}': {}",
+                    key_name,
+                    e
+                );
+                Err(AppError::Execution(format!(
+                    "Failed to remove uninstaller registry entry '{}': {}",
+                    key_name, e
+                )))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = registry_path;
+        Ok(())
     }
 }
 
@@ -393,6 +591,11 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                             total_duration_ms: start_time.elapsed().as_millis() as u64,
                             is_dry_run: false,
                         })
+                    } else if (res.0 as usize) == 2 {
+                        Err(AppError::Execution(format!(
+                            "Uninstaller executable not found (FileNotFound): '{}'. The application files may have been deleted manually.",
+                            program
+                        )))
                     } else {
                         Err(AppError::Execution(format!(
                             "Elevated launch via ShellExecuteW failed with OS error code {}",
@@ -407,6 +610,11 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                         err
                     )));
                 }
+            } else if err.kind() == std::io::ErrorKind::NotFound || err.raw_os_error() == Some(2) {
+                Err(AppError::Execution(format!(
+                    "Uninstaller executable not found (FileNotFound): '{}'. The application files may have been deleted manually.",
+                    program
+                )))
             } else {
                 Err(AppError::Execution(format!(
                     "Failed to execute uninstaller process '{}': {}",
@@ -531,4 +739,41 @@ mod tests {
         assert_eq!(escape_cmd_arg("simple"), "simple");
         assert_eq!(escape_cmd_arg(""), "\"\"");
     }
+
+    #[test]
+    fn test_check_is_ghost_nonexistent_executable() {
+        let is_ghost = check_is_ghost(
+            Some(r#""C:\NonExistentDirectory_WiScripts_9999\uninstall.exe" /S"#),
+            None,
+            None,
+        );
+        assert!(is_ghost);
+    }
+
+    #[test]
+    fn test_check_is_ghost_nonexistent_install_location() {
+        let is_ghost = check_is_ghost(
+            None,
+            None,
+            Some(r#"C:\NonExistentDirectory_WiScripts_9999"#),
+        );
+        assert!(is_ghost);
+    }
+
+    #[test]
+    fn test_check_is_ghost_msiexec_not_ghost_by_default() {
+        let is_ghost = check_is_ghost(
+            Some(r#"msiexec.exe /X{12345678-ABCD-1234-ABCD-1234567890AB}"#),
+            None,
+            None,
+        );
+        assert!(!is_ghost);
+    }
+
+    #[test]
+    fn test_remove_installed_app_entry_rejects_unauthorized_key() {
+        let res = remove_installed_app_entry(r#"HKLM\SYSTEM\CurrentControlSet\Services\SomeService"#);
+        assert!(res.is_err());
+    }
 }
+

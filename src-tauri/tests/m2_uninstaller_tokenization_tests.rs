@@ -98,6 +98,7 @@ fn test_uninstall_app_dry_run_execution() {
         install_date: Some("20260301".to_string()),
         registry_path: "HKLM\\Software\\...".to_string(),
         is_system_component: false,
+        is_ghost: false,
         quiet_uninstall_string: None,
         install_location: None,
     };

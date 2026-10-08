@@ -184,6 +184,7 @@ export interface InstalledApp {
   isSystemComponent: boolean;
   quietUninstallString?: string | null;
   installLocation?: string | null;
+  isGhost?: boolean;
 }
 
 export interface SystemMetricsPayload {

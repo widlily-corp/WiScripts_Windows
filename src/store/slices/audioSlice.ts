@@ -6,7 +6,6 @@ import {
   AudioFlow,
   ExecutionSummary,
 } from '../../types';
-import { MOCK_AUDIO_PAYLOAD, MOCK_APP_SESSIONS } from '../../mocks/audioMocks';
 import type { AppState } from '../useAppStore';
 import { getErrorMessage } from '../../utils';
 
@@ -45,9 +44,9 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
       return payload;
     } catch (err) {
       const errMsg = getErrorMessage(err);
-      get().addLog({ level: 'warn', message: `Fetch audio devices IPC failed (${errMsg}), using fallback preview state.` });
-      set({ audioDevicesPayload: MOCK_AUDIO_PAYLOAD, audioDevices: MOCK_AUDIO_PAYLOAD, audioError: null });
-      return MOCK_AUDIO_PAYLOAD;
+      get().addLog({ level: 'error', message: `Fetch audio devices IPC failed: ${errMsg}` });
+      set({ audioDevicesPayload: null, audioDevices: null, audioError: errMsg });
+      return null;
     } finally {
       set({ isAudioLoading: false, audioLoading: false });
     }
@@ -63,9 +62,9 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
       return sessions;
     } catch (err) {
       const errMsg = getErrorMessage(err);
-      get().addLog({ level: 'warn', message: `Fetch audio sessions IPC failed (${errMsg}), using fallback preview state.` });
-      set({ appAudioSessions: MOCK_APP_SESSIONS, audioError: null });
-      return MOCK_APP_SESSIONS;
+      get().addLog({ level: 'error', message: `Fetch audio sessions IPC failed: ${errMsg}` });
+      set({ appAudioSessions: [], audioError: errMsg });
+      return [];
     } finally {
       set({ isAudioLoading: false, audioLoading: false });
     }
@@ -113,8 +112,10 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
       });
 
       set((state) => {
-        const currentPayload = state.audioDevicesPayload || MOCK_AUDIO_PAYLOAD;
-        const updatedPayload = { ...currentPayload };
+        if (!state.audioDevicesPayload) {
+          return {};
+        }
+        const updatedPayload = { ...state.audioDevicesPayload };
         if (flowStr === 'render') {
           updatedPayload.defaultRenderId = deviceId;
           updatedPayload.renderDevices = updatedPayload.renderDevices.map((d) => ({

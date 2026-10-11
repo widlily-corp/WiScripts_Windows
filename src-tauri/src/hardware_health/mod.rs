@@ -19,7 +19,25 @@ use windows::{
     },
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// S.M.A.R.T. Attribute row matching CrystalDiskInfo specifications.
+/// Reference: https://github.com/hiyohiyo/CrystalDiskInfo (Noriyuki Miyazaki)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SmartAttributeItem {
+    pub id: u8,
+    pub name: String,
+    pub current: u64,
+    pub worst: Option<u64>,
+    pub threshold: Option<u64>,
+    pub raw_value: String,
+    pub status: String,
+    pub description: String,
+}
+
+/// Comprehensive Storage Device Health & Telemetry.
+/// Incorporates CrystalDiskInfo NVMe/ATA IOCTL methods and S.M.A.R.T. metrics.
+/// Dedicated credit: https://github.com/hiyohiyo/CrystalDiskInfo
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageDeviceHealth {
     pub device_id: String,
@@ -36,6 +54,36 @@ pub struct StorageDeviceHealth {
     pub power_cycles: u64,
     pub unsafe_shutdowns: u64,
     pub smart_status: String,
+    #[serde(default)]
+    pub firmware_revision: String,
+    #[serde(default)]
+    pub serial_number: String,
+    #[serde(default)]
+    pub transfer_mode: String,
+    #[serde(default)]
+    pub standard: String,
+    #[serde(default)]
+    pub drive_letters: Vec<String>,
+    #[serde(default)]
+    pub size_bytes: u64,
+    #[serde(default)]
+    pub media_type: String,
+    #[serde(default)]
+    pub rotation_rate_rpm: Option<u32>,
+    #[serde(default)]
+    pub features_supported: Vec<String>,
+    #[serde(default)]
+    pub media_errors: u64,
+    #[serde(default)]
+    pub error_log_entries: u64,
+    #[serde(default)]
+    pub warning_temp_time_mins: u32,
+    #[serde(default)]
+    pub critical_temp_time_mins: u32,
+    #[serde(default)]
+    pub sensor_temperatures: Vec<f32>,
+    #[serde(default)]
+    pub smart_attributes: Vec<SmartAttributeItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,6 +187,172 @@ pub fn parse_nvme_health_log(log_bytes: &[u8]) -> Option<StorageDeviceHealth> {
         "Good".to_string()
     };
 
+    let mut media_err_bytes = [0u8; 16];
+    media_err_bytes.copy_from_slice(&log_bytes[160..176]);
+    let media_errors = u128::from_le_bytes(media_err_bytes) as u64;
+
+    let mut err_log_bytes = [0u8; 16];
+    err_log_bytes.copy_from_slice(&log_bytes[176..192]);
+    let error_log_entries = u128::from_le_bytes(err_log_bytes) as u64;
+
+    let warning_temp_time_mins = u32::from_le_bytes([log_bytes[192], log_bytes[193], log_bytes[194], log_bytes[195]]);
+    let critical_temp_time_mins = u32::from_le_bytes([log_bytes[196], log_bytes[197], log_bytes[198], log_bytes[199]]);
+
+    let mut sensor_temperatures = Vec::new();
+    for i in 0..4 {
+        let off = 200 + i * 2;
+        if off + 2 <= log_bytes.len() {
+            let s_kelvin = u16::from_le_bytes([log_bytes[off], log_bytes[off + 1]]);
+            if s_kelvin >= 273 {
+                sensor_temperatures.push(((s_kelvin as f32 - 273.15) * 10.0).round() / 10.0);
+            }
+        }
+    }
+
+    // Build CrystalDiskInfo-compliant NVMe S.M.A.R.T. Attributes table
+    let smart_attributes = vec![
+        SmartAttributeItem {
+            id: 0x01,
+            name: "Critical Warning".to_string(),
+            current: critical_warning as u64,
+            worst: None,
+            threshold: Some(0),
+            raw_value: format!("0x{:02X}", critical_warning),
+            status: if critical_warning == 0 { "Good".to_string() } else { "Critical".to_string() },
+            description: "Overall controller warning flags (spare, temperature, reliability, read-only)".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x02,
+            name: "Composite Temperature".to_string(),
+            current: temperature_celsius.round() as u64,
+            worst: None,
+            threshold: Some(70),
+            raw_value: format!("{:.1} °C", temperature_celsius),
+            status: if temperature_celsius < 60.0 { "Good".to_string() } else if temperature_celsius < 75.0 { "Warning".to_string() } else { "Critical".to_string() },
+            description: "Composite temperature of NVM subsystem controller and media in Celsius".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x03,
+            name: "Available Spare".to_string(),
+            current: available_spare_percent as u64,
+            worst: None,
+            threshold: Some(log_bytes[4] as u64),
+            raw_value: format!("{}%", available_spare_percent),
+            status: if available_spare_percent >= 20 { "Good".to_string() } else { "Warning".to_string() },
+            description: "Normalized percentage of remaining spare capacity available for provisioning".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x04,
+            name: "Available Spare Threshold".to_string(),
+            current: log_bytes[4] as u64,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{}%", log_bytes[4]),
+            status: "Good".to_string(),
+            description: "Threshold below which critical warning bit 0 is asserted".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x05,
+            name: "Percentage Used".to_string(),
+            current: percentage_used as u64,
+            worst: None,
+            threshold: Some(100),
+            raw_value: format!("{}%", percentage_used),
+            status: if percentage_used < 90 { "Good".to_string() } else if percentage_used < 100 { "Warning".to_string() } else { "Critical".to_string() },
+            description: "Vendor-specific estimate of percentage of NVM subsystem life used".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x06,
+            name: "Data Units Read".to_string(),
+            current: (total_bytes_read_tb * 10.0) as u64,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{:.2} TB", total_bytes_read_tb),
+            status: "Good".to_string(),
+            description: "Total data read from controller in 512,000 byte units".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x07,
+            name: "Data Units Written (TBW)".to_string(),
+            current: (total_bytes_written_tb * 10.0) as u64,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{:.2} TB", total_bytes_written_tb),
+            status: "Good".to_string(),
+            description: "Total data written to controller (Host Writes / TBW)".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x08,
+            name: "Power Cycles".to_string(),
+            current: power_cycles,
+            worst: None,
+            threshold: None,
+            raw_value: power_cycles.to_string(),
+            status: "Good".to_string(),
+            description: "Number of power-on cycles recorded by drive".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x09,
+            name: "Power-On Hours".to_string(),
+            current: power_on_hours,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{} h", power_on_hours),
+            status: "Good".to_string(),
+            description: "Cumulative hours drive has been in active or standby power state".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x0A,
+            name: "Unsafe Shutdowns".to_string(),
+            current: unsafe_shutdowns,
+            worst: None,
+            threshold: None,
+            raw_value: unsafe_shutdowns.to_string(),
+            status: if unsafe_shutdowns < 100 { "Good".to_string() } else { "Warning".to_string() },
+            description: "Number of shutdowns where power loss notification was not received prior to loss".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x0B,
+            name: "Media & Data Integrity Errors".to_string(),
+            current: media_errors,
+            worst: None,
+            threshold: Some(0),
+            raw_value: media_errors.to_string(),
+            status: if media_errors == 0 { "Good".to_string() } else { "Critical".to_string() },
+            description: "Unrecovered data integrity errors encountered by NVM subsystem".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x0C,
+            name: "Error Information Log Entries".to_string(),
+            current: error_log_entries,
+            worst: None,
+            threshold: None,
+            raw_value: error_log_entries.to_string(),
+            status: if error_log_entries == 0 { "Good".to_string() } else { "Warning".to_string() },
+            description: "Cumulative count of error information log entries created".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x0D,
+            name: "Warning Composite Temp Time".to_string(),
+            current: warning_temp_time_mins as u64,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{} min", warning_temp_time_mins),
+            status: if warning_temp_time_mins == 0 { "Good".to_string() } else { "Warning".to_string() },
+            description: "Time in minutes composite temperature was greater than or equal to Warning threshold".to_string(),
+        },
+        SmartAttributeItem {
+            id: 0x0E,
+            name: "Critical Composite Temp Time".to_string(),
+            current: critical_temp_time_mins as u64,
+            worst: None,
+            threshold: None,
+            raw_value: format!("{} min", critical_temp_time_mins),
+            status: if critical_temp_time_mins == 0 { "Good".to_string() } else { "Critical".to_string() },
+            description: "Time in minutes composite temperature was greater than or equal to Critical threshold".to_string(),
+        },
+    ];
+
     Some(StorageDeviceHealth {
         device_id: "\\\\.\\PhysicalDrive0".to_string(),
         model: "NVMe SSD".to_string(),
@@ -154,7 +368,79 @@ pub fn parse_nvme_health_log(log_bytes: &[u8]) -> Option<StorageDeviceHealth> {
         power_cycles,
         unsafe_shutdowns,
         smart_status,
+        firmware_revision: String::new(),
+        serial_number: String::new(),
+        transfer_mode: "PCIe 4.0 x4 / PCIe 3.0 x4".to_string(),
+        standard: "NVM Express 1.4".to_string(),
+        drive_letters: Vec::new(),
+        size_bytes: 0,
+        media_type: "SSD".to_string(),
+        rotation_rate_rpm: None,
+        features_supported: vec!["S.M.A.R.T.".to_string(), "TRIM".to_string(), "VolatileWriteCache".to_string()],
+        media_errors,
+        error_log_entries,
+        warning_temp_time_mins,
+        critical_temp_time_mins,
+        sensor_temperatures,
+        smart_attributes,
     })
+}
+
+#[cfg(windows)]
+fn query_drive_letters_for_disk(disk_index: u32) -> Vec<String> {
+    let mut letters = Vec::new();
+    const IOCTL_STORAGE_GET_DEVICE_NUMBER: u32 = 0x002D1080;
+
+    #[repr(C)]
+    struct StorageDeviceNumber {
+        device_type: u32,
+        device_number: u32,
+        partition_number: u32,
+    }
+
+    for letter in b'A'..=b'Z' {
+        let drive_path = format!("\\\\.\\{}:", letter as char);
+        let wide: Vec<u16> = drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+
+        unsafe {
+            let handle = CreateFileW(
+                PCWSTR(wide.as_ptr()),
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                None,
+                OPEN_EXISTING,
+                windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0),
+                HANDLE::default(),
+            );
+
+            if let Ok(h) = handle {
+                if !h.0.is_null() {
+                    let mut dev_num = StorageDeviceNumber {
+                        device_type: 0,
+                        device_number: u32::MAX,
+                        partition_number: 0,
+                    };
+                    let mut bytes_ret = 0u32;
+                    let res = DeviceIoControl(
+                        h,
+                        IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                        None,
+                        0,
+                        Some(&mut dev_num as *mut _ as *mut std::ffi::c_void),
+                        std::mem::size_of::<StorageDeviceNumber>() as u32,
+                        Some(&mut bytes_ret),
+                        None,
+                    );
+                    let _ = CloseHandle(h);
+
+                    if res.is_ok() && dev_num.device_number == disk_index {
+                        letters.push(format!("{}:", letter as char));
+                    }
+                }
+            }
+        }
+    }
+    letters
 }
 
 #[cfg(windows)]
@@ -178,12 +464,7 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
             _ => return None,
         };
 
-        // STORAGE_PROPERTY_QUERY setup
-        // PropertyId = 50 (StorageDeviceProtocolSpecificProperty)
-        // QueryType = 0 (PropertyStandardQuery)
-        // ProtocolType = 1 (ProtocolTypeNvme)
-        // DataType = 2 (NVMeDataTypeLogPage)
-        // ProtocolDataRequestValue = 2 (NVME_LOG_PAGE_HEALTH_INFO)
+        // 1. Query NVMe SMART / Health Log Page (Log Page 0x02)
         #[repr(C)]
         struct NVME_QUERY_BUFFER {
             property_id: u32,
@@ -223,11 +504,141 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
             None,
         );
 
+        // 2. Query NVMe Identify Controller Data (CNS 0x01)
+        #[repr(C)]
+        struct NVME_IDENTIFY_BUFFER {
+            property_id: u32,
+            query_type: u32,
+            protocol_type: u32,
+            data_type: u32,
+            protocol_data_request_value: u32,
+            protocol_data_sub_value: u32,
+            protocol_data_offset: u32,
+            protocol_data_length: u32,
+            fixed_padding: [u32; 4],
+            data: [u8; 4096],
+        }
+
+        let mut id_query = NVME_IDENTIFY_BUFFER {
+            property_id: 50,
+            query_type: 0,
+            protocol_type: 1,
+            data_type: 1,
+            protocol_data_request_value: 1,
+            protocol_data_sub_value: 0,
+            protocol_data_offset: 48,
+            protocol_data_length: 4096,
+            fixed_padding: [0; 4],
+            data: [0; 4096],
+        };
+
+        let mut id_bytes_returned = 0u32;
+        let id_res = DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&id_query as *const _ as *const std::ffi::c_void),
+            std::mem::size_of::<NVME_IDENTIFY_BUFFER>() as u32,
+            Some(&mut id_query as *mut _ as *mut std::ffi::c_void),
+            std::mem::size_of::<NVME_IDENTIFY_BUFFER>() as u32,
+            Some(&mut id_bytes_returned),
+            None,
+        );
+
+        // 3. Query Storage Device Descriptor for bus type and strings
+        #[repr(C)]
+        struct STORAGE_PROPERTY_QUERY_BASIC {
+            property_id: u32,
+            query_type: u32,
+            additional_parameters: [u8; 1],
+        }
+
+        let query_desc = STORAGE_PROPERTY_QUERY_BASIC {
+            property_id: 0,
+            query_type: 0,
+            additional_parameters: [0],
+        };
+        let mut desc_buf = [0u8; 1024];
+        let mut desc_bytes_returned = 0u32;
+        let desc_res = DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&query_desc as *const _ as *const std::ffi::c_void),
+            std::mem::size_of::<STORAGE_PROPERTY_QUERY_BASIC>() as u32,
+            Some(desc_buf.as_mut_ptr() as *mut std::ffi::c_void),
+            desc_buf.len() as u32,
+            Some(&mut desc_bytes_returned),
+            None,
+        );
+
         let _ = CloseHandle(handle);
 
         if ioctl_res.is_ok() && bytes_returned >= 48 {
             if let Some(mut health) = parse_nvme_health_log(&query.data) {
                 health.device_id = drive_path;
+                health.drive_letters = query_drive_letters_for_disk(drive_index);
+
+                // Populate from Identify Controller data if available
+                if id_res.is_ok() && id_bytes_returned >= 48 {
+                    let serial = String::from_utf8_lossy(&id_query.data[4..24]).trim().to_string();
+                    let model = String::from_utf8_lossy(&id_query.data[24..64]).trim().to_string();
+                    let firmware = String::from_utf8_lossy(&id_query.data[64..72]).trim().to_string();
+                    let ver_raw = u32::from_le_bytes([
+                        id_query.data[512],
+                        id_query.data[513],
+                        id_query.data[514],
+                        id_query.data[515],
+                    ]);
+
+                    if !serial.is_empty() {
+                        health.serial_number = serial;
+                    }
+                    if !model.is_empty() {
+                        health.model = model;
+                    }
+                    if !firmware.is_empty() {
+                        health.firmware_revision = firmware;
+                    }
+                    if ver_raw > 0 {
+                        let major = (ver_raw >> 16) & 0xFF;
+                        let minor = (ver_raw >> 8) & 0xFF;
+                        health.standard = format!("NVM Express {}.{}", major, minor);
+                    }
+                }
+
+                // If strings still empty, extract from STORAGE_DEVICE_DESCRIPTOR
+                if desc_res.is_ok() && desc_bytes_returned >= 36 {
+                    let get_ascii = |offset: u32| -> String {
+                        let off = offset as usize;
+                        if off > 0 && off < desc_buf.len() {
+                            let slice = &desc_buf[off..];
+                            let end = slice.iter().position(|&b| b == 0).unwrap_or(slice.len());
+                            String::from_utf8_lossy(&slice[..end]).trim().to_string()
+                        } else {
+                            String::new()
+                        }
+                    };
+
+                    let prod_off = u32::from_le_bytes([desc_buf[16], desc_buf[17], desc_buf[18], desc_buf[19]]);
+                    let rev_off = u32::from_le_bytes([desc_buf[20], desc_buf[21], desc_buf[22], desc_buf[23]]);
+                    let sn_off = u32::from_le_bytes([desc_buf[24], desc_buf[25], desc_buf[26], desc_buf[27]]);
+
+                    let p_str = get_ascii(prod_off);
+                    let r_str = get_ascii(rev_off);
+                    let s_str = get_ascii(sn_off);
+
+                    if health.model.is_empty() || health.model == "NVMe SSD" {
+                        if !p_str.is_empty() {
+                            health.model = p_str;
+                        }
+                    }
+                    if health.firmware_revision.is_empty() && !r_str.is_empty() {
+                        health.firmware_revision = r_str;
+                    }
+                    if health.serial_number.is_empty() && !s_str.is_empty() {
+                        health.serial_number = s_str;
+                    }
+                }
+
                 return Some(health);
             }
         }
@@ -249,14 +660,18 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
             $d = $_; \
             $r = $null; \
             try { $r = $d | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue } catch {}; \
+            $parts = @(Get-Partition -DiskNumber $d.DeviceId -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter } | ForEach-Object { ('{0}:' -f $_.DriveLetter) }); \
             [PSCustomObject]@{ \
                 DeviceId = [string]$d.DeviceId; \
                 FriendlyName = [string]$d.FriendlyName; \
+                SerialNumber = [string]$d.SerialNumber; \
+                FirmwareVersion = [string]$d.FirmwareVersion; \
                 MediaType = [string]$d.MediaType; \
                 BusType = [string]$d.BusType; \
                 HealthStatus = [string]$d.HealthStatus; \
                 OperationalStatus = [string]($d.OperationalStatus -join ','); \
                 Size = [int64]$d.Size; \
+                Partitions = $parts; \
                 Temperature = if ($r -and $r.Temperature) { [double]$r.Temperature } else { $null }; \
                 PowerOnHours = if ($r -and $r.PowerOnHours) { [int64]$r.PowerOnHours } else { $null }; \
                 Wear = if ($r -and $r.Wear -ne $null) { [int]$r.Wear } else { $null }; \
@@ -292,13 +707,23 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
     for item in items {
         let dev_id_raw = item.get("DeviceId").and_then(|v| v.as_str()).unwrap_or("0").trim().to_string();
         let friendly_name = item.get("FriendlyName").and_then(|v| v.as_str()).unwrap_or("Storage Device").trim().to_string();
+        let serial_number_raw = item.get("SerialNumber").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        let firmware_raw = item.get("FirmwareVersion").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
         let bus_type_raw = item.get("BusType").and_then(|v| v.as_str()).unwrap_or("NVMe").trim().to_string();
         let media_type_raw = item.get("MediaType").and_then(|v| v.as_str()).unwrap_or("SSD").trim().to_string();
         let health_status_raw = item.get("HealthStatus").and_then(|v| v.as_str()).unwrap_or("Healthy").trim().to_string();
+        let size_raw = item.get("Size").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        let partitions: Vec<String> = item.get("Partitions")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|s| s.as_str().map(|str_val| str_val.to_string())).collect())
+            .unwrap_or_default();
 
         let temp_c = item.get("Temperature").and_then(|v| v.as_f64()).map(|v| v as f32).unwrap_or(0.0);
         let power_on_hours = item.get("PowerOnHours").and_then(|v| v.as_u64()).unwrap_or(0);
         let wear = item.get("Wear").and_then(|v| v.as_u64()).map(|v| v as u8);
+        let read_errors = item.get("ReadErrorsTotal").and_then(|v| v.as_u64()).unwrap_or(0);
+        let write_errors = item.get("WriteErrorsTotal").and_then(|v| v.as_u64()).unwrap_or(0);
 
         let dev_num: Option<u32> = dev_id_raw.parse::<u32>().ok();
 
@@ -307,9 +732,26 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
         let mut health_info = dev_num.and_then(query_nvme_drive_ioctl);
 
         if let Some(ref mut hi) = health_info {
-            hi.model = friendly_name.clone();
+            if hi.model == "NVMe SSD" && !friendly_name.is_empty() {
+                hi.model = friendly_name.clone();
+            }
             if !bus_type_raw.is_empty() {
                 hi.bus_type = bus_type_raw.clone();
+            }
+            if hi.serial_number.is_empty() && !serial_number_raw.is_empty() {
+                hi.serial_number = serial_number_raw.clone();
+            }
+            if hi.firmware_revision.is_empty() && !firmware_raw.is_empty() {
+                hi.firmware_revision = firmware_raw.clone();
+            }
+            if hi.drive_letters.is_empty() && !partitions.is_empty() {
+                hi.drive_letters = partitions.clone();
+            }
+            if hi.size_bytes == 0 && size_raw > 0 {
+                hi.size_bytes = size_raw;
+            }
+            if hi.media_type.is_empty() {
+                hi.media_type = media_type_raw.clone();
             }
             if hi.temperature_celsius <= 0.0 && temp_c > 0.0 {
                 hi.temperature_celsius = temp_c;
@@ -334,10 +776,71 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
                 health_status_raw
             };
 
+            // Generate SMART attributes table for non-IOCTL drives
+            let mut smart_attributes = Vec::new();
+            smart_attributes.push(SmartAttributeItem {
+                id: 0x01,
+                name: "Health Status".to_string(),
+                current: health_percentage as u64,
+                worst: None,
+                threshold: Some(10),
+                raw_value: smart_status.clone(),
+                status: if health_percentage >= 80 { "Good".to_string() } else { "Warning".to_string() },
+                description: "Overall storage operational health status".to_string(),
+            });
+            if temp_c > 0.0 {
+                smart_attributes.push(SmartAttributeItem {
+                    id: 0x02,
+                    name: "Temperature".to_string(),
+                    current: temp_c.round() as u64,
+                    worst: None,
+                    threshold: Some(70),
+                    raw_value: format!("{:.1} °C", temp_c),
+                    status: if temp_c < 60.0 { "Good".to_string() } else { "Warning".to_string() },
+                    description: "Storage device internal operating temperature".to_string(),
+                });
+            }
+            if power_on_hours > 0 {
+                smart_attributes.push(SmartAttributeItem {
+                    id: 0x09,
+                    name: "Power-On Hours".to_string(),
+                    current: power_on_hours,
+                    worst: None,
+                    threshold: None,
+                    raw_value: format!("{} h", power_on_hours),
+                    status: "Good".to_string(),
+                    description: "Total power-on hours recorded".to_string(),
+                });
+            }
+            if let Some(w) = wear {
+                smart_attributes.push(SmartAttributeItem {
+                    id: 0x05,
+                    name: "Wear Level / Percentage Used".to_string(),
+                    current: w as u64,
+                    worst: None,
+                    threshold: Some(100),
+                    raw_value: format!("{}%", w),
+                    status: if w < 90 { "Good".to_string() } else { "Warning".to_string() },
+                    description: "Wear indicator of flash memory cells".to_string(),
+                });
+            }
+            if read_errors > 0 || write_errors > 0 {
+                smart_attributes.push(SmartAttributeItem {
+                    id: 0x0E,
+                    name: "Read/Write Errors Total".to_string(),
+                    current: read_errors + write_errors,
+                    worst: None,
+                    threshold: Some(0),
+                    raw_value: format!("R:{}/W:{}", read_errors, write_errors),
+                    status: if read_errors + write_errors == 0 { "Good".to_string() } else { "Warning".to_string() },
+                    description: "Cumulative read and write errors reported by driver".to_string(),
+                });
+            }
+
             drives.push(StorageDeviceHealth {
                 device_id: format!("\\\\.\\PhysicalDrive{}", dev_id_raw),
                 model: friendly_name,
-                bus_type: if !bus_type_raw.is_empty() { bus_type_raw } else { media_type_raw },
+                bus_type: if !bus_type_raw.is_empty() { bus_type_raw } else { media_type_raw.clone() },
                 temperature_celsius: temp_c,
                 health_percentage,
                 critical_warning: 0,
@@ -349,6 +852,21 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
                 power_cycles: 0,
                 unsafe_shutdowns: 0,
                 smart_status,
+                firmware_revision: firmware_raw,
+                serial_number: serial_number_raw,
+                transfer_mode: "SATA / NVMe".to_string(),
+                standard: "Standard Storage Specification".to_string(),
+                drive_letters: partitions,
+                size_bytes: size_raw,
+                media_type: media_type_raw,
+                rotation_rate_rpm: None,
+                features_supported: vec!["S.M.A.R.T.".to_string(), "TRIM".to_string()],
+                media_errors: read_errors + write_errors,
+                error_log_entries: 0,
+                warning_temp_time_mins: 0,
+                critical_temp_time_mins: 0,
+                sensor_temperatures: Vec::new(),
+                smart_attributes,
             });
         }
     }
@@ -381,6 +899,21 @@ fn query_sysinfo_fallback_drives() -> Vec<StorageDeviceHealth> {
             power_cycles: 0,
             unsafe_shutdowns: 0,
             smart_status: "Healthy".to_string(),
+            firmware_revision: "N/A".to_string(),
+            serial_number: "N/A".to_string(),
+            transfer_mode: "SATA / NVMe".to_string(),
+            standard: "Standard Storage Device".to_string(),
+            drive_letters: vec![mount],
+            size_bytes: disk.total_space(),
+            media_type: "SSD".to_string(),
+            rotation_rate_rpm: None,
+            features_supported: vec!["S.M.A.R.T.".to_string()],
+            media_errors: 0,
+            error_log_entries: 0,
+            warning_temp_time_mins: 0,
+            critical_temp_time_mins: 0,
+            sensor_temperatures: Vec::new(),
+            smart_attributes: Vec::new(),
         });
     }
 
@@ -760,6 +1293,9 @@ GUID схемы питания: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate 
         assert_eq!(health.power_on_hours, 1800);
         assert_eq!(health.smart_status, "Good");
         assert!((health.temperature_celsius - 36.85).abs() < 0.2);
+        assert_eq!(health.smart_attributes.len(), 14);
+        assert_eq!(health.smart_attributes[0].name, "Critical Warning");
+        assert_eq!(health.smart_attributes[0].status, "Good");
     }
 
     #[test]
@@ -779,6 +1315,32 @@ GUID схемы питания: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate 
             power_cycles: 850,
             unsafe_shutdowns: 3,
             smart_status: "Good".to_string(),
+            firmware_revision: "5B2QGXA7".to_string(),
+            serial_number: "S5GXNF0R123456".to_string(),
+            transfer_mode: "PCIe 4.0 x4".to_string(),
+            standard: "NVM Express 1.4".to_string(),
+            drive_letters: vec!["C:".to_string()],
+            size_bytes: 1_000_204_886_016,
+            media_type: "SSD".to_string(),
+            rotation_rate_rpm: None,
+            features_supported: vec!["S.M.A.R.T.".to_string(), "TRIM".to_string()],
+            media_errors: 0,
+            error_log_entries: 0,
+            warning_temp_time_mins: 0,
+            critical_temp_time_mins: 0,
+            sensor_temperatures: vec![42.5],
+            smart_attributes: vec![
+                SmartAttributeItem {
+                    id: 1,
+                    name: "Critical Warning".to_string(),
+                    current: 0,
+                    worst: None,
+                    threshold: Some(0),
+                    raw_value: "0x00".to_string(),
+                    status: "Good".to_string(),
+                    description: "Overall controller warning flags".to_string(),
+                }
+            ],
         };
 
         let json = serde_json::to_string(&health).expect("Failed to serialize StorageDeviceHealth");
@@ -789,6 +1351,9 @@ GUID схемы питания: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate 
         assert!(json.contains("totalBytesWrittenTb"));
         assert!(json.contains("totalBytesReadTb"));
         assert!(json.contains("powerOnHours"));
+        assert!(json.contains("firmwareRevision"));
+        assert!(json.contains("serialNumber"));
+        assert!(json.contains("smartAttributes"));
     }
 
     #[test]

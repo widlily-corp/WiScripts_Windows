@@ -1,3 +1,14 @@
+export interface SmartAttributeItem {
+  id: number;
+  name: string;
+  current: number;
+  worst?: number | null;
+  threshold?: number | null;
+  rawValue: string;
+  status: 'Good' | 'Warning' | 'Critical' | string;
+  description: string;
+}
+
 export interface StorageDeviceHealth {
   deviceId: string;
   model: string;
@@ -13,6 +24,21 @@ export interface StorageDeviceHealth {
   powerCycles: number;
   unsafeShutdowns: number;
   smartStatus: string;
+  firmwareRevision: string;
+  serialNumber: string;
+  transferMode: string;
+  standard: string;
+  driveLetters: string[];
+  sizeBytes: number;
+  mediaType: string;
+  rotationRateRpm?: number | null;
+  featuresSupported: string[];
+  mediaErrors: number;
+  errorLogEntries: number;
+  warningTempTimeMins: number;
+  criticalTempTimeMins: number;
+  sensorTemperatures: number[];
+  smartAttributes: SmartAttributeItem[];
 }
 
 export interface BatteryHealthAnalytics {

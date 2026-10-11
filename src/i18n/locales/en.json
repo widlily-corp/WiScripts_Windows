@@ -55,6 +55,17 @@
       "state_engine": "State Engine & Undo",
       "settings": "Settings"
     },
+    "categories": {
+      "core_monitoring": "Core & Monitoring",
+      "performance": "Performance & Tuning",
+      "storage_cleaner": "Storage & Cleanup",
+      "system_software": "System & Apps",
+      "security_network": "Security & Network",
+      "tools_settings": "Tools & Settings"
+    },
+    "filter_placeholder": "Search navigation...",
+    "collapse_sidebar": "Collapse sidebar",
+    "expand_sidebar": "Expand sidebar",
     "app_version": "Windows Utility v{{version}}",
     "admin_status": {
       "elevated": "Elevated Privileges",
@@ -1627,7 +1638,11 @@
   },
   "hardwareHealth": {
     "title": "Hardware NVMe SMART & Battery/Power Analytics",
-    "subtitle": "Physical storage health telemetry, battery wear metrics, and Windows power plan management",
+    "subtitle": "Low-level SMART telemetry based on CrystalDiskInfo specifications, battery wear metrics, and Windows power plan management",
+    "tabs": {
+      "storage": "SSD & Storage (CrystalDiskInfo)",
+      "battery": "Battery & Power Schemes"
+    },
     "storage": {
       "title": "Physical Storage SMART Health",
       "select_drive": "Select Drive",
@@ -1636,7 +1651,7 @@
       "health_warning": "Warning",
       "temperature": "Temperature",
       "tbw_written": "Total Written (TBW)",
-      "tbw_read": "Total Read",
+      "tbw_read": "Total Read (TBR)",
       "power_on_hours": "Power-On Hours",
       "power_cycles": "Power Cycles",
       "unsafe_shutdowns": "Unsafe Shutdowns",
@@ -1644,7 +1659,33 @@
       "critical_warnings": "Critical Warnings",
       "smart_status": "SMART Status",
       "hours_unit": "{{hours}} hrs",
-      "no_drives": "No physical storage drives detected."
+      "no_drives": "No physical storage drives detected.",
+      "firmware": "Firmware",
+      "serial_number": "Serial Number",
+      "interface": "Interface",
+      "transfer_mode": "Transfer Mode",
+      "drive_letters": "Drive Letters",
+      "standard": "Standard",
+      "features": "Supported Features",
+      "copy_report": "Copy Report",
+      "report_copied": "Text report copied to clipboard!",
+      "credits_title": "Acknowledgment to CrystalDiskInfo Project",
+      "credits_desc": "Storage diagnostics module incorporates low-level NVMe/ATA IOCTL methods and S.M.A.R.T. telemetry standards pioneered by the open-source CrystalDiskInfo project by Noriyuki Miyazaki (hiyohiyo). Special thanks for open-source disk inspection tooling.",
+      "visit_github": "View CrystalDiskInfo on GitHub",
+      "smart_table_title": "S.M.A.R.T. Attributes Table",
+      "search_attrs": "Filter by ID or attribute name...",
+      "attr_id": "ID",
+      "attr_name": "Attribute",
+      "attr_current": "Current",
+      "attr_threshold": "Threshold",
+      "attr_raw": "Raw Values",
+      "attr_status": "Status",
+      "health_good": "Good",
+      "health_caution": "Caution",
+      "health_bad": "Bad",
+      "health_unknown": "Unknown",
+      "refresh_telemetry": "Refresh Telemetry",
+      "copied_clipboard": "Copied to clipboard"
     },
     "battery": {
       "title": "Battery & Power Analytics",

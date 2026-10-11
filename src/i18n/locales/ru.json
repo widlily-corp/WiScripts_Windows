@@ -55,6 +55,17 @@
       "state_engine": "Движок состояний и откат",
       "settings": "Настройки"
     },
+    "categories": {
+      "core_monitoring": "Мониторинг и Система",
+      "performance": "Производительность",
+      "storage_cleaner": "Диски и Очистка",
+      "system_software": "Система и Программы",
+      "security_network": "Безопасность и Сеть",
+      "tools_settings": "Сервис и Настройки"
+    },
+    "filter_placeholder": "Поиск разделов...",
+    "collapse_sidebar": "Свернуть панель",
+    "expand_sidebar": "Развернуть панель",
     "app_version": "Утилита Windows v{{version}}",
     "admin_status": {
       "elevated": "Права Администратора",
@@ -1627,7 +1638,11 @@
   },
   "hardwareHealth": {
     "title": "Здоровье SSD/NVMe и аналитика питания",
-    "subtitle": "Телеметрия SMART физических накопителей, износ аккумулятора и управление схемами питания Windows",
+    "subtitle": "Низкоуровневая SMART телеметрия физических накопителей по стандартам CrystalDiskInfo, износ аккумулятора и схемы питания Windows",
+    "tabs": {
+      "storage": "SSD & Накопители (CrystalDiskInfo)",
+      "battery": "Батарея & Схемы питания"
+    },
     "storage": {
       "title": "Здоровье накопителей SMART",
       "select_drive": "Выбрать накопитель",
@@ -1636,7 +1651,7 @@
       "health_warning": "Предупреждение",
       "temperature": "Температура",
       "tbw_written": "Всего записано (TBW)",
-      "tbw_read": "Всего прочитано",
+      "tbw_read": "Всего прочитано (TBR)",
       "power_on_hours": "Время работы",
       "power_cycles": "Циклы включения",
       "unsafe_shutdowns": "Небезопасные отключения",
@@ -1644,7 +1659,33 @@
       "critical_warnings": "Критические предупреждения",
       "smart_status": "Статус SMART",
       "hours_unit": "{{hours}} ч",
-      "no_drives": "Физические накопители не обнаружены."
+      "no_drives": "Физические накопители не обнаружены.",
+      "firmware": "Прошивка",
+      "serial_number": "Серийный номер",
+      "interface": "Интерфейс",
+      "transfer_mode": "Режим передачи",
+      "drive_letters": "Буквы дисков",
+      "standard": "Стандарт",
+      "features": "Поддерживаемые возможности",
+      "copy_report": "Копировать отчет",
+      "report_copied": "Текстовый отчет скопирован в буфер обмена!",
+      "credits_title": "Благодарность проекту CrystalDiskInfo",
+      "credits_desc": "Раздел диагностики накопителей построен на базе методов опроса IOCTL и открытых спецификаций проекта CrystalDiskInfo автора Noriyuki Miyazaki (hiyohiyo). Особая благодарность за открытые алгоритмы чтения NVMe/ATA IOCTL и эталонный подход к S.M.A.R.T. аналитике.",
+      "visit_github": "Открыть CrystalDiskInfo на GitHub",
+      "smart_table_title": "Таблица атрибутов S.M.A.R.T.",
+      "search_attrs": "Поиск по ID или названию атрибута...",
+      "attr_id": "ID",
+      "attr_name": "Атрибут",
+      "attr_current": "Текущее",
+      "attr_threshold": "Порог",
+      "attr_raw": "Необработанные данные",
+      "attr_status": "Статус",
+      "health_good": "Хорошо",
+      "health_caution": "Внимание",
+      "health_bad": "Критическое",
+      "health_unknown": "Неизвестно",
+      "refresh_telemetry": "Обновить телеметрию",
+      "copied_clipboard": "Скопировано в буфер"
     },
     "battery": {
       "title": "Аналитика аккумулятора и питания",

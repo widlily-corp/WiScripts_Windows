@@ -190,8 +190,8 @@ WiScripts_Windows/
 │   └── tauri.conf.json      # Tauri application manifest
 ├── tests/                   # E2E & component testing suite
 │   └── e2e/                 # Comprehensive multi-tier test runner & test specs
+├── AGENTS.md                # Engineering rules & project invariants
 ├── ARCHITECTURE.md          # Comprehensive Architecture Design Document
-├── PROJECT.md               # Project state, milestones & interface contracts
 ├── README.md                # Project landing & user documentation
 └── package.json             # NPM scripts & dependencies
 ```

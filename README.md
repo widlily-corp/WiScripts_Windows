@@ -1,6 +1,6 @@
 # WiScripts Windows 🚀
 
-[![Release](https://img.shields.io/badge/release-v1.4.0-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
+[![Release](https://img.shields.io/badge/release-v1.7.1-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-v2.0-orange.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://react.dev/)
@@ -11,22 +11,45 @@
 
 ---
 
-## 🌟 Key Features (v1.4.0 Release)
+## 🌟 Key Features (v1.7.1 Release)
 
-### 🌡️ Multi-Tier Hardware Telemetry & AMD/Laptop Support (v1.4.0)
-- **Multi-Vendor Cascading Sensor Engine:**
-  1. *Tier 1 (In-Process GPU DLLs):* AMD ADL (`atiadlxx.dll`/`atiadlxy.dll` with Overdrive 5/6 & multi-head deduplication) + NVIDIA NVML (`nvml.dll`).
-  2. *Tier 2 (Dedicated Hardware Monitors):* LibreHardwareMonitor & OpenHardwareMonitor via WMI.
+### 💽 CrystalDiskInfo Architecture & S.M.A.R.T. Telemetry (v1.7.1)
+- **Low-Level Win32 IOCTL Driver Engine:** Adopts low-level hardware communication standards directly from [CrystalDiskInfo](https://github.com/hiyohiyo/CrystalDiskInfo) (by Noriyuki Miyazaki / hiyohiyo):
+  - `IOCTL_STORAGE_GET_DEVICE_NUMBER` (`0x002D1080`): Maps logical volumes (`C:`, `D:`) to `PhysicalDriveX`.
+  - `NVME_LOG_PAGE_HEALTH_INFO` (Log Page `0x02`): Reads 15 authentic NVMe health metrics with Kelvin-to-Celsius conversion, spare reserve thresholds, and wear indicators.
+  - `NVME_IDENTIFY_CNS_CONTROLLER` (CNS `0x01`): Extracts authentic firmware revision, controller serial number, and NVMe specification standard.
+- **CrystalDiskInfo Experience UI:**
+  - Multi-Drive Selector Bar with real-time temperature pills and health status badges.
+  - Circular Wear Health Gauge (`Good 100%`) and color-coded temperature monitoring.
+  - 6-Metric Endurance Matrix (TBW, TBR, Power-on Hours, Power-on Cycles, Unsafe Shutdowns, Available Spare Blocks).
+  - Searchable interactive S.M.A.R.T. table with raw hex decoding.
+  - 1-Click signature CrystalDiskInfo text report export to system clipboard.
+  - Open-Source attribution card crediting hiyohiyo and the CrystalDiskInfo community.
+
+### 🧭 Semantic Categorized Navigation & Instant Quick Search (v1.7.1)
+- **6 Semantic Navigation Categories:** Organizes 25 system tools into logical groups:
+  1. *Мониторинг и Система* (Dashboard, Diagnostics, Hardware Health & SSD, Smart RAM)
+  2. *Производительность* (Optimization, Game Boost, CPU Governor ProFlow, Gaming Latency & DPC)
+  3. *Диски и Очистка* (Disk Space Analyzer, System Cleaner, Duplicate Finder)
+  4. *Система и Программы* (Startup Manager, Services & Scheduler, Uninstaller, Package Manager)
+  5. *Безопасность и Сеть* (Network Shield & DNS, Context Menu, Restore Points, State Engine Snapshots)
+  6. *Сервис и Настройки* (Script Library, Tweak Presets, Driver Backup, Settings)
+- **Real-Time Header Search:** Sidebar quick-filter input instantly filters tabs by keyword with `Esc`/`✕` one-touch reset.
+
+### 📁 Disk Space Analyzer & Filesystem Explorer (v1.6.0)
+- **High-Speed Multithreaded Scanning:** Traverses physical volumes and folders recursively with real-time streaming progress events.
+- **Visual Ranked Breakdown:** Instant discovery of Top 20 Largest Folders and Top 50 Largest Files.
+- **Interactive Directory Tree:** Hierarchical navigation, proportional size bars, extension filters, and size thresholds.
+- **Kernel Guardrail Safety:** Strictly prevents deletion of critical Windows OS directories (`System32`, `Windows`, drive roots).
+
+### 🌡️ Multi-Tier Hardware Telemetry & AMD/Laptop Support
+- **Cascading Sensor Engine:**
+  1. *Tier 1 (In-Process GPU DLLs):* AMD ADL (`atiadlxx.dll`/`atiadlxy.dll`) + NVIDIA NVML (`nvml.dll`).
+  2. *Tier 2 (Hardware Monitors):* LibreHardwareMonitor & OpenHardwareMonitor via WMI.
   3. *Tier 3 (Laptop & ACPI Thermal Zones):* `MSAcpi_ThermalZoneTemperature` (`root\wmi`) & `Win32_PerfFormattedData_Counters_ThermalZoneInformation` (`root\cimv2`).
-  4. *Tier 4 (CLI Telemetry Fallbacks):* `nvidia-smi` & `amd-smi` with non-blocking 2-second timeout protection and hidden console flags (`0x08000000`).
+  4. *Tier 4 (CLI Telemetry Fallbacks):* `nvidia-smi` & `amd-smi` with 2-second timeout protection.
   5. *Tier 5 (Universal Kernel Fallback):* `sysinfo` Components.
-- **Smart Filtering & Primary Sensor Selection:** Automatically rejects static BIOS dummy zones (e.g. $300\text{ K}/301\text{ K} \approx 26.8^\circ\text{C} / 27.8^\circ\text{C}$) and out-of-bound readings ($5^\circ\text{C} - 118^\circ\text{C}$ validation window).
-- **Manual Sensor Selector:** Interactive dropdown selector allowing custom CPU/GPU sensor bindings with persistent state.
-
-### 🧭 Flexible Navigation & Dark Scrollbar Integration (v1.4.0)
-- **3-Tier Flex Layout:** Pinned Brand Header (`shrink-0`) and Pinned Admin Elevation Card (`shrink-0`) with an independent, flexible scroll container (`flex-1 min-h-0 overflow-y-auto custom-scrollbar`).
-- **All 25 Modules Accessible:** Seamless vertical scrolling ensuring all views and tools are reachable across laptops, tablets, and low-resolution displays.
-- **Refined Minimal Dark Scrollbar:** Sub-pixel 5px scrollbars styled in dark neutral `#22252a` with hover state transitions.
+- **Smart Filtering:** Automatically rejects static BIOS dummy zones and invalid thermal readings.
 
 ### 🌐 Online Script Library & GitHub Sync (`scripts_lib`)
 
@@ -139,22 +162,27 @@ npm run tauri build
 
 ## 🧪 Testing & Quality Assurance
 
-WiScripts Windows enforces strict multi-tier testing standards:
+WiScripts Windows enforces strict multi-tier testing standards with 100% pass rates:
 
 ```powershell
-# Run the complete 4-tier E2E test suite (57 test cases)
+# Run the complete 142-test Frontend & E2E test suite
 npm test
 
-# Run Rust backend unit & integration tests
-cd src-tauri
-cargo test
+# Run the 267 Rust backend unit & integration tests
+cargo test --lib --manifest-path src-tauri/Cargo.toml
 ```
 
-### Test Suite Structure:
-- **Tier 1 — Feature Coverage (22 tests):** Script Runner, Streaming IPC, Log Export, Elevation Banner, Celebratory Banner, Multi-tier Temp Collectors, Win32 Token Elevation.
-- **Tier 2 — Boundary & Edge Cases (22 tests):** Input validation, burst IPC event handling, WMI 3-second timeouts, path traversal guards, locked registry key handling.
-- **Tier 3 — Cross-Feature Interactions (7 tests):** Concurrency between metric polling and script execution, dynamic i18n switching, diagnostic export aggregation.
-- **Tier 4 — Real-World Application Scenarios (6 tests):** Complete optimization workflows, sensor override lifecycle, security validation workflows.
+### Test Suite Structure (142 E2E & Static Tests):
+- **Static AST & Manifest Schema Verification (9 tests):** Validates script manifests, SemVer synchronization, and UI AST invariants.
+- **Multi-TB Formatting & Disk Utilities (10 tests):** Byte conversions, scaling, and safe path normalization.
+- **Tier 1 — Feature Coverage (25 tests):** Script Runner, in-place streaming, elevation banners, temp collectors, Win32 token checks.
+- **Tier 2 — Boundary & Edge Cases (26 tests):** Input sanitization, burst events, WMI timeouts, path traversal guards, locked registry keys.
+- **Tier 3 — Cross-Feature Interactions (9 tests):** Concurrent execution during metrics polling, dynamic locale switching, ProFlow governor affinity.
+- **Tier 4 — Real-World Application Scenarios (6 tests):** Competitive gaming mode, heavy IDE RAM reclaim, rogue socket firewall blocks, battery wear telemetry.
+- **Disk Space Analyzer & Filesystem Tree Explorer (57 tests):** Recursive folder scanning, cancellation latency, Top 20/50 extraction, and protected OS directory guardrails.
+
+### Rust Backend Test Coverage (267 Tests):
+- Full coverage across 23 domain submodules including hardware health IOCTL routines, NVMe log page parsers, Win32 token elevation, script runner execution sandboxing, and registry state transactions.
 
 ---
 

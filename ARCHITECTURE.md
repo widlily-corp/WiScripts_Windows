@@ -1,7 +1,7 @@
 # WiScripts Windows — Technical Architecture Specification
 
-**Document Version:** 1.4.0  
-**Target Release:** WiScripts Windows v1.4.0  
+**Document Version:** 1.7.1  
+**Target Release:** WiScripts Windows v1.7.1  
 **Author:** Principal System Architect & Elite Product Designer  
 **Classification:** Core System Architecture
 
@@ -204,9 +204,22 @@ All WMI and CLI subprocesses are executed with `CREATE_NO_WINDOW` (`0x08000000`)
 - **Working Set Trimming:** Leverages `EmptyWorkingSet()` and `SetProcessWorkingSetSize()` via Win32 API to purge stale physical pages into the standby list.
 - **Core Affinity & Priority:** Configures CPU process affinity masks (`SetProcessAffinityMask`) and priority classes (`REALTIME_PRIORITY_CLASS`, `HIGH_PRIORITY_CLASS`, `IDLE_PRIORITY_CLASS`) for critical gaming or productivity workloads.
 
+### 4.5 Storage Telemetry & CrystalDiskInfo Architecture (v1.7.1)
+- **Direct Win32 IOCTL Driver Engine:** Modeled directly after the low-level hardware communication routines of [CrystalDiskInfo](https://github.com/hiyohiyo/CrystalDiskInfo) by Noriyuki Miyazaki (hiyohiyo).
+- **Core Storage IOCTL Queries:**
+  - `IOCTL_STORAGE_GET_DEVICE_NUMBER` (`0x002D1080`): Maps logical volume drive letters (`C:`, `D:`) directly to physical storage device paths (`\\.\PhysicalDriveX`).
+  - `NVME_LOG_PAGE_HEALTH_INFO` (Log Page `0x02`): Queries physical NVMe controller telemetry for Kelvin-to-Celsius thermal conversions, available spare wear limits, host read/write totals, power-on hours, and power cycles.
+  - `NVME_IDENTIFY_CNS_CONTROLLER` (CNS `0x01`): Identifies authentic firmware revision, controller serial number, and NVMe specification revision.
+- **Elevation-Aware Zero-Mock Fallback:** When running non-elevated, never injects synthetic mock data. System gracefully executes PowerShell `Get-PhysicalDisk` and `Get-StorageReliabilityCounter` while displaying elevation badges (`Требуются права админа для SMART`) in the UI.
+
+### 4.6 Disk Space Analyzer & Filesystem Guardrails (v1.6.0)
+- **High-Performance Recursive Scanner:** Traverses physical volumes and deep directory hierarchies asynchronously, emitting real-time progress events over Tauri IPC.
+- **Bounded Heap Statistics:** Maintains bounded priority queues for Top 20 Largest Folders and Top 50 Largest Files without unbounded memory bloat.
+- **Kernel Guardrails:** Strictly validates target paths to prevent deletion of protected operating system folders (`System32`, `Windows`, `Program Files`, and volume roots).
+
 ---
 
-## 5. Complete IPC Command Catalog (44 Commands)
+## 5. Complete IPC Command Catalog
 
 | Subsystem | Command Name | Input Payload | Return Payload |
 |-----------|--------------|---------------|----------------|
@@ -285,28 +298,40 @@ All WMI and CLI subprocesses are executed with `CREATE_NO_WINDOW` (`0x08000000`)
 ## 7. Testing & Quality Assurance Architecture
 
 ```
-Testing Pipeline (57 Multi-Tier Test Cases)
-├── Tier 1: Feature Coverage (22 Tests)
-│   ├── Script Runner execution, loading, format parsing
-│   ├── Live streaming IPC stdout/stderr event dispatch
+Testing Pipeline (142 Frontend/E2E Tests + 267 Rust Backend Tests)
+├── Static AST & Manifest Schema Verification (9 Tests)
+│   ├── Root schema, version sync across 7 manifests
+│   └── 45 script entries metadata integrity
+├── Multi-TB Formatting & Disk Utilities (10 Tests)
+│   ├── Byte conversions up to Petabyte scale
+│   └── Safe path normalization & dot-segment sanitization
+├── Tier 1: Feature Coverage (25 Tests)
+│   ├── Script Runner in-place streaming, live IPC stdout/stderr
 │   ├── Elevation warning banner and dry-run toggling
-│   ├── Dynamic celebratory queue banner state (N=0 vs N>0)
-│   ├── i18n locale parity & structural integrity
 │   └── Multi-tier temperature sensor parsing & payload contracts
-├── Tier 2: Boundary & Edge Cases (22 Tests)
+├── Tier 2: Boundary & Edge Cases (26 Tests)
 │   ├── Empty and oversized script payload validation
-│   ├── Burst IPC event streaming throughput
 │   ├── WMI 3-second non-blocking subprocess timeout
-│   ├── Safe temp directory traversal prevention
-│   └── Registry locked key sharing violation recovery
-├── Tier 3: Cross-Feature Interactions (7 Tests)
+│   ├── Directory traversal protection and locked registry key recovery
+│   └── BOM invariant sanitization on read and write
+├── Tier 3: Cross-Feature Interactions (9 Tests)
 │   ├── Concurrent script execution during background metrics polling
-│   ├── Dynamic language switching during live execution
-│   └── Diagnostic dump aggregation of logs and telemetry
-└── Tier 4: Real-World Application Scenarios (6 Tests)
-    ├── End-to-end optimization queue completion workflow
-    ├── Hardware sensor discovery and override workflow
-    └── Autorun security scanning & quarantine workflow
+│   ├── Dynamic language switching across 25 views
+│   └── ProFlow governor affinity & Game Boost coordination
+├── Tier 4: Real-World Application Scenarios (6 Tests)
+│   ├── Competitive gaming launch & DPC latency benchmark
+│   ├── Developer IDE memory trim & auto-purge
+│   └── Network traffic audit & 1-click firewall isolation
+├── Disk Space Analyzer & Filesystem Tree Explorer (57 Tests)
+│   ├── Recursive multithreaded directory traversal & size calculations
+│   ├── Sub-5ms scan cancellation latency & partial tree return
+│   ├── Top 20 folders & Top 50 files extraction
+│   └── Kernel safety guardrails blocking OS directory deletion
+└── Rust Backend Library Unit Tests (267 Tests)
+    ├── Win32 IOCTL NVMe SMART log page parsers & controller identification
+    ├── StateEngine transactional snapshot & rollback mechanics
+    ├── Autoruns scanner & Authenticode digital signature validation
+    └── System restore point creation & frequency limit enforcement
 ```
 
-Executed via `npm test` (`tests/e2e/runner.js`) with sub-millisecond execution times and 100% deterministic test isolation.
+Executed via `npm test` (`tests/e2e/runner.js`) and `cargo test --lib` with 100% deterministic test isolation.

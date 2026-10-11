@@ -1,4 +1,4 @@
-﻿# WiScripts Windows — Engineering Rules & Invariants
+# WiScripts Windows — Engineering Rules & Invariants
 
 ## 1. PowerShell Script File Staging & BOM Encoding Invariant
 
@@ -47,3 +47,31 @@ Whenever a bug fix or modification must reach users who may have already downloa
    - `scripts_lib/manifest.json` (`"version"`)
 3. **Dedicated Release Notes**:
    Always create `RELEASE_NOTES_<version>.md` before publishing the tag so GitHub Actions (`release.yml`) automatically populates the GitHub Release description.
+4. **Synchronize Version Verification Tests**:
+   When bumping a version, atomically update the assertion targets in:
+   - `tests/test_challenger1_m3_version_verification.cjs`
+   - `tests/static_analysis/static_analysis_suite.js` (`report.manifest.version`)
+
+---
+
+## 3. Low-Level Hardware & Storage Telemetry Invariant
+
+### The Invariant
+Drive health and diagnostic telemetry must always reflect authentic system state with graceful privilege-level fallbacks and explicit open-source attribution.
+
+### Strict Requirements
+1. **Zero-Mock Policy & Graceful Elevation Fallback**:
+   Win32 `DeviceIoControl` queries to physical drives (`\\.\PhysicalDriveX`) require Administrator elevation. When non-elevated, **NEVER** inject synthetic mock telemetry (fake temperatures, fabricated health percentages). Gracefully fall back to non-elevated PowerShell (`Get-PhysicalDisk`, `Get-StorageReliabilityCounter`) and display elevation requirement badges (`Требуются права админа для SMART`).
+2. **Open-Source Attribution**:
+   When adopting low-level hardware telemetry, IOCTL mappings, or reverse-engineered log page structures from external reference implementations (e.g. CrystalDiskInfo), always retain explicit in-app acknowledgments and repository links crediting the original authors (e.g. Noriyuki Miyazaki / hiyohiyo).
+
+---
+
+## 4. Static AST Test Integrity Invariant
+
+### The Invariant
+Core UI components and navigation configurations that are actively inspected by static AST test suites must preserve their literal symbol structures and syntax tokens.
+
+### Strict Requirements
+1. **Preserve Scanned Literal Symbols**:
+   Components validated by static AST test suites (such as `src/components/Navigation.tsx`) must preserve their literal symbol declarations (e.g. `const NAV_ITEMS: NavItem[] = [...]`) and class literal invariants. Never extract scanned constants to external helper modules without updating the static AST test harnesses.

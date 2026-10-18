@@ -189,8 +189,8 @@ export function App() {
               {activeTab === 'package_manager' && <PackageManagerView />}
               {activeTab === 'app_uninstaller' && <UninstallerView />}
               {activeTab === 'presets' && <PresetsView />}
-              {activeTab === 'system_cleaner' && <SystemCleaner />}
-              {activeTab === 'storage_utilities' && <StorageUtilities />}
+              {activeTab === 'system_cleaner' && <StorageUtilities initialTab="cleaner" />}
+              {activeTab === 'storage_utilities' && <StorageUtilities initialTab="analyzer" />}
               {activeTab === 'startup' && <StartupView />}
               {activeTab === 'scheduler' && <SchedulerView />}
               {activeTab === 'autoruns' && <AutorunsView />}

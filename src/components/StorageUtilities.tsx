@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
@@ -23,8 +23,10 @@ import {
   Square,
   ShieldAlert,
   PieChart,
+  Sparkles,
 } from 'lucide-react';
 import { DiskSpaceAnalyzerView } from './DiskSpaceAnalyzer/DiskSpaceAnalyzerView';
+import { SystemCleanerContent } from './SystemCleaner';
 import { getErrorMessage, formatBytes } from '../utils';
 
 function formatDate(tsSec: number, t: TFunction): string {
@@ -33,13 +35,33 @@ function formatDate(tsSec: number, t: TFunction): string {
   return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function StorageUtilities() {
+export type StorageTabType = 'cleaner' | 'analyzer' | 'duplicates' | 'large';
+
+export interface StorageUtilitiesProps {
+  initialTab?: StorageTabType;
+}
+
+export function StorageUtilities({ initialTab = 'analyzer' }: StorageUtilitiesProps = {}) {
   const { t } = useTranslation();
   const addLog = useAppStore((s) => s.addLog);
   const addToast = useAppStore((s) => s.addToast);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const drives = useAppStore((s) => s.drives);
+  const fetchDrives = useAppStore((s) => s.fetchDrives);
 
-  const [activeTab, setActiveTab] = useState<'analyzer' | 'duplicates' | 'large'>('analyzer');
+  const [activeTab, setActiveTab] = useState<StorageTabType>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (drives.length === 0) {
+      fetchDrives();
+    }
+  }, [drives.length, fetchDrives]);
 
   const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[] | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -221,6 +243,54 @@ export function StorageUtilities() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Quick Volume Capacity Summary Strip */}
+      {drives.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          {drives.map((d) => {
+            const usagePct = d.usagePercentage || (d.totalBytes > 0 ? (d.usedBytes / d.totalBytes) * 100 : 0);
+            let barColor = 'bg-brand';
+            if (usagePct > 90) barColor = 'bg-status-danger';
+            else if (usagePct > 75) barColor = 'bg-status-warning';
+
+            return (
+              <div
+                key={d.mountPoint}
+                onClick={() => {
+                  useAppStore.getState().setSelectedDrive(d.mountPoint);
+                  setActiveTab('analyzer');
+                }}
+                className="p-2.5 rounded-[6px] bg-surface border border-border hover:border-brand/50 cursor-pointer transition-all flex items-center justify-between gap-2 shadow-xs"
+                title={`${d.mountPoint} · ${formatBytes(d.availableBytes)} free of ${formatBytes(d.totalBytes)}`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1.5 rounded-[4px] bg-surface-subtle text-text-muted">
+                    <HardDrive className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0 truncate">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-text truncate">{d.name || d.mountPoint}</span>
+                      <span className="text-[10px] font-mono px-1 rounded bg-surface-subtle border border-border text-text-muted">
+                        {d.mountPoint}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-text-muted font-mono truncate">
+                      {formatBytes(d.availableBytes)} free
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-14 flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-[10px] font-mono text-text-muted">{usagePct.toFixed(0)}%</span>
+                  <div className="w-full h-1 bg-surface-subtle rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, usagePct)}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Header & Mode Selector Card */}
       <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -242,7 +312,7 @@ export function StorageUtilities() {
             </div>
           </div>
 
-          {activeTab !== 'analyzer' && (
+          {activeTab !== 'analyzer' && activeTab !== 'cleaner' && (
             <div className="flex items-center gap-2">
               {activeTab === 'duplicates' ? (
                 <button
@@ -284,7 +354,23 @@ export function StorageUtilities() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2 border-t border-border-subtle pt-3">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('cleaner');
+              setSelectedPaths(new Set());
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
+              activeTab === 'cleaner'
+                ? 'bg-surface-active text-brand border border-border-focus/40 shadow-xs'
+                : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+            }`}
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>{t('storageUtilities.cleanerTab', 'Экспресс-Очистка')}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -293,7 +379,7 @@ export function StorageUtilities() {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
               activeTab === 'analyzer'
-                ? 'bg-surface-active text-brand border border-border-focus/40'
+                ? 'bg-surface-active text-brand border border-border-focus/40 shadow-xs'
                 : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
             }`}
           >
@@ -309,7 +395,7 @@ export function StorageUtilities() {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
               activeTab === 'duplicates'
-                ? 'bg-surface-active text-brand border border-border-focus/40'
+                ? 'bg-surface-active text-brand border border-border-focus/40 shadow-xs'
                 : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
             }`}
           >
@@ -325,7 +411,7 @@ export function StorageUtilities() {
             }}
             className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[6px] transition-colors ${
               activeTab === 'large'
-                ? 'bg-surface-active text-brand border border-border-focus/40'
+                ? 'bg-surface-active text-brand border border-border-focus/40 shadow-xs'
                 : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
             }`}
           >
@@ -336,7 +422,9 @@ export function StorageUtilities() {
       </div>
 
       {/* Main Content Body */}
-      {activeTab === 'analyzer' ? (
+      {activeTab === 'cleaner' ? (
+        <SystemCleanerContent onNavigateToAnalyzer={() => setActiveTab('analyzer')} />
+      ) : activeTab === 'analyzer' ? (
         <DiskSpaceAnalyzerView />
       ) : activeTab === 'duplicates' ? (
         <div className="space-y-4">

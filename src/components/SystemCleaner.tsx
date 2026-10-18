@@ -18,7 +18,11 @@ import {
 } from 'lucide-react';
 import { formatBytes } from '../utils';
 
-export function SystemCleaner() {
+interface SystemCleanerContentProps {
+  onNavigateToAnalyzer?: () => void;
+}
+
+export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerContentProps = {}) {
   const { t } = useTranslation();
   const addLog = useAppStore((s) => s.addLog);
   const addToast = useAppStore((s) => s.addToast);
@@ -168,7 +172,13 @@ export function SystemCleaner() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab('storage_utilities')}
+              onClick={() => {
+                if (onNavigateToAnalyzer) {
+                  onNavigateToAnalyzer();
+                } else {
+                  setActiveTab('storage_utilities');
+                }
+              }}
               className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-[6px] bg-brand/10 border border-brand/20 text-brand hover:bg-brand/20 transition-colors"
               title={t('systemCleaner.openDiskAnalyzerTitle', 'Открыть детальный анализатор диска и дерево папок')}
             >
@@ -410,4 +420,9 @@ export function SystemCleaner() {
       )}
     </div>
   );
+}
+
+export function SystemCleaner() {
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  return <SystemCleanerContent onNavigateToAnalyzer={() => setActiveTab('storage_utilities')} />;
 }

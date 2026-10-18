@@ -223,11 +223,15 @@ fn get_modified_timestamp(path: &Path) -> u64 {
 // Tree Aggregation & Sizing Engine
 // ---------------------------------------------------------------------------
 
+pub const MAX_SERIALIZE_TREE_DEPTH: usize = 6;
+pub const MAX_SERIALIZE_CHILD_FILES: usize = 150;
+
 fn aggregate_dir_tree(
     current_dir: &PathBuf,
     dirs_map: &HashMap<PathBuf, RawDirNode>,
     root_path: &PathBuf,
     top_folders_heap: &mut BinaryHeap<TopItemCandidate>,
+    depth: usize,
 ) -> FsTreeNode {
     let raw_node = dirs_map.get(current_dir);
 
@@ -251,36 +255,49 @@ fn aggregate_dir_tree(
     let mut total_file_count = 0u64;
     let mut total_dir_count = 0u64;
 
-    // Recurse into subdirectories
+    // Recurse into subdirectories (always compute exact recursive aggregates)
     for sub_dir_path in sub_dirs {
-        let child_tree = aggregate_dir_tree(sub_dir_path, dirs_map, root_path, top_folders_heap);
+        let child_tree = aggregate_dir_tree(sub_dir_path, dirs_map, root_path, top_folders_heap, depth + 1);
         total_size_bytes = total_size_bytes.saturating_add(child_tree.size_bytes);
         total_file_count = total_file_count.saturating_add(child_tree.file_count);
         total_dir_count = total_dir_count.saturating_add(1).saturating_add(child_tree.dir_count);
-        children_nodes.push(child_tree);
+        if depth < MAX_SERIALIZE_TREE_DEPTH {
+            children_nodes.push(child_tree);
+        }
     }
 
     // Add direct files
+    let mut direct_file_nodes = Vec::new();
     for file in direct_files {
         total_size_bytes = total_size_bytes.saturating_add(file.size_bytes);
         total_file_count = total_file_count.saturating_add(1);
-        let file_path = current_dir.join(&file.name);
-        let file_path_str = file_path.to_string_lossy().to_string();
-        children_nodes.push(FsTreeNode {
-            id: file_path_str.clone(),
-            name: file.name.clone(),
-            path: file_path_str,
-            size_bytes: file.size_bytes,
-            file_count: 0,
-            dir_count: 0,
-            is_dir: false,
-            modified_timestamp: file.modified_timestamp,
-            children: None,
-        });
+        if depth < MAX_SERIALIZE_TREE_DEPTH {
+            let file_path = current_dir.join(&file.name);
+            let file_path_str = file_path.to_string_lossy().to_string();
+            direct_file_nodes.push(FsTreeNode {
+                id: file_path_str.clone(),
+                name: file.name.clone(),
+                path: file_path_str,
+                size_bytes: file.size_bytes,
+                file_count: 0,
+                dir_count: 0,
+                is_dir: false,
+                modified_timestamp: file.modified_timestamp,
+                children: None,
+            });
+        }
     }
 
-    // Sort children by size descending
-    children_nodes.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
+    if depth < MAX_SERIALIZE_TREE_DEPTH {
+        if direct_file_nodes.len() > MAX_SERIALIZE_CHILD_FILES {
+            direct_file_nodes.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
+            direct_file_nodes.truncate(MAX_SERIALIZE_CHILD_FILES);
+        }
+        children_nodes.extend(direct_file_nodes);
+
+        // Sort children by size descending
+        children_nodes.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes).then_with(|| a.name.cmp(&b.name)));
+    }
 
     let folder_item_count = total_file_count.saturating_add(total_dir_count);
 
@@ -301,6 +318,12 @@ fn aggregate_dir_tree(
     }
 
     let cur_path_str = current_dir.to_string_lossy().to_string();
+    let children_option = if depth < MAX_SERIALIZE_TREE_DEPTH {
+        Some(children_nodes)
+    } else {
+        None
+    };
+
     FsTreeNode {
         id: cur_path_str.clone(),
         name,
@@ -310,7 +333,7 @@ fn aggregate_dir_tree(
         dir_count: total_dir_count,
         is_dir: true,
         modified_timestamp,
-        children: Some(children_nodes),
+        children: children_option,
     }
 }
 
@@ -329,6 +352,8 @@ pub fn is_fast_scan_system_dir(name_lower: &str) -> bool {
             | "$windows.~bt"
             | "$windows.~ws"
             | "config.msi"
+            | "deliveryoptimization"
+            | "msocache"
     )
 }
 
@@ -426,9 +451,18 @@ pub fn scan_directory_tree_with_options(
                 .unwrap_or_else(|| root_path_buf.clone());
 
             if file_type.is_dir() {
-                let should_skip_children = if fast_drilldown && entry.depth() == 1 {
+                let should_skip_children = if fast_drilldown {
                     let dir_name_lower = entry.file_name().to_string_lossy().to_lowercase();
-                    is_fast_scan_system_dir(&dir_name_lower)
+                    if entry.depth() == 1 {
+                        is_fast_scan_system_dir(&dir_name_lower)
+                    } else if entry.depth() == 2 {
+                        matches!(
+                            dir_name_lower.as_str(),
+                            "windows defender" | "package cache" | "deliveryoptimization"
+                        )
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 };
@@ -532,6 +566,7 @@ pub fn scan_directory_tree_with_options(
         &dirs_map,
         &root_path_buf,
         &mut top_folders_heap,
+        0,
     );
 
     let total_scanned_bytes = tree.size_bytes;
@@ -730,4 +765,44 @@ mod tests {
         let win_entry = root_children.iter().find(|c| c.name == "Windows");
         assert!(win_entry.is_some(), "Windows folder node must be retained in root tree");
     }
+
+    #[test]
+    fn test_scan_directory_serialization_depth_bounding() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // Create an 8-level deep directory chain:
+        // root/d1/d2/d3/d4/d5/d6/d7/deep_file.dat
+        let mut curr = root.to_path_buf();
+        for i in 1..=7 {
+            curr = curr.join(format!("d{}", i));
+        }
+        fs::create_dir_all(&curr).unwrap();
+        fs::write(curr.join("deep_file.dat"), vec![0x99; 4096]).unwrap();
+
+        let result = scan_directory_tree(None, root.to_string_lossy().to_string(), None).unwrap();
+
+        // Full recursive aggregates must be 100% exact
+        assert_eq!(result.total_bytes, 4096);
+        assert_eq!(result.total_files, 1);
+        assert_eq!(result.total_dirs, 7);
+        assert_eq!(result.tree.size_bytes, 4096);
+        assert_eq!(result.tree.file_count, 1);
+        assert_eq!(result.tree.dir_count, 7);
+
+        // Verify that depth 6 node has children: None (pruned for IPC safety)
+        let mut node = &result.tree;
+        for _ in 0..MAX_SERIALIZE_TREE_DEPTH {
+            assert!(node.children.is_some());
+            let ch = node.children.as_ref().unwrap();
+            assert_eq!(ch.len(), 1);
+            node = &ch[0];
+        }
+        // At MAX_SERIALIZE_TREE_DEPTH (depth 6), children is None!
+        assert!(node.children.is_none());
+        // Yet its size and file counts are exact!
+        assert_eq!(node.size_bytes, 4096);
+        assert_eq!(node.file_count, 1);
+    }
 }
+

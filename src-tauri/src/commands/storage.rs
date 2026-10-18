@@ -1,7 +1,7 @@
 use crate::storage::{
     self, check_path_protection_status, delete_filesystem_items as fs_delete_items,
-    get_all_disk_drives, resolve_and_normalize_path, scan_directory_tree, DeletionResult,
-    DiskDriveInfo, DiskScanResult, PathProtectionStatus,
+    get_all_disk_drives, resolve_and_normalize_path, scan_directory_tree_with_options,
+    DeletionResult, DiskDriveInfo, DiskScanResult, PathProtectionStatus,
 };
 use std::path::Path;
 use std::process::Command;
@@ -21,10 +21,12 @@ pub async fn scan_disk_space(
     app: tauri::AppHandle,
     path: String,
     scan_id: Option<String>,
+    fast_mode: Option<bool>,
 ) -> Result<DiskScanResult, String> {
-    log::info!("[IPC] scan_disk_space requested for path '{}', scan_id: {:?}", path, scan_id);
+    log::info!("[IPC] scan_disk_space requested for path '{}', scan_id: {:?}, fast_mode: {:?}", path, scan_id, fast_mode);
     tauri::async_runtime::spawn_blocking(move || {
-        scan_directory_tree(Some(&app), path, scan_id).map_err(|e| e.to_string())
+        scan_directory_tree_with_options(Some(&app), path, scan_id, fast_mode.unwrap_or(true))
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| format!("Join error in scan_disk_space: {}", e))?

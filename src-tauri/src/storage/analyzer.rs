@@ -318,10 +318,33 @@ fn aggregate_dir_tree(
 // Main Multi-Threaded Filesystem Analyzer
 // ---------------------------------------------------------------------------
 
+#[inline]
+pub fn is_fast_scan_system_dir(name_lower: &str) -> bool {
+    matches!(
+        name_lower,
+        "windows"
+            | "system volume information"
+            | "$recycle.bin"
+            | "recovery"
+            | "$windows.~bt"
+            | "$windows.~ws"
+            | "config.msi"
+    )
+}
+
 pub fn scan_directory_tree(
     app: Option<&tauri::AppHandle>,
     target_path: String,
     scan_id_opt: Option<String>,
+) -> Result<DiskScanResult, AppError> {
+    scan_directory_tree_with_options(app, target_path, scan_id_opt, false)
+}
+
+pub fn scan_directory_tree_with_options(
+    app: Option<&tauri::AppHandle>,
+    target_path: String,
+    scan_id_opt: Option<String>,
+    fast_drilldown: bool,
 ) -> Result<DiskScanResult, AppError> {
     let scan_id = scan_id_opt.unwrap_or_else(|| format!("scan-{}", Instant::now().elapsed().as_nanos()));
     let cancel_token = register_cancellation_token(&scan_id);
@@ -371,12 +394,12 @@ pub fn scan_directory_tree(
 
     if !is_cancelled {
         // Traverse directory structure
-        let walker = WalkDir::new(&root_path_buf)
+        let mut walker = WalkDir::new(&root_path_buf)
             .follow_links(false)
             .same_file_system(true)
             .into_iter();
 
-        for entry_res in walker {
+        while let Some(entry_res) = walker.next() {
             if cancel_token.load(Ordering::Relaxed) {
                 log::info!("[Storage Analyzer] Scan '{}' halted via cancellation token", scan_id);
                 is_cancelled = true;
@@ -403,6 +426,13 @@ pub fn scan_directory_tree(
                 .unwrap_or_else(|| root_path_buf.clone());
 
             if file_type.is_dir() {
+                let should_skip_children = if fast_drilldown && entry.depth() == 1 {
+                    let dir_name_lower = entry.file_name().to_string_lossy().to_lowercase();
+                    is_fast_scan_system_dir(&dir_name_lower)
+                } else {
+                    false
+                };
+
                 directories_scanned = directories_scanned.saturating_add(1);
                 let dir_name = entry.file_name().to_string_lossy().to_string();
                 let mod_time = get_modified_timestamp(&entry_path);
@@ -427,6 +457,10 @@ pub fn scan_directory_tree(
                     })
                     .sub_dirs
                     .push(entry_path.clone());
+
+                if should_skip_children {
+                    walker.skip_current_dir();
+                }
             } else if file_type.is_file() {
                 files_scanned = files_scanned.saturating_add(1);
                 let file_size = match entry.metadata() {
@@ -663,5 +697,37 @@ mod tests {
         }
         assert_eq!(result.top_folders[19].rank, 20);
         assert_eq!(result.top_files[19].rank, 20);
+    }
+
+    #[test]
+    fn test_scan_directory_fast_drilldown_system_dir_pruning() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // Create standard folders
+        let users = root.join("Users");
+        fs::create_dir_all(&users).unwrap();
+        fs::write(users.join("data.bin"), vec![0x1; 1000]).unwrap();
+
+        // Create a system folder that should be pruned at depth 1 when fast_drilldown is true
+        let win = root.join("Windows");
+        let winsxs = win.join("WinSxS");
+        fs::create_dir_all(&winsxs).unwrap();
+        fs::write(winsxs.join("huge_system_file.dll"), vec![0x2; 50000]).unwrap();
+
+        // 1. Scan with fast_drilldown = false (standard deep crawl)
+        let full_res = scan_directory_tree_with_options(None, root.to_string_lossy().to_string(), None, false).unwrap();
+        assert_eq!(full_res.total_files, 2);
+        assert_eq!(full_res.total_bytes, 51000);
+
+        // 2. Scan with fast_drilldown = true (prunes Windows descendants, records Windows root entry)
+        let fast_res = scan_directory_tree_with_options(None, root.to_string_lossy().to_string(), None, true).unwrap();
+        // Only users file was scanned, Windows was pruned at depth 1
+        assert_eq!(fast_res.total_files, 1);
+        assert_eq!(fast_res.total_bytes, 1000);
+        // But Windows still exists in the root children!
+        let root_children = fast_res.tree.children.as_ref().unwrap();
+        let win_entry = root_children.iter().find(|c| c.name == "Windows");
+        assert!(win_entry.is_some(), "Windows folder node must be retained in root tree");
     }
 }

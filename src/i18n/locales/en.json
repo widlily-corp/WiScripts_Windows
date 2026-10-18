@@ -654,6 +654,8 @@
     "customDirectory": "Custom Folder Path",
     "browse": "Browse",
     "presets": "Presets",
+    "turboDrilldown": "Turbo Drill-Down",
+    "turboDrilldownTooltip": "Drill-Down Engine: skips millions of Windows OS files and instantly locates heavy games and user hubs",
     "scanDrive": "Scan Drive",
     "scanCustom": "Scan Custom Path",
     "scanning": "Scanning Filesystem...",

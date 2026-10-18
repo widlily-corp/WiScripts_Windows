@@ -20,6 +20,7 @@ export interface DiskAnalyzerSlice {
   selectedDrive: string | null;
   customPath: string;
   isDrivesLoading: boolean;
+  fastMode: boolean;
 
   // Scan State
   scanResult: DiskScanResult | null;
@@ -49,6 +50,7 @@ export interface DiskAnalyzerSlice {
   fetchDrives: () => Promise<DiskDriveInfo[]>;
   setSelectedDrive: (drive: string | null) => void;
   setCustomPath: (path: string) => void;
+  setFastMode: (fast: boolean) => void;
   startScan: (targetPath?: string) => Promise<DiskScanResult | null>;
   cancelScan: () => Promise<void>;
   setupScanProgressListener: () => Promise<UnlistenFn>;
@@ -79,6 +81,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
   selectedDrive: null,
   customPath: '',
   isDrivesLoading: false,
+  fastMode: true,
 
   scanResult: null,
   isScanning: false,
@@ -130,6 +133,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
 
   setSelectedDrive: (drive: string | null) => set({ selectedDrive: drive }),
   setCustomPath: (path: string) => set({ customPath: path }),
+  setFastMode: (fast: boolean) => set({ fastMode: fast }),
 
   setupScanProgressListener: async () => {
     const existing = get().unlistenScanProgress;
@@ -184,6 +188,8 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
         path: target,
         scanId,
         scan_id: scanId,
+        fast_mode: get().fastMode,
+        fastMode: get().fastMode,
       });
 
       const normalizedResult: DiskScanResult = {

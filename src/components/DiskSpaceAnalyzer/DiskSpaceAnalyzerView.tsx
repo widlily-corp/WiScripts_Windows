@@ -20,6 +20,7 @@ export const DiskSpaceAnalyzerView: React.FC = () => {
     selectedDrive,
     customPath,
     isDrivesLoading,
+    fastMode,
     scanResult,
     isScanning,
     scanProgress,
@@ -38,6 +39,7 @@ export const DiskSpaceAnalyzerView: React.FC = () => {
     fetchDrives,
     setSelectedDrive,
     setCustomPath,
+    setFastMode,
     startScan,
     cancelScan,
     deleteItem,
@@ -70,6 +72,8 @@ export const DiskSpaceAnalyzerView: React.FC = () => {
         customPath={customPath}
         isScanning={isScanning}
         isDrivesLoading={isDrivesLoading}
+        fastMode={fastMode}
+        onToggleFastMode={setFastMode}
         onSelectDrive={setSelectedDrive}
         onChangeCustomPath={setCustomPath}
         onStartScan={(target) => startScan(target)}

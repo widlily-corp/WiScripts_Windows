@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "1.7.1",
-  "lastUpdated": "2026-10-11T12:00:00.000Z",
+  "version": "1.7.2",
+  "lastUpdated": "2026-10-18T12:00:00.000Z",
   "repositoryUrl": "https://github.com/widlily-corp/WiScripts_Windows",
   "rawBaseUrl": "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib",
   "scripts": [
@@ -854,6 +854,67 @@
         }
       ],
       "sha256": "fa6a6c35986283bb40c1decc12e0327b7f11e020e53efd655d9f6c0d1a0d9c74"
+    },
+    {
+      "id": "maint-fast-disk-drilldown-analyzer",
+      "name": "Fast Hierarchical Disk Space Analyzer (Drill-Down Engine)",
+      "category": "maintenance",
+      "path": "maintenance/fast_disk_drilldown_analyzer.ps1",
+      "description": "Performs instant hierarchical drill-down disk analysis across Levels 0-3 using low-level Win32 DriveInfo, Scripting.FileSystemObject COM, and multi-threaded Robocopy /L without memory bloat or long pauses.",
+      "riskLevel": "safe",
+      "requiresAdmin": false,
+      "author": "WiScripts Core Team",
+      "version": "1.0.0",
+      "tags": [
+        "disk-space",
+        "drill-down",
+        "analyzer",
+        "robocopy",
+        "win32",
+        "com",
+        "storage",
+        "steam",
+        "hoyoplay"
+      ],
+      "parameters": [
+        {
+          "name": "Drive",
+          "type": "string",
+          "default": "C:",
+          "description": "Target drive letter to analyze"
+        },
+        {
+          "name": "CustomPath",
+          "type": "string",
+          "default": "",
+          "description": "Optional custom directory path to analyze"
+        },
+        {
+          "name": "MinSizeGB",
+          "type": "number",
+          "default": 1.0,
+          "description": "Minimum folder size threshold in GB to qualify as a heavy hotspot"
+        },
+        {
+          "name": "MaxLevel",
+          "type": "number",
+          "default": 3,
+          "description": "Maximum drill-down depth level (1 to 3)"
+        },
+        {
+          "name": "IncludeWindows",
+          "type": "boolean",
+          "default": false,
+          "description": "Deeply scan Windows OS system directories"
+        },
+        {
+          "name": "JsonOutput",
+          "type": "boolean",
+          "default": false,
+          "description": "Output structured JSON report"
+        }
+      ],
+      "sha256": "7d1378156457664d8d80a66e82f726d4dc104232a77f52f9107fd58ac85a6212"
     },
     {
       "id": "maint-safe-browser-cache-cleaner",

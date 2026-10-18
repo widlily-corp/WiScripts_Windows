@@ -4,8 +4,9 @@ pub mod drives;
 pub mod guardrails;
 
 pub use analyzer::{
-    cancel_scan, register_cancellation_token, scan_directory_tree, DiskScanProgressPayload,
-    DiskScanResult, FsTreeNode, RankedFsItem,
+    cancel_scan, is_fast_scan_system_dir, register_cancellation_token, scan_directory_tree,
+    scan_directory_tree_with_options, DiskScanProgressPayload, DiskScanResult, FsTreeNode,
+    RankedFsItem,
 };
 pub use deletion::{
     calculate_target_size, delete_filesystem_items, DeletionItemReport, DeletionResult,

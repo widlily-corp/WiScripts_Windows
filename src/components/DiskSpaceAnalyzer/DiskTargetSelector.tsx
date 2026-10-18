@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HardDrive, FolderSearch, RefreshCw, Sparkles, Folder, Play } from 'lucide-react';
+import { HardDrive, FolderSearch, RefreshCw, Sparkles, Folder, Play, Zap } from 'lucide-react';
 import { DiskDriveInfo } from '../../types';
 import { formatBytes } from '../../utils';
 
@@ -10,6 +10,8 @@ interface DiskTargetSelectorProps {
   customPath: string;
   isScanning: boolean;
   isDrivesLoading: boolean;
+  fastMode?: boolean;
+  onToggleFastMode?: (fast: boolean) => void;
   onSelectDrive: (mountPoint: string) => void;
   onChangeCustomPath: (path: string) => void;
   onStartScan: (targetPath?: string) => void;
@@ -30,6 +32,8 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
   customPath,
   isScanning,
   isDrivesLoading,
+  fastMode = true,
+  onToggleFastMode,
   onSelectDrive,
   onChangeCustomPath,
   onStartScan,
@@ -187,6 +191,22 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
               className="w-full bg-surface-subtle border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-text placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand disabled:opacity-50"
             />
           </div>
+
+          {onToggleFastMode && (
+            <button
+              type="button"
+              onClick={() => onToggleFastMode(!fastMode)}
+              disabled={isScanning}
+              className={'px-3 py-2 rounded-[6px] border text-xs font-semibold flex items-center gap-1.5 transition-colors ' +
+                (fastMode
+                  ? 'bg-status-success/15 border-status-success/40 text-status-success'
+                  : 'bg-surface-subtle border-border text-text-muted hover:text-text')}
+              title={t('diskAnalyzer.turboDrilldownTooltip', 'Drill-Down Engine: skips millions of Windows OS files and instantly locates heavy games and user hubs')}
+            >
+              <Zap className={'w-3.5 h-3.5 ' + (fastMode ? 'fill-current text-status-success' : 'text-text-muted')} />
+              <span>{t('diskAnalyzer.turboDrilldown', 'Turbo Drill-Down')}</span>
+            </button>
+          )}
 
           <button
             onClick={() => onStartScan(customPath || selectedDrive || undefined)}

@@ -24,10 +24,10 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     assert.isTrue(report.manifest !== null, 'Manifest parsed into memory');
-    assert.equal(report.manifest.scripts.length, 45, 'Manifest catalogs exactly 45 scripts');
+    assert.equal(report.manifest.scripts.length, 46, 'Manifest catalogs exactly 46 scripts');
     assert.match(report.manifest.schemaVersion, /^\d+\.\d+\.\d+$/, 'schemaVersion is semver');
     assert.match(report.manifest.version, /^\d+\.\d+\.\d+$/, 'version is semver');
-    assert.equal(report.manifest.version, '1.7.1', 'Manifest version is 1.7.1');
+    assert.equal(report.manifest.version, '1.7.2', 'Manifest version is 1.7.2');
     assert.ok(report.manifest.repositoryUrl.startsWith('https://'), 'repositoryUrl is https');
     assert.ok(report.manifest.rawBaseUrl.startsWith('https://'), 'rawBaseUrl is https');
   });
@@ -56,7 +56,7 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     const diskParityChecks = report.assertions.filter(a => a.name.startsWith('Disk File Tracked') || a.name === 'Disk & Manifest Count Parity');
-    assert.greaterThanOrEqual(diskParityChecks.length, 45, 'All 45 disk files tracked');
+    assert.greaterThanOrEqual(diskParityChecks.length, 46, 'All 46 disk files tracked');
     for (const check of diskParityChecks) {
       assert.isTrue(check.passed, `Parity check passed: ${check.name} (${check.detail})`);
     }
@@ -68,7 +68,7 @@ export function buildStaticAnalysisSuite() {
 
     // Assert
     const shaChecks = report.assertions.filter(a => a.name.includes('SHA-256 Integrity'));
-    assert.equal(shaChecks.length, 45, 'All 45 scripts have SHA-256 integrity check');
+    assert.equal(shaChecks.length, 46, 'All 46 scripts have SHA-256 integrity check');
     for (const check of shaChecks) {
       assert.isTrue(check.passed, `SHA-256 verified: ${check.name}`);
     }
@@ -79,7 +79,7 @@ export function buildStaticAnalysisSuite() {
     const summary = runPowerShellAstValidation();
 
     // Assert
-    assert.equal(summary.totalScripts, 45, 'All 45 scripts parsed by AST');
+    assert.equal(summary.totalScripts, 46, 'All 46 scripts parsed by AST');
     for (const res of summary.results) {
       const astCheck = res.checks.find(c => c.name === 'AST Syntax Parsing');
       assert.ok(astCheck, `AST check present for ${res.scriptPath}`);

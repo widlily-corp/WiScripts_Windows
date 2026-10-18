@@ -1,7 +1,7 @@
 # WiScripts Windows — Technical Architecture Specification
 
-**Document Version:** 1.7.1  
-**Target Release:** WiScripts Windows v1.7.1  
+**Document Version:** 1.7.2  
+**Target Release:** WiScripts Windows v1.7.2  
 **Author:** Principal System Architect & Elite Product Designer  
 **Classification:** Core System Architecture
 
@@ -212,9 +212,13 @@ All WMI and CLI subprocesses are executed with `CREATE_NO_WINDOW` (`0x08000000`)
   - `NVME_IDENTIFY_CNS_CONTROLLER` (CNS `0x01`): Identifies authentic firmware revision, controller serial number, and NVMe specification revision.
 - **Elevation-Aware Zero-Mock Fallback:** When running non-elevated, never injects synthetic mock data. System gracefully executes PowerShell `Get-PhysicalDisk` and `Get-StorageReliabilityCounter` while displaying elevation badges (`Требуются права админа для SMART`) in the UI.
 
-### 4.6 Disk Space Analyzer & Filesystem Guardrails (v1.6.0)
-- **High-Performance Recursive Scanner:** Traverses physical volumes and deep directory hierarchies asynchronously, emitting real-time progress events over Tauri IPC.
-- **Bounded Heap Statistics:** Maintains bounded priority queues for Top 20 Largest Folders and Top 50 Largest Files without unbounded memory bloat.
+### 4.6 Disk Space Analyzer & Turbo Drill-Down Engine (v1.7.2)
+- **Hierarchical Drill-Down Pipeline (L0–L3):** Completely replaces monolithic, 20–40 minute recursive crawls with descending decomposition:
+  - **Level 0 (<0.1s):** Queries `Win32_LogicalDisk` / `System.IO.DriveInfo` for instantaneous volume totals, used bytes, and percentage without file enumeration.
+  - **Level 1 (Root Shallow Sizing):** Measures the 10–15 root directories of `C:\`. Identifies where 90% of disk space resides (`Program Files`, `Users`, `Games`) and prunes protected Windows system subtrees (`C:\Windows\WinSxS`, `$Recycle.Bin`, `System Volume Information`) via `WalkDir::skip_current_dir()`.
+  - **Level 2 (Targeted Heavy Giants):** Recursively crawls only the identified heavy giants, instantly localizing game distribution platforms (Steam, HoYoPlay, Epic) and user profiles.
+  - **Level 3 (Precision Hotspot Breakdown):** Pinpoints installed games (`steamapps\common`, `HoYoPlay\games`), shader caches, downloads, and developer workspaces.
+- **Low-Level Win32 & COM `Scripting.FileSystemObject`:** Directly interfaces with the Windows C++ COM runtime server `scrrun.dll` and multi-threaded Robocopy in List-Only mode (`/MT:16 /XJ /R:0 /W:0 /BYTES /NFL /NDL /NJH /NC /NS /NP`), reading directory sizes from NTFS structures without memory bloat or object allocations.
 - **Kernel Guardrails:** Strictly validates target paths to prevent deletion of protected operating system folders (`System32`, `Windows`, `Program Files`, and volume roots).
 
 ---

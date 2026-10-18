@@ -1,6 +1,6 @@
 # WiScripts Windows 🚀
 
-[![Release](https://img.shields.io/badge/release-v1.7.1-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
+[![Release](https://img.shields.io/badge/release-v1.7.2-blue.svg)](https://github.com/widlily-corp/WiScripts_Windows/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-v2.0-orange.svg)](https://tauri.app/)
 [![Rust](https://img.shields.io/badge/Rust-2021-DEA584.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB.svg)](https://react.dev/)
@@ -11,9 +11,18 @@
 
 ---
 
-## 🌟 Key Features (v1.7.1 Release)
+## 🌟 Key Features (v1.7.2 Release)
 
-### 💽 CrystalDiskInfo Architecture & S.M.A.R.T. Telemetry (v1.7.1)
+### ⚡ Turbo Drill-Down Disk Scanning Engine (v1.7.2)
+- **Hierarchical Drill-Down (L0–L3):** Replaces 40-minute full-drive crawls across millions of Windows system files with a smart descending 4-level drill-down:
+  - **Level 0 (<0.1s):** Queries `Win32_LogicalDisk` / `DriveInfo` for instant volume capacity and used space.
+  - **Level 1:** Sizing of 10–15 root directories on `C:\`. Identifies where 90% of disk space is concentrated (`Program Files`, `Users`, `Games`) and safely prunes Windows OS system folders (`WinSxS`, `$Recycle.Bin`).
+  - **Level 2:** Selectively crawls only the heavy giants, immediately identifying game launchers and user directories.
+  - **Level 3:** Surgical hotspot breakdown into games (Steam `steamapps\common`, HoYoPlay, Epic) and AppData caches.
+- **Low-Level Win32 & COM `Scripting.FileSystemObject`:** Queries NTFS kernel structures directly via `scrrun.dll` and multi-threaded Robocopy `/L` (`/MT:16 /XJ`) without allocating millions of in-memory .NET objects.
+- **Interactive UI Toggle:** 1-click **⚡ Turbo Drill-Down** mode in the Disk Space Analyzer with live telemetry.
+
+### 💽 CrystalDiskInfo Architecture & S.M.A.R.T. Telemetry
 - **Low-Level Win32 IOCTL Driver Engine:** Adopts low-level hardware communication standards directly from [CrystalDiskInfo](https://github.com/hiyohiyo/CrystalDiskInfo) (by Noriyuki Miyazaki / hiyohiyo):
   - `IOCTL_STORAGE_GET_DEVICE_NUMBER` (`0x002D1080`): Maps logical volumes (`C:`, `D:`) to `PhysicalDriveX`.
   - `NVME_LOG_PAGE_HEALTH_INFO` (Log Page `0x02`): Reads 15 authentic NVMe health metrics with Kelvin-to-Celsius conversion, spare reserve thresholds, and wear indicators.

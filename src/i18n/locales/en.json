@@ -1512,8 +1512,13 @@
     "reload_button": "Reload Application"
   },
   "gamingLatency": {
-    "title": "Gaming Low-Latency & DPC Latency Analyzer",
-    "subtitle": "Real-time kernel DPC/ISR jitter analysis, timer resolution control, and Game Boost orchestration",
+    "title": "Gaming Center & Smart Daemon",
+    "subtitle": "Autonomous game process optimization, shader cache cleaning, and DPC latency monitoring",
+    "tabs": {
+      "daemon": "⚡ Smart Game Daemon & Processes",
+      "shaderNuker": "🧹 Shader Cache Nuker (Stutter Eliminator)",
+      "latency": "📊 DPC Latency & Timer"
+    },
     "status": {
       "optimal": "Optimal (< 500 µs)",
       "moderate": "Moderate (500-1000 µs)",
@@ -1561,6 +1566,54 @@
       "boost_activated": "Game Boost activated for {{process}}",
       "boost_deactivated": "Game Boost deactivated. Services restored."
     }
+  },
+  "gamingDaemon": {
+    "heroTitle": "Smart Game Daemon Ready",
+    "heroDesc": "Pick an active process from the list or enable background auto-detect. When launched, WiScripts pins threads to P-cores, locks timer resolution to 0.5ms, and purges Standby RAM.",
+    "selectProcessBtn": "Select Process to Optimize",
+    "stopBoost": "Stop Optimization",
+    "autoDetectTitle": "Auto-Detect 3D Games",
+    "autoDetectDesc": "Scans foreground windows every 1.5s. Automatically initiates Game Boost when CS2, Valorant, Dota 2, Cyberpunk, etc. launch.",
+    "altTabTitle": "PID-Bound Latch (Zero Alt-Tab Jitter)",
+    "altTabDesc": "Optimizations latch to the process lifetime. Switching to browser or Discord via Alt-Tab will never thrash services or cause frame drops.",
+    "watchdogTitle": "Watchdog Crash Protection",
+    "watchdogDesc": "Even if the game crashes or Windows reboots abruptly, the session journal restores services and standard 15.6ms timer on next launch.",
+    "selector": {
+      "title": "Select Process to Optimize",
+      "processes": "processes",
+      "subtitle": "Choose an active 3D game or application to apply high-performance scheduling",
+      "searchPlaceholder": "Search by process name or window title...",
+      "scanning": "Scanning running processes...",
+      "notFound": "No matching processes found",
+      "tuningOptions": "Tuning Options",
+      "selectPrompt": "Select a process from the list on the left to configure tuning",
+      "optimizing": "Applying optimizations...",
+      "boostButton": "Optimize Process"
+    },
+    "tuning": {
+      "priority": "High Priority Class",
+      "priorityDesc": "Sets HIGH_PRIORITY_CLASS in Windows Task Manager",
+      "affinity": "Physical P-Cores",
+      "affinityDesc": "Pins game threads to physical/performance CPU cores",
+      "timer": "0.5ms System Timer",
+      "timerDesc": "Locks timer resolution to 5000 100ns units for frame pacing",
+      "ram": "Purge Standby RAM",
+      "ramDesc": "Clears standby list memory cache to prevent sudden paging stalls",
+      "services": "Suspend Background Services",
+      "servicesDesc": "Temporarily pauses SysMain, DiagTrack, and WSearch"
+    }
+  },
+  "shaderNuker": {
+    "title": "Shader Cache Nuker — Stutter Eliminator",
+    "heavyCache": "High Usage",
+    "description": "Purges stale and corrupted DirectX 12, Vulkan, NVIDIA, AMD, and Unreal Engine shader caches to eliminate in-game asset loading micro-stutters.",
+    "cleaning": "Purging caches...",
+    "cleanButton": "Nuke Shader Caches",
+    "totalSize": "Total Shader Caches",
+    "cachedFiles": "Cached Files",
+    "stutterImpact": "Stutter Impact",
+    "resultTitle": "Shader caches successfully nuked!",
+    "detectedStorages": "Detected Shader Storages"
   },
   "smartRam": {
     "title": "Smart RAM & Standby List Memory Purger",

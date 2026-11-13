@@ -1512,8 +1512,13 @@
     "reload_button": "Перезагрузить приложение"
   },
   "gamingLatency": {
-    "title": "Анализатор игровых задержек и DPC",
-    "subtitle": "Анализ задержек DPC/ISR в реальном времени, настройка системного таймера и режим Game Boost",
+    "title": "Игровой Центр & Smart Daemon",
+    "subtitle": "Автоматическая оптимизация процессов игр, очистка кэшей шейдеров и мониторинг DPC-задержек",
+    "tabs": {
+      "daemon": "⚡ Smart Game Daemon & Процессы",
+      "shaderNuker": "🧹 Shader Cache Nuker (Ликвидатор статтеров)",
+      "latency": "📊 DPC Latency & Таймер"
+    },
     "status": {
       "optimal": "Оптимально (< 500 мкс)",
       "moderate": "Умеренно (500-1000 мкс)",
@@ -1561,6 +1566,54 @@
       "boost_activated": "Режим Game Boost активирован для {{process}}",
       "boost_deactivated": "Режим Game Boost отключен. Службы восстановлены."
     }
+  },
+  "gamingDaemon": {
+    "heroTitle": "Smart Game Daemon готов к ускорению",
+    "heroDesc": "Выберите процесс вручную из списка запущенных окон или включите фоновое автоопределение. При запуске игры WiScripts привяжет потоки к P-ядрам, зафиксирует таймер на 0.5 мс и сбросит Standby RAM.",
+    "selectProcessBtn": "Выбрать процесс для ускорения",
+    "stopBoost": "Завершить ускорение",
+    "autoDetectTitle": "Автодетект 3D-игр",
+    "autoDetectDesc": "Мониторинг активного окна каждые 1.5 сек. Автоматический вход в Game Boost при запуске CS2, Valorant, Dota 2, Cyberpunk и других.",
+    "altTabTitle": "PID-Bound Latch (Без Alt-Tab фризов)",
+    "altTabDesc": "Настройки привязаны к жизни процесса. Переключение по Alt-Tab в браузер или Discord не дергает службы и не создает фреймтайм-спайков.",
+    "watchdogTitle": "Watchdog Crash Protection",
+    "watchdogDesc": "Даже при аварийном завершении игры или Windows сессионный журнал восстановит службы и 15.6 мс таймер на следующем старте.",
+    "selector": {
+      "title": "Выбор процесса для оптимизации",
+      "processes": "процессов",
+      "subtitle": "Выберите активную 3D-игру или приложение для включения режима максимальной производительности",
+      "searchPlaceholder": "Поиск по имени процесса или заголовку окна...",
+      "scanning": "Сканирование процессов...",
+      "notFound": "Процессы не найдены",
+      "tuningOptions": "Параметры ускорения",
+      "selectPrompt": "Выберите процесс из списка слева для настройки",
+      "optimizing": "Применение оптимизаций...",
+      "boostButton": "Оптимизировать процесс"
+    },
+    "tuning": {
+      "priority": "Высокий приоритет",
+      "priorityDesc": "Приоритет HIGH_PRIORITY_CLASS в диспетчере задач",
+      "affinity": "Физические P-ядра",
+      "affinityDesc": "Изоляция потоков игры на основных физических ядрах",
+      "timer": "Таймер 0.5 мс",
+      "timerDesc": "Фиксация 5000 100ns для плавного фреймпейсинга",
+      "ram": "Сброс Standby RAM",
+      "ramDesc": "Очистка кэша памяти перед запуском для устранения фризов",
+      "services": "Пауза фоновых служб",
+      "servicesDesc": "Временная пауза SysMain, DiagTrack и WSearch"
+    }
+  },
+  "shaderNuker": {
+    "title": "Shader Cache Nuker — Ликвидатор статтеров",
+    "heavyCache": "Большой объём",
+    "description": "Удаление устаревших и фрагментированных кэшей DirectX 12, Vulkan, NVIDIA, AMD и Unreal Engine для устранения фризов и статтеров при загрузке ассетов в играх.",
+    "cleaning": "Очистка кэшей...",
+    "cleanButton": "Очистить кэши шейдеров",
+    "totalSize": "Общий объём кэшей",
+    "cachedFiles": "Файлов кэша",
+    "stutterImpact": "Влияние на статтеры",
+    "resultTitle": "Кэши шейдеров успешно очищены!",
+    "detectedStorages": "Обнаруженные хранилища шейдеров"
   },
   "smartRam": {
     "title": "Очистка памяти Smart RAM и Standby List",

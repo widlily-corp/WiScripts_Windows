@@ -1,6 +1,15 @@
 import { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { LatencyMetrics, TimerResolutionInfo, GameBoostStatus } from '../../types';
+import {
+  LatencyMetrics,
+  TimerResolutionInfo,
+  GameBoostStatus,
+  DaemonStatus,
+  ProcessSelectorItem,
+  GameOptimizationConfig,
+  ShaderScanSummary,
+  ShaderNukeResult,
+} from '../../types';
 import type { AppState } from '../useAppStore';
 import { getErrorMessage } from '../../utils';
 
@@ -8,6 +17,13 @@ export interface GamingSlice {
   latencyMetrics: LatencyMetrics | null;
   timerResolution: TimerResolutionInfo | null;
   gameBoostStatus: GameBoostStatus | null;
+  daemonStatus: DaemonStatus | null;
+  runningProcesses: ProcessSelectorItem[];
+  isProcessesLoading: boolean;
+  shaderSummary: ShaderScanSummary | null;
+  isScanningShaders: boolean;
+  isNukingShaders: boolean;
+  nukeResult: ShaderNukeResult | null;
   latencyHistory: number[];
   isGamingLoading: boolean;
   gamingError: string | null;
@@ -16,12 +32,26 @@ export interface GamingSlice {
   setTimerResolution: (resolution100ns: number) => Promise<TimerResolutionInfo | null>;
   toggleGameBoost: (targetPid?: number | null, enable?: boolean) => Promise<GameBoostStatus | null>;
   fetchGameBoostStatus: () => Promise<GameBoostStatus | null>;
+  fetchDaemonStatus: () => Promise<DaemonStatus | null>;
+  setDaemonAutoDetect: (enabled: boolean) => Promise<DaemonStatus | null>;
+  fetchRunningProcesses: () => Promise<ProcessSelectorItem[]>;
+  optimizeGameProcess: (config: GameOptimizationConfig) => Promise<DaemonStatus | null>;
+  restoreGameProcess: () => Promise<DaemonStatus | null>;
+  scanShaderCaches: () => Promise<ShaderScanSummary | null>;
+  nukeShaderCaches: (selectedIds?: string[]) => Promise<ShaderNukeResult | null>;
 }
 
 export const createGamingSlice: StateCreator<AppState, [], [], GamingSlice> = (set, get) => ({
   latencyMetrics: null,
   timerResolution: null,
   gameBoostStatus: null,
+  daemonStatus: null,
+  runningProcesses: [],
+  isProcessesLoading: false,
+  shaderSummary: null,
+  isScanningShaders: false,
+  isNukingShaders: false,
+  nukeResult: null,
   latencyHistory: [],
   isGamingLoading: false,
   gamingError: null,
@@ -116,6 +146,152 @@ export const createGamingSlice: StateCreator<AppState, [], [], GamingSlice> = (s
     } catch (err) {
       const errMsg = getErrorMessage(err);
       set({ gamingError: errMsg });
+      return null;
+    }
+  },
+
+  fetchDaemonStatus: async () => {
+    try {
+      const status = await invoke<DaemonStatus>('get_daemon_status');
+      set({ daemonStatus: status });
+      return status;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ gamingError: errMsg });
+      return null;
+    }
+  },
+
+  setDaemonAutoDetect: async (enabled: boolean) => {
+    const { addLog, addToast } = get();
+    try {
+      const status = await invoke<DaemonStatus>('set_daemon_auto_detect', { enabled });
+      set({ daemonStatus: status });
+      addLog({
+        level: 'info',
+        message: `Smart Game Daemon auto-detect set to ${enabled ? 'ENABLED' : 'DISABLED'}`,
+      });
+      addToast({
+        type: 'info',
+        title: 'Smart Daemon Auto-Detect',
+        message: enabled ? 'Daemon is actively monitoring for games.' : 'Auto-detect disabled.',
+      });
+      return status;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ gamingError: errMsg });
+      return null;
+    }
+  },
+
+  fetchRunningProcesses: async () => {
+    set({ isProcessesLoading: true });
+    try {
+      const procs = await invoke<ProcessSelectorItem[]>('get_running_processes_for_selector');
+      set({ runningProcesses: procs, isProcessesLoading: false });
+      return procs;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ isProcessesLoading: false, gamingError: errMsg });
+      return [];
+    }
+  },
+
+  optimizeGameProcess: async (config: GameOptimizationConfig) => {
+    const { addLog, addToast } = get();
+    set({ isGamingLoading: true });
+    addLog({
+      level: 'cmd',
+      message: `Optimizing game process '${config.processName}' (PID ${config.targetPid}) with high priority, affinity & timer resolution...`,
+    });
+    try {
+      const status = await invoke<DaemonStatus>('optimize_game_process', { config });
+      set({ daemonStatus: status, isGamingLoading: false });
+      addLog({
+        level: 'info',
+        message: `Process '${config.processName}' successfully boosted! High priority: ${config.setHighPriority}, Physical cores: ${config.pinPhysicalCores}, Timer: ${config.setTimerResolution}`,
+      });
+      addToast({
+        type: 'success',
+        title: 'Game Process Boosted',
+        message: `Optimized '${config.processName}' with high priority and performance scheduling.`,
+      });
+      return status;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ isGamingLoading: false, gamingError: errMsg });
+      addLog({ level: 'error', message: `Optimization failed: ${errMsg}` });
+      addToast({ type: 'error', title: 'Optimization Failed', message: errMsg });
+      return null;
+    }
+  },
+
+  restoreGameProcess: async () => {
+    const { addLog, addToast } = get();
+    set({ isGamingLoading: true });
+    try {
+      const status = await invoke<DaemonStatus>('restore_game_process');
+      set({ daemonStatus: status, isGamingLoading: false });
+      addLog({
+        level: 'info',
+        message: 'Game optimization restored: standard services and timer resolution reinstated.',
+      });
+      addToast({
+        type: 'info',
+        title: 'Game Boost Restored',
+        message: 'System returned to standard power profile.',
+      });
+      return status;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ isGamingLoading: false, gamingError: errMsg });
+      return null;
+    }
+  },
+
+  scanShaderCaches: async () => {
+    set({ isScanningShaders: true });
+    try {
+      const summary = await invoke<ShaderScanSummary>('scan_shader_caches');
+      set({ shaderSummary: summary, isScanningShaders: false });
+      return summary;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ isScanningShaders: false, gamingError: errMsg });
+      return null;
+    }
+  },
+
+  nukeShaderCaches: async (selectedIds?: string[]) => {
+    const { addLog, addToast } = get();
+    set({ isNukingShaders: true });
+    addLog({
+      level: 'cmd',
+      message: 'Nuking shader caches (DirectX, NVIDIA, AMD, Unreal Engine)...',
+    });
+    try {
+      const result = await invoke<ShaderNukeResult>('nuke_shader_caches', {
+        selectedIds: selectedIds ?? null,
+      });
+      set({ nukeResult: result, isNukingShaders: false });
+      const freedMb = (result.bytesFreed / (1024 * 1024)).toFixed(1);
+      addLog({
+        level: 'info',
+        message: `Shader caches cleaned! Freed ${freedMb} MB across ${result.filesRemoved} files. (Skipped ${result.skippedLockedCount} locked by driver)`,
+      });
+      addToast({
+        type: 'success',
+        title: 'Shader Caches Nuked',
+        message: `Freed ${freedMb} MB. Stutter sources eliminated!`,
+      });
+      // Refresh scan after nuke
+      get().scanShaderCaches();
+      return result;
+    } catch (err) {
+      const errMsg = getErrorMessage(err);
+      set({ isNukingShaders: false, gamingError: errMsg });
+      addLog({ level: 'error', message: `Failed to nuke shader caches: ${errMsg}` });
+      addToast({ type: 'error', title: 'Shader Nuker Error', message: errMsg });
       return null;
     }
   },

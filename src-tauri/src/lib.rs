@@ -89,6 +89,8 @@ pub fn run() {
             commands::remove_installed_app_entry,
             commands::scan_system_cleaner,
             commands::clean_system_items,
+            commands::scan_shader_caches,
+            commands::nuke_shader_caches,
             commands::scan_duplicate_files,
             commands::scan_large_files,
             commands::delete_files,

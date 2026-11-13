@@ -1181,6 +1181,24 @@ pub async fn clean_system_items(
 }
 
 #[tauri::command]
+pub async fn scan_shader_caches() -> Result<cleaner::shader_nuker::ShaderScanSummary, AppError> {
+    log::info!("[IPC] scan_shader_caches request received");
+    tauri::async_runtime::spawn_blocking(cleaner::shader_nuker::scan_shader_caches)
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in scan_shader_caches: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn nuke_shader_caches(
+    selected_ids: Option<Vec<String>>,
+) -> Result<cleaner::shader_nuker::ShaderNukeResult, AppError> {
+    log::info!("[IPC] nuke_shader_caches request received");
+    tauri::async_runtime::spawn_blocking(move || cleaner::shader_nuker::nuke_shader_caches(selected_ids))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in nuke_shader_caches: {}", e)))?
+}
+
+#[tauri::command]
 pub async fn scan_duplicate_files(
     target_dir: Option<String>,
 ) -> Result<Vec<fs_storage::DuplicateGroup>, AppError> {

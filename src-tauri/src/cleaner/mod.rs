@@ -1,3 +1,5 @@
+pub mod shader_nuker;
+
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

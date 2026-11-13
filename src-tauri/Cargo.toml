@@ -66,6 +66,5 @@ windows = { version = "0.58.0", features = [
     "Win32_Networking_WinSock",
     "Win32_Storage_FileSystem",
     "Win32_System_Ioctl",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
-
-

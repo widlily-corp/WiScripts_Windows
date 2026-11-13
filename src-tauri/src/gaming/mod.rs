@@ -1,3 +1,5 @@
+pub mod daemon;
+
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use crate::error::AppError;
@@ -508,6 +510,37 @@ pub fn get_game_boost_status() -> Result<GameBoostStatus, AppError> {
         suspended_services: state.suspended_services.clone(),
         timer_resolution_applied: state.timer_resolution_applied,
     })
+}
+
+#[tauri::command]
+pub async fn get_running_processes_for_selector() -> Result<Vec<daemon::ProcessSelectorItem>, AppError> {
+    tauri::async_runtime::spawn_blocking(daemon::get_running_processes_for_selector)
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in get_running_processes_for_selector: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn optimize_game_process(config: daemon::GameOptimizationConfig) -> Result<daemon::DaemonStatus, AppError> {
+    tauri::async_runtime::spawn_blocking(move || daemon::optimize_game_process(config))
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in optimize_game_process: {}", e)))?
+}
+
+#[tauri::command]
+pub async fn restore_game_process() -> Result<daemon::DaemonStatus, AppError> {
+    tauri::async_runtime::spawn_blocking(daemon::restore_game_process)
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in restore_game_process: {}", e)))?
+}
+
+#[tauri::command]
+pub fn get_daemon_status() -> Result<daemon::DaemonStatus, AppError> {
+    daemon::get_daemon_status()
+}
+
+#[tauri::command]
+pub fn set_daemon_auto_detect(enabled: bool) -> Result<daemon::DaemonStatus, AppError> {
+    daemon::set_daemon_auto_detect(enabled)
 }
 
 #[cfg(test)]

@@ -36,6 +36,11 @@ pub fn run() {
         eprintln!("Failed to initialize logger: {}", err);
     }
 
+    // Startup Crash Recovery: Check for orphaned daemon session and restore state
+    if let Err(err) = gaming::daemon::check_and_recover_daemon_session() {
+        log::error!("Failed to check daemon session recovery: {}", err);
+    }
+
     let metrics_collector = Arc::new(Mutex::new(metrics::MetricsCollector::new()));
 
     tauri::Builder::default()
@@ -127,6 +132,11 @@ pub fn run() {
             gaming::set_timer_resolution,
             gaming::toggle_game_boost,
             gaming::get_game_boost_status,
+            gaming::get_running_processes_for_selector,
+            gaming::optimize_game_process,
+            gaming::restore_game_process,
+            gaming::get_daemon_status,
+            gaming::set_daemon_auto_detect,
             memory::get_memory_breakdown,
             memory::purge_standby_memory,
             memory::purge_working_sets,

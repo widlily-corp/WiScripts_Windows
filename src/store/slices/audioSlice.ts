@@ -9,6 +9,18 @@ import {
 import type { AppState } from '../useAppStore';
 import { getErrorMessage } from '../../utils';
 
+const VOLUME_IPC_THROTTLE_MS = 80;
+
+interface PendingVolumeEntry {
+  timer: ReturnType<typeof setTimeout> | null;
+  lastSentAt: number;
+  latestArgs: { volume: number; muted: boolean; dryRun: boolean };
+  resolvers: Array<(value: ExecutionSummary | null) => void>;
+}
+
+const pendingVolumeByPid = new Map<number, PendingVolumeEntry>();
+const volumeRollbackBaselineByPid = new Map<number, { volume: number; isMuted: boolean }>();
+
 export interface AudioSlice {
   audioDevicesPayload: AudioDevicesPayload | null;
   audioDevices: AudioDevicesPayload | null;
@@ -100,6 +112,19 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
         totalDurationMs: duration,
         isDryRun: currentDryRun,
       };
+
+      if (currentDryRun) {
+        addLog({
+          level: 'info',
+          message: `[Dry-Run] Simulated setting global audio default device for ${flowStr} to "${deviceId}".`,
+        });
+        addToast({
+          type: 'info',
+          title: 'Dry-Run Simulation',
+          message: `Simulated switching default ${flowStr} device. No system audio changes were applied.`,
+        });
+        return summary;
+      }
 
       addLog({
         level: 'info',
@@ -210,10 +235,19 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
     }
   },
 
-  setAppVolume: async (pid: number, volume: number, muted: boolean, dryRun?: boolean) => {
+  setAppVolume: (pid: number, volume: number, muted: boolean, dryRun?: boolean) => {
     const currentDryRun = dryRun ?? get().dryRunMode;
-    const { addLog } = get();
     const clampedVol = Math.max(0, Math.min(1, volume));
+
+    if (!volumeRollbackBaselineByPid.has(pid)) {
+      const existing = get().appAudioSessions.find((s) => s.pid === pid);
+      if (existing) {
+        volumeRollbackBaselineByPid.set(pid, {
+          volume: existing.volume,
+          isMuted: existing.isMuted,
+        });
+      }
+    }
 
     set((state) => ({
       appAudioSessions: state.appAudioSessions.map((session) => {
@@ -224,29 +258,90 @@ export const createAudioSlice: StateCreator<AppState, [], [], AudioSlice> = (set
       }),
     }));
 
-    try {
-      if (!currentDryRun) {
-        await invoke('set_app_volume', { pid, volume: clampedVol, muted });
+    const dispatchVolumeIpc = async (
+      targetVol: number,
+      targetMuted: boolean,
+      targetDryRun: boolean
+    ): Promise<ExecutionSummary | null> => {
+      try {
+        if (!targetDryRun) {
+          await invoke('set_app_volume', { pid, volume: targetVol, muted: targetMuted });
+        }
+        const entry = pendingVolumeByPid.get(pid);
+        if (entry && entry.timer) {
+          volumeRollbackBaselineByPid.set(pid, { volume: targetVol, isMuted: targetMuted });
+        } else {
+          volumeRollbackBaselineByPid.delete(pid);
+        }
+        return {
+          success: true,
+          executedActions: [
+            {
+              id: `volume_app_${pid}`,
+              name: `Set App PID ${pid} Volume/Mute`,
+              command: `Set-AppVolume -PID ${pid} -Volume ${targetVol} -Muted ${targetMuted}`,
+              output: { exitCode: 0, stdout: 'App volume updated', stderr: '' },
+              skipped: targetDryRun,
+            },
+          ],
+          totalDurationMs: 5,
+          isDryRun: targetDryRun,
+        };
+      } catch (err) {
+        const errMsg = getErrorMessage(err);
+        get().addLog({ level: 'error', message: `Set app volume failed for PID ${pid}: ${errMsg}` });
+        const baseline = volumeRollbackBaselineByPid.get(pid);
+        const pending = pendingVolumeByPid.get(pid);
+        if (baseline && !pending?.timer) {
+          set((state) => ({
+            appAudioSessions: state.appAudioSessions.map((session) =>
+              session.pid === pid
+                ? { ...session, volume: baseline.volume, isMuted: baseline.isMuted }
+                : session
+            ),
+          }));
+          volumeRollbackBaselineByPid.delete(pid);
+        }
+        return null;
       }
-      const summary: ExecutionSummary = {
-        success: true,
-        executedActions: [
-          {
-            id: `volume_app_${pid}`,
-            name: `Set App PID ${pid} Volume/Mute`,
-            command: `Set-AppVolume -PID ${pid} -Volume ${clampedVol} -Muted ${muted}`,
-            output: { exitCode: 0, stdout: 'App volume updated', stderr: '' },
-            skipped: currentDryRun,
-          },
-        ],
-        totalDurationMs: 5,
-        isDryRun: currentDryRun,
+    };
+
+    const now = Date.now();
+    let entry = pendingVolumeByPid.get(pid);
+    if (!entry) {
+      entry = {
+        timer: null,
+        lastSentAt: 0,
+        latestArgs: { volume: clampedVol, muted, dryRun: currentDryRun },
+        resolvers: [],
       };
-      return summary;
-    } catch (err) {
-      const errMsg = getErrorMessage(err);
-      addLog({ level: 'error', message: `Set app volume failed for PID ${pid}: ${errMsg}` });
-      return null;
+      pendingVolumeByPid.set(pid, entry);
+    } else {
+      entry.latestArgs = { volume: clampedVol, muted, dryRun: currentDryRun };
     }
+
+    if (now - entry.lastSentAt >= VOLUME_IPC_THROTTLE_MS && !entry.timer) {
+      entry.lastSentAt = now;
+      return dispatchVolumeIpc(clampedVol, muted, currentDryRun);
+    }
+
+    return new Promise<ExecutionSummary | null>((resolve) => {
+      entry!.resolvers.push(resolve);
+      if (!entry!.timer) {
+        const delay = Math.max(10, VOLUME_IPC_THROTTLE_MS - (now - entry!.lastSentAt));
+        entry!.timer = setTimeout(async () => {
+          const currentEntry = pendingVolumeByPid.get(pid);
+          if (!currentEntry) return;
+          currentEntry.timer = null;
+          currentEntry.lastSentAt = Date.now();
+          const { volume: finalVol, muted: finalMuted, dryRun: finalDryRun } = currentEntry.latestArgs;
+          const resolvers = currentEntry.resolvers.splice(0, currentEntry.resolvers.length);
+          const result = await dispatchVolumeIpc(finalVol, finalMuted, finalDryRun);
+          for (const res of resolvers) {
+            res(result);
+          }
+        }, delay);
+      }
+    });
   },
 });

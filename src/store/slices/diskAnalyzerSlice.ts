@@ -14,6 +14,8 @@ import {
 } from '../../types';
 import { getErrorMessage, formatBytes, syncTreeAfterDeletion, isSystemProtectedPath } from '../../utils';
 
+let scanListenerGeneration = 0;
+
 export interface DiskAnalyzerSlice {
   // Drives & Target
   drives: DiskDriveInfo[];
@@ -28,7 +30,6 @@ export interface DiskAnalyzerSlice {
   activeScanId: string | null;
   scanProgress: DiskScanProgressPayload | null;
   scanError: string | null;
-  error: string | null;
   unlistenScanProgress: UnlistenFn | null;
 
   // Navigation & Tree Interaction
@@ -88,7 +89,6 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
   activeScanId: null,
   scanProgress: null,
   scanError: null,
-  error: null,
   unlistenScanProgress: null,
 
   viewMode: 'tree',
@@ -105,7 +105,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
   lastDeletionResult: null,
 
   fetchDrives: async () => {
-    set({ isDrivesLoading: true, error: null });
+    set({ isDrivesLoading: true });
     try {
       const drives = await invoke<DiskDriveInfo[]>('get_disk_drives');
       const normalizedDrives = drives.map((d) => ({
@@ -121,7 +121,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
       return normalizedDrives;
     } catch (err) {
       const msg = getErrorMessage(err);
-      set({ isDrivesLoading: false, error: msg });
+      set({ isDrivesLoading: false });
       get().addToast({
         type: 'error',
         title: 'Drive Discovery Error',
@@ -136,6 +136,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
   setFastMode: (fast: boolean) => set({ fastMode: fast }),
 
   setupScanProgressListener: async () => {
+    const gen = ++scanListenerGeneration;
     const existing = get().unlistenScanProgress;
     if (existing) {
       existing();
@@ -144,9 +145,21 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
 
     try {
       const unlisten = await listen<DiskScanProgressPayload>('disk-scan-progress', (event) => {
-        const payload = event.payload;
-        set({ scanProgress: payload });
+        if (!get().isScanning) return;
+        const payload = event.payload as DiskScanProgressPayload & { scanId?: string };
+        const currentScanId = get().activeScanId;
+        if (payload.scanId && currentScanId && payload.scanId !== currentScanId) {
+          return;
+        }
+        set({ scanProgress: event.payload });
       });
+
+      if (gen !== scanListenerGeneration || !get().isScanning) {
+        unlisten();
+        const dummyUnlisten: UnlistenFn = () => {};
+        return dummyUnlisten;
+      }
+
       set({ unlistenScanProgress: unlisten });
       return unlisten;
     } catch {
@@ -156,6 +169,7 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
   },
 
   cleanupScanProgressListener: () => {
+    scanListenerGeneration++;
     const unlisten = get().unlistenScanProgress;
     if (unlisten) {
       unlisten();
@@ -172,11 +186,13 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
       isScanning: true,
       activeScanId: scanId,
       scanError: null,
-      error: null,
       scanProgress: null,
     });
 
     await get().setupScanProgressListener();
+    if (get().activeScanId !== scanId) {
+      return null;
+    }
 
     addLog({
       level: 'cmd',
@@ -191,6 +207,10 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
         fast_mode: get().fastMode,
         fastMode: get().fastMode,
       });
+
+      if (get().activeScanId !== scanId) {
+        return null;
+      }
 
       const normalizedResult: DiskScanResult = {
         ...result,
@@ -229,12 +249,14 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
 
       return normalizedResult;
     } catch (err) {
+      if (get().activeScanId !== scanId) {
+        return null;
+      }
       const msg = getErrorMessage(err);
       set({
         isScanning: false,
         activeScanId: null,
         scanError: msg,
-        error: msg,
       });
 
       addLog({
@@ -415,20 +437,51 @@ export const createDiskAnalyzerSlice: StateCreator<AppState, [], [], DiskAnalyze
     if (!currentResult || !currentResult.tree) return;
 
     const updatedTree = syncTreeAfterDeletion(currentResult.tree, deletedPath, freedBytes, itemsCount);
+    const treeFreedBytes = Math.max(0, currentResult.tree.sizeBytes - updatedTree.sizeBytes);
+    const reconciledFreed = updatedTree !== currentResult.tree ? treeFreedBytes : freedBytes;
     const targetNorm = deletedPath.replace(/\//g, '\\').toLowerCase();
 
-    const updatedTopFolders = (currentResult.topFolders || currentResult.largestFolders || []).filter(
-      (f) => f.path.replace(/\//g, '\\').toLowerCase() !== targetNorm
-    );
-    const updatedTopFiles = (currentResult.topFiles || currentResult.largestFiles || []).filter(
-      (f) => f.path.replace(/\//g, '\\').toLowerCase() !== targetNorm
-    );
+    const findNode = (node: FsTreeNode): FsTreeNode | null => {
+      if (node.path.replace(/\//g, '\\').toLowerCase() === targetNorm) return node;
+      if (node.children) {
+        for (const ch of node.children) {
+          const match = findNode(ch);
+          if (match) return match;
+        }
+      }
+      return null;
+    };
+    const remainingTargetNode = findNode(updatedTree);
+
+    const nextTotalBytes =
+      currentResult.tree.sizeBytes === currentResult.totalBytes
+        ? updatedTree.sizeBytes
+        : Math.max(0, currentResult.totalBytes - reconciledFreed);
+
+    const reconcileRankedList = (items: RankedFsItem[]) =>
+      items
+        .flatMap((item) => {
+          if (item.path.replace(/\//g, '\\').toLowerCase() !== targetNorm) {
+            return [item];
+          }
+          return remainingTargetNode
+            ? [{ ...item, sizeBytes: remainingTargetNode.sizeBytes }]
+            : [];
+        })
+        .map((item) => ({
+          ...item,
+          percentageOfTotal:
+            nextTotalBytes > 0 ? Number(((item.sizeBytes / nextTotalBytes) * 100).toFixed(2)) : 0,
+        }));
+
+    const updatedTopFolders = reconcileRankedList(currentResult.topFolders || currentResult.largestFolders || []);
+    const updatedTopFiles = reconcileRankedList(currentResult.topFiles || currentResult.largestFiles || []);
 
     const updatedResult: DiskScanResult = {
       ...currentResult,
       tree: updatedTree,
       rootNode: updatedTree,
-      totalBytes: Math.max(0, currentResult.totalBytes - freedBytes),
+      totalBytes: nextTotalBytes,
       totalFiles: Math.max(0, currentResult.totalFiles - itemsCount),
       topFolders: updatedTopFolders,
       largestFolders: updatedTopFolders,

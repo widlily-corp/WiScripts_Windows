@@ -8,9 +8,20 @@ import type {
   ScriptManifestEntry,
   ScriptCategory,
   ScriptRiskLevel,
-  ScriptParameter,
   ScriptParameterValue,
 } from '../../types';
+import { getErrorMessage } from '../../utils/errors';
+import { exportLiveOutputLogs } from '../../utils/scriptLogExporter';
+import {
+  formatScriptWithParameters,
+  buildInitialParameterValues,
+} from '../../utils/scriptParameters';
+import {
+  loadPersistedExecutionHistory,
+  savePersistedExecutionHistory,
+} from '../../utils/historyStorage';
+
+export { formatScriptWithParameters };
 
 export interface ScriptOutputLine {
   id: string;
@@ -24,128 +35,9 @@ export interface ScriptOutputLinePayload {
   stream: 'stdout' | 'stderr';
 }
 
-/**
- * Extracts the top-level param(...) header block from a PowerShell script,
- * including any preceding comments (<# ... #>, #) or attributes ([CmdletBinding()]),
- * properly tracking nested parentheses within parameter attributes and default values.
- */
-function extractParamBlockHeader(code: string): string | null {
-  const clean = code.replace(/^\uFEFF/, '');
-  const paramRegex = /(?:^|\s)(param\s*\()/i;
-  const match = paramRegex.exec(clean);
-  if (!match) {
-    return null;
-  }
-
-  const startIndex = match.index + (match[0].length - match[1].length);
-  const openParenIndex = clean.indexOf('(', startIndex);
-  if (openParenIndex === -1) {
-    return null;
-  }
-
-  let depth = 1;
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-
-  for (let i = openParenIndex + 1; i < clean.length; i++) {
-    const char = clean[i];
-    const prev = clean[i - 1];
-
-    if (char === "'" && !inDoubleQuote) {
-      if (inSingleQuote && clean[i + 1] === "'") {
-        i++; // skip escaped single quote ''
-      } else {
-        inSingleQuote = !inSingleQuote;
-      }
-      continue;
-    }
-    if (char === '"' && !inSingleQuote) {
-      if (prev !== '`') {
-        inDoubleQuote = !inDoubleQuote;
-      }
-      continue;
-    }
-    if (inSingleQuote || inDoubleQuote) {
-      continue;
-    }
-
-    if (char === '(') {
-      depth++;
-    } else if (char === ')') {
-      depth--;
-      if (depth === 0) {
-        // Return everything from script start (after BOM) up to end of param(...)
-        return clean.substring(0, i + 1).trim();
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Synthesizes a clean PowerShell param(...) block for scripts that lack one,
- * ensuring root AST ParamBlock preservation.
- */
-function synthesizeParamBlock(parameters: ScriptParameter[]): string {
-  const paramDecls = parameters.map((p) => {
-    if (p.type === 'boolean') {
-      return `  [switch]$${p.name}`;
-    } else if (p.type === 'number') {
-      return `  [double]$${p.name}`;
-    } else {
-      return `  [string]$${p.name}`;
-    }
-  });
-  return `param(\n${paramDecls.join(',\n')}\n)`;
-}
-
-export function formatScriptWithParameters(
-  rawContent: string,
-  parameters: ScriptParameter[],
-  values: Record<string, ScriptParameterValue>
-): string {
-  if (!parameters || parameters.length === 0 || !values) {
-    return rawContent;
-  }
-
-  // 1. Strip UTF-8 BOM if present at start
-  const cleanContent = rawContent.replace(/^\uFEFF/, '').trim();
-
-  // 2. Build PowerShell CLI arguments with strict typing and injection protection
-  const args: string[] = [];
-  for (const param of parameters) {
-    const val = values[param.name];
-    if (val === undefined || val === null || val === '') {
-      continue;
-    }
-
-    if (param.type === 'boolean') {
-      // Use -$name:$true or -$name:$false (prevents ParameterBindingArgumentTransformationException)
-      const boolToken = Boolean(val) ? '$true' : '$false';
-      args.push(`-${param.name}:${boolToken}`);
-    } else if (param.type === 'number') {
-      const numVal = Number(val);
-      if (!Number.isNaN(numVal) && Number.isFinite(numVal)) {
-        args.push(`-${param.name} ${numVal}`);
-      }
-    } else {
-      // Escape single quotes for PowerShell single-quoted literal: ' -> ''
-      const strVal = String(val).replace(/'/g, "''");
-      args.push(`-${param.name} '${strVal}'`);
-    }
-  }
-
-  if (args.length === 0) {
-    return cleanContent;
-  }
-
-  // 3. Preserve root AST ParamBlock to ensure PowerShell 5.1/7 AST and static analyzer compliance
-  const existingHeader = extractParamBlockHeader(cleanContent);
-  const rootParamBlock = existingHeader || synthesizeParamBlock(parameters);
-
-  return `${rootParamBlock}\n\n& {\n${cleanContent}\n} ${args.join(' ')}\n`;
-}
+let scriptOutputSetupPromise: Promise<UnlistenFn> | null = null;
+let scriptOutputHasViewSubscriber = false;
+let scriptOutputPendingCleanup = false;
 
 export type ExecutionStatus = 'success' | 'failed' | 'cancelled';
 
@@ -217,6 +109,7 @@ export interface ScriptRunnerSlice {
 
   // Execution History State & Actions
   executionHistory: ScriptExecutionRecord[];
+  hydrateExecutionHistory: () => Promise<void>;
   addHistoryEntry: (entry: ScriptExecutionRecord) => void;
   clearHistory: () => void;
   deleteHistoryEntry: (id: string) => void;
@@ -390,7 +283,46 @@ Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitect
 Write-Host "Diagnostic completed successfully." -ForegroundColor Green
 `;
 
-export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunnerSlice> = (set, get) => ({
+export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunnerSlice> = (set, get) => {
+  const ensureScriptOutputListener = async (): Promise<UnlistenFn> => {
+    const currentUnlisten = get().unlistenScriptOutput;
+    if (currentUnlisten) {
+      return currentUnlisten;
+    }
+    if (scriptOutputSetupPromise) {
+      return scriptOutputSetupPromise;
+    }
+
+    scriptOutputSetupPromise = (async () => {
+      try {
+        const unlisten = await listen<ScriptOutputLinePayload>('script-output-line', (event) => {
+          get().addOutputLine(event.payload);
+        });
+
+        if (scriptOutputPendingCleanup && !get().isExecutingScript && !scriptOutputHasViewSubscriber) {
+          unlisten();
+          const noop: UnlistenFn = () => {};
+          return noop;
+        }
+
+        set({ unlistenScriptOutput: unlisten });
+        return unlisten;
+      } catch (err) {
+        console.warn('[ScriptRunner] Could not set up Tauri event listener (web/mock environment):', err);
+        const dummyUnlisten: UnlistenFn = () => {};
+        if (!(scriptOutputPendingCleanup && !get().isExecutingScript && !scriptOutputHasViewSubscriber)) {
+          set({ unlistenScriptOutput: dummyUnlisten });
+        }
+        return dummyUnlisten;
+      } finally {
+        scriptOutputSetupPromise = null;
+      }
+    })();
+
+    return scriptOutputSetupPromise;
+  };
+
+  return {
   scriptContent: DEFAULT_SCRIPT_CONTENT,
   scriptType: 'ps1',
   uploadedFileName: null,
@@ -437,20 +369,40 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   setParameterRunAsAdmin: (runAsAdmin) => set({ parameterRunAsAdmin: runAsAdmin }),
 
   // Execution History Actions
+  hydrateExecutionHistory: async () => {
+    const persisted = await loadPersistedExecutionHistory();
+    if (persisted.length === 0) return;
+    set((state) => {
+      const existing = state.executionHistory || [];
+      const seen = new Set(existing.map((e) => e.id));
+      const merged = [
+        ...existing,
+        ...persisted.filter((e) => !seen.has(e.id)),
+      ].slice(0, MAX_HISTORY_ENTRIES);
+      return { executionHistory: merged };
+    });
+  },
   addHistoryEntry: (entry) => {
     const boundedEntry: ScriptExecutionRecord = {
       ...entry,
       logLines: (entry.logLines || []).slice(-MAX_HISTORY_LOG_LINES),
     };
-    set((state) => ({
-      executionHistory: [boundedEntry, ...(state.executionHistory || [])].slice(0, MAX_HISTORY_ENTRIES),
-    }));
+    set((state) => {
+      const next = [boundedEntry, ...(state.executionHistory || [])].slice(0, MAX_HISTORY_ENTRIES);
+      void savePersistedExecutionHistory(next);
+      return { executionHistory: next };
+    });
   },
-  clearHistory: () => set({ executionHistory: [] }),
+  clearHistory: () => {
+    void savePersistedExecutionHistory([]);
+    set({ executionHistory: [] });
+  },
   deleteHistoryEntry: (id) =>
-    set((state) => ({
-      executionHistory: (state.executionHistory || []).filter((e) => e.id !== id),
-    })),
+    set((state) => {
+      const next = (state.executionHistory || []).filter((e) => e.id !== id);
+      void savePersistedExecutionHistory(next);
+      return { executionHistory: next };
+    }),
   rerunHistoryEntry: async (record) => {
     set({
       scriptContent: record.rawContent,
@@ -483,7 +435,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         get().addToast({
           type: 'error',
           title: 'Impact Simulator Error',
-          message: `Could not load script code: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Could not load script code: ${getErrorMessage(err)}`,
         });
       }
     } else {
@@ -567,27 +519,20 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   clearOutputLogs: () => set({ outputLogs: [] }),
 
   setupScriptOutputListener: async () => {
-    const currentUnlisten = get().unlistenScriptOutput;
-    if (currentUnlisten) {
-      return currentUnlisten;
-    }
-
-    try {
-      const unlisten = await listen<ScriptOutputLinePayload>('script-output-line', (event) => {
-        get().addOutputLine(event.payload);
-      });
-
-      set({ unlistenScriptOutput: unlisten });
-      return unlisten;
-    } catch (err) {
-      console.warn('[ScriptRunner] Could not set up Tauri event listener (web/mock environment):', err);
-      const dummyUnlisten: UnlistenFn = () => {};
-      set({ unlistenScriptOutput: dummyUnlisten });
-      return dummyUnlisten;
-    }
+    scriptOutputHasViewSubscriber = true;
+    scriptOutputPendingCleanup = false;
+    return ensureScriptOutputListener();
   },
 
   cleanupScriptOutputListener: () => {
+    scriptOutputHasViewSubscriber = false;
+    if (get().isExecutingScript) {
+      // Keep log capture active while a script is running; executeScript's finally cleans up if unmounted.
+      scriptOutputPendingCleanup = true;
+      return;
+    }
+
+    scriptOutputPendingCleanup = true;
     const unlisten = get().unlistenScriptOutput;
     if (unlisten) {
       unlisten();
@@ -600,19 +545,20 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     const rawContent = customContent ?? get().scriptContent;
     const content = (rawContent || '').replace(/^\uFEFF+/, '');
     const type = customType ?? get().scriptType;
+    const optionsObj = typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions : undefined;
 
     const shouldElevate = typeof runAsAdminOrOptions === 'boolean'
       ? runAsAdminOrOptions
-      : runAsAdminOrOptions?.runAsAdmin !== undefined
-        ? Boolean(runAsAdminOrOptions.runAsAdmin)
+      : optionsObj?.runAsAdmin !== undefined
+        ? Boolean(optionsObj.runAsAdmin)
         : Boolean(editorRunAsAdmin);
 
-    const isDryRun = typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.dryRun !== undefined
-      ? runAsAdminOrOptions.dryRun
+    const isDryRun = optionsObj?.dryRun !== undefined
+      ? optionsObj.dryRun
       : dryRunMode;
 
-    const timeoutSeconds = typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.timeoutSeconds !== undefined
-      ? runAsAdminOrOptions.timeoutSeconds
+    const timeoutSeconds = optionsObj?.timeoutSeconds !== undefined
+      ? optionsObj.timeoutSeconds
       : 300;
 
     if (!content || !content.trim()) {
@@ -625,6 +571,29 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     }
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const scriptName = optionsObj?.scriptName || get().uploadedFileName || 'Custom Script';
+    const scriptId = optionsObj?.scriptId;
+    const parameters = optionsObj?.parameters;
+
+    const recordExecutionHistory = (exitCode: number, status: ExecutionStatus) => {
+      const durationMs = Date.now() - (get().executionStartTime || Date.now());
+      const capturedLogs = get().outputLogs.slice(-MAX_HISTORY_LOG_LINES);
+      get().addHistoryEntry({
+        id: executionId,
+        scriptId,
+        scriptName,
+        scriptType: type,
+        timestamp: new Date().toISOString(),
+        durationMs,
+        exitCode,
+        status,
+        elevated: shouldElevate,
+        isDryRun,
+        rawContent: content,
+        parameters,
+        logLines: capturedLogs,
+      });
+    };
 
     set({
       isExecutingScript: true,
@@ -635,7 +604,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     });
     get().clearOutputLogs();
 
-    await get().setupScriptOutputListener();
+    await ensureScriptOutputListener();
 
     addLog({
       level: 'cmd',
@@ -653,37 +622,10 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       });
 
       const exitCode = output.exitCode ?? output.exit_code ?? 0;
-      const durationMs = Date.now() - (get().executionStartTime || Date.now());
-      const capturedLogs = get().outputLogs.slice(-MAX_HISTORY_LOG_LINES);
       const executionStatus: ExecutionStatus =
         exitCode === 0 ? 'success' : exitCode === 1223 ? 'cancelled' : 'failed';
 
-      const scriptName =
-        typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.scriptName
-          ? runAsAdminOrOptions.scriptName
-          : get().uploadedFileName || 'Custom Script';
-
-      const scriptId =
-        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.scriptId : undefined;
-
-      const parameters =
-        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.parameters : undefined;
-
-      get().addHistoryEntry({
-        id: executionId,
-        scriptId,
-        scriptName,
-        scriptType: type,
-        timestamp: new Date().toISOString(),
-        durationMs,
-        exitCode,
-        status: executionStatus,
-        elevated: shouldElevate,
-        isDryRun,
-        rawContent: content,
-        parameters,
-        logLines: capturedLogs,
-      });
+      recordExecutionHistory(exitCode, executionStatus);
 
       if (exitCode === 0) {
         addToast({
@@ -716,7 +658,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
       return output;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       const lowerError = errorMsg.toLowerCase();
 
       // Differentiate UAC cancellation (single 'l' / double 'l' / code 1223 / Russian locale) from crashes
@@ -741,38 +683,11 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         lowerError.includes('отменено') ||
         isUacDecline;
 
-      const durationMs = Date.now() - (get().executionStartTime || Date.now());
-      const capturedLogs = get().outputLogs.slice(-MAX_HISTORY_LOG_LINES);
       const executionStatus: ExecutionStatus =
         isUacDecline || isProcessCancelled ? 'cancelled' : 'failed';
       const exitCode = isUacDecline ? 1223 : isProcessCancelled ? -1 : 1;
 
-      const scriptName =
-        typeof runAsAdminOrOptions === 'object' && runAsAdminOrOptions?.scriptName
-          ? runAsAdminOrOptions.scriptName
-          : get().uploadedFileName || 'Custom Script';
-
-      const scriptId =
-        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.scriptId : undefined;
-
-      const parameters =
-        typeof runAsAdminOrOptions === 'object' ? runAsAdminOrOptions?.parameters : undefined;
-
-      get().addHistoryEntry({
-        id: executionId,
-        scriptId,
-        scriptName,
-        scriptType: type,
-        timestamp: new Date().toISOString(),
-        durationMs,
-        exitCode,
-        status: executionStatus,
-        elevated: shouldElevate,
-        isDryRun,
-        rawContent: content,
-        parameters,
-        logLines: capturedLogs,
-      });
+      recordExecutionHistory(exitCode, executionStatus);
 
       if (isUacDecline) {
         addLog({
@@ -823,6 +738,15 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         executionStartTime: null,
         isCancellingScript: false,
       });
+
+      if (!scriptOutputHasViewSubscriber || scriptOutputPendingCleanup) {
+        const unlisten = get().unlistenScriptOutput;
+        if (unlisten) {
+          unlisten();
+          set({ unlistenScriptOutput: null });
+        }
+        scriptOutputPendingCleanup = false;
+      }
     }
   },
 
@@ -850,7 +774,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     try {
       await invoke('cancel_running_script', { executionId: activeExecutionId });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       console.warn('[ScriptRunner] cancel_running_script notice:', errorMsg);
     }
   },
@@ -860,40 +784,8 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
   },
 
   downloadOutputLog: () => {
-    const { outputLogs, scriptType } = get();
-    if (outputLogs.length === 0) {
-      return;
-    }
-
-    const header = [
-      '===================================================================',
-      'WiScripts Windows - Script Execution Output Log',
-      `Timestamp: ${new Date().toISOString()}`,
-      `Script Type: .${scriptType}`,
-      '===================================================================',
-      '',
-    ].join('\n');
-
-    const body = outputLogs
-      .map((item) => `[${item.timestamp}] [${item.stream.toUpperCase()}] ${item.line}`)
-      .join('\n');
-
-    const footer = [
-      '',
-      '===================================================================',
-      'End of Log',
-    ].join('\n');
-
-    const fullText = `${header}${body}${footer}`;
-    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `wiscripts_execution_log_${Date.now()}.log`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const { outputLogs, scriptType, uploadedFileName } = get();
+    exportLiveOutputLogs(outputLogs, scriptType, uploadedFileName);
   },
 
   // Online Library Implementation
@@ -931,7 +823,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         message: `${manifest.scripts.length} verified scripts ready in library catalog.`,
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       set({
         isLoadingLibrary: false,
         libraryError: errorMsg,
@@ -957,7 +849,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       const cleanCode = (code || '').replace(/^\uFEFF+/, '');
       set({ previewContent: cleanCode, isLoadingPreview: false });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       set({ isLoadingPreview: false });
       addLog({
         level: 'error',
@@ -994,7 +886,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         message: `"${script.name}" loaded into Script Editor.`,
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to load script "${script.name}": ${errorMsg}`,
@@ -1043,7 +935,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         scriptName: script.name,
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to execute library script "${script.name}": ${errorMsg}`,
@@ -1058,20 +950,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
 
   // Parameter Dialog Actions
   openParameterDialog: (script, initialRunAsAdmin) => {
-    const initialValues: Record<string, ScriptParameterValue> = {};
-    if (script.parameters) {
-      for (const param of script.parameters) {
-        if (param.default !== undefined && param.default !== null) {
-          initialValues[param.name] = param.default as ScriptParameterValue;
-        } else if (param.type === 'boolean') {
-          initialValues[param.name] = false;
-        } else if (param.type === 'number') {
-          initialValues[param.name] = 0;
-        } else {
-          initialValues[param.name] = '';
-        }
-      }
-    }
+    const initialValues = buildInitialParameterValues(script.parameters);
 
     const shouldElevate = initialRunAsAdmin !== undefined
       ? initialRunAsAdmin
@@ -1112,23 +991,8 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
     const script = get().parameterDialogScript;
     if (!script) return;
 
-    const initialValues: Record<string, ScriptParameterValue> = {};
-    if (script.parameters) {
-      for (const param of script.parameters) {
-        if (param.default !== undefined && param.default !== null) {
-          initialValues[param.name] = param.default as ScriptParameterValue;
-        } else if (param.type === 'boolean') {
-          initialValues[param.name] = false;
-        } else if (param.type === 'number') {
-          initialValues[param.name] = 0;
-        } else {
-          initialValues[param.name] = '';
-        }
-      }
-    }
-
     set({
-      parameterValues: initialValues,
+      parameterValues: buildInitialParameterValues(script.parameters),
       parameterValidationErrors: {},
     });
   },
@@ -1201,7 +1065,7 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
         parameters: values,
       });
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorMsg = getErrorMessage(err);
       addLog({
         level: 'error',
         message: `Failed to execute script "${script.name}" with parameters: ${errorMsg}`,
@@ -1214,4 +1078,5 @@ export const createScriptRunnerSlice: StateCreator<AppState, [], [], ScriptRunne
       return null;
     }
   },
-});
+  };
+};

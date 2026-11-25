@@ -38,6 +38,7 @@ export interface SystemToolsSlice {
 
   metricsHistory: MetricSnapshot[];
   currentMetrics: MetricSnapshot | null;
+  metricsError: string | null;
   isPollingActive: boolean;
   pollingIntervalMs: number;
   setPollingIntervalMs: (interval: number) => void;
@@ -153,9 +154,21 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
         return summary;
       }
 
-      if (!currentDryRun) {
+      if (currentDryRun) {
+        addToast({
+          type: 'info',
+          title: 'Dry-Run Simulation',
+          message: enable
+            ? 'Simulated enabling classic Windows 10 context menu. No registry changes applied.'
+            : 'Simulated restoring modern Windows 11 context menu. No registry changes applied.',
+        });
+      } else {
         set({ classicContextMenuEnabled: enable });
-        addToast({ type: 'success', title: 'Context Menu Updated', message: enable ? 'Classic Windows 10 context menu enabled.' : 'Modern Windows 11 context menu restored.' });
+        addToast({
+          type: 'success',
+          title: 'Context Menu Updated',
+          message: enable ? 'Classic Windows 10 context menu enabled.' : 'Modern Windows 11 context menu restored.',
+        });
       }
       return summary;
     } catch (err) {
@@ -295,6 +308,7 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
 
   metricsHistory: [],
   currentMetrics: null,
+  metricsError: null,
   isPollingActive: true,
   pollingIntervalMs: 2000,
   setPollingIntervalMs: (interval) => set({ pollingIntervalMs: interval }),
@@ -302,6 +316,7 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
   pushMetricSnapshot: (snapshot) =>
     set((state) => ({
       currentMetrics: snapshot,
+      metricsError: null,
       metricsHistory: [...state.metricsHistory, snapshot].slice(-30),
     })),
   sensorItems: [],
@@ -312,25 +327,30 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
 
   fetchLatestMetrics: async () => {
     try {
-      const metricsPayload = await invoke<SystemMetricsPayload>('get_system_metrics');
-      const tempsPayload = await invoke<SystemTemperaturesPayload>('get_system_temperatures');
+      const [metricsPayload, tempsPayload] = await Promise.all([
+        invoke<SystemMetricsPayload>('get_system_metrics'),
+        invoke<SystemTemperaturesPayload>('get_system_temperatures').catch(() => null),
+      ]);
 
-      const items = tempsPayload.sensorItems || [];
-      set({ sensorItems: items });
+      const items = tempsPayload?.sensorItems || [];
+      if (tempsPayload) {
+        set({ sensorItems: items });
+      }
 
       const { selectedCpuSensorId, selectedGpuSensorId } = get();
+      const activeSensors = tempsPayload ? items : get().sensorItems;
 
-      let effectiveCpuTemp = tempsPayload.cpuTempCelsius;
-      if (selectedCpuSensorId) {
-        const foundCpuSensor = items.find((s) => s.id === selectedCpuSensorId);
+      let effectiveCpuTemp = tempsPayload ? tempsPayload.cpuTempCelsius : null;
+      if (tempsPayload && selectedCpuSensorId) {
+        const foundCpuSensor = activeSensors.find((s) => s.id === selectedCpuSensorId);
         if (foundCpuSensor) {
           effectiveCpuTemp = foundCpuSensor.temperatureCelsius;
         }
       }
 
-      let effectiveGpuTemp = tempsPayload.gpuTempCelsius;
-      if (selectedGpuSensorId) {
-        const foundGpuSensor = items.find((s) => s.id === selectedGpuSensorId);
+      let effectiveGpuTemp = tempsPayload ? tempsPayload.gpuTempCelsius : null;
+      if (tempsPayload && selectedGpuSensorId) {
+        const foundGpuSensor = activeSensors.find((s) => s.id === selectedGpuSensorId);
         if (foundGpuSensor) {
           effectiveGpuTemp = foundGpuSensor.temperatureCelsius;
         }
@@ -362,25 +382,9 @@ export const createSystemToolsSlice: StateCreator<AppState, [], [], SystemToolsS
       get().pushMetricSnapshot(snapshot);
       return snapshot;
     } catch (e) {
-      const ramUsed = Math.floor(4000 + Math.random() * 1500);
-      const ramTotal = 16384;
-      const simSnapshot: MetricSnapshot = {
-        timestamp: Date.now(),
-        cpuUsagePercent: Math.floor(10 + Math.random() * 25),
-        memoryUsedMb: ramUsed,
-        memoryTotalMb: ramTotal,
-        memoryUsagePercent: (ramUsed / ramTotal) * 100,
-        diskReadBytesPerSec: Math.floor(Math.random() * 5000000),
-        diskWriteBytesPerSec: Math.floor(Math.random() * 2000000),
-        networkRxBytesPerSec: Math.floor(Math.random() * 1000000),
-        networkTxBytesPerSec: Math.floor(Math.random() * 300000),
-        cpuTempC: Math.floor(45 + Math.random() * 15),
-        gpuTempC: Math.floor(40 + Math.random() * 12),
-        cpuThermalStatus: 'normal',
-        gpuThermalStatus: 'normal',
-      };
-      get().pushMetricSnapshot(simSnapshot);
-      return simSnapshot;
+      const errMsg = getErrorMessage(e);
+      set({ metricsError: errMsg });
+      return null;
     }
   },
 

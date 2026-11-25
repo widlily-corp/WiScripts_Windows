@@ -34,25 +34,21 @@ export const createSystemSlice: StateCreator<AppState, [], [], SystemSlice> = (s
   activeTab: 'dashboard',
   setActiveTab: (tab) => set({ activeTab: tab }),
 
-  systemInfo: {
-    osName: 'Windows 11 Pro',
-    osVersion: '23H2',
-    osBuild: '22631.3880',
-    isElevated: true,
-    cpuUsagePercent: 12,
-    memoryUsedMb: 6144,
-    memoryTotalMb: 16384,
-    telemetryStatus: 'Active',
-  },
-  isElevated: true,
+  systemInfo: null,
+  isElevated: false,
   isSystemLoading: false,
 
   checkElevation: async () => {
     try {
       const info = await invoke<SystemInfo>('get_system_info');
-      set({ systemInfo: info, isElevated: info.isElevated });
-      return info.isElevated;
+      set({ systemInfo: info, isElevated: Boolean(info.isElevated) });
+      return Boolean(info.isElevated);
     } catch (err) {
+      set({ isElevated: false });
+      get().addLog({
+        level: 'error',
+        message: `Failed to verify elevation status: ${getErrorMessage(err)}`,
+      });
       return false;
     }
   },

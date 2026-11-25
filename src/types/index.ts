@@ -333,17 +333,7 @@ export interface ToastNotification {
   durationMs?: number;
 }
 
-export type ThemeMode = 'dark' | 'light' | 'system';
 export type Language = 'ru' | 'en';
-
-export interface AppPreferences {
-  themeMode: ThemeMode;
-  dryRunMode: boolean;
-  autoCreateRestorePoint: boolean;
-  pollingIntervalMs: number;
-  autoCheckUpdates: boolean;
-  language: Language;
-}
 
 export interface PresetMetadata {
   id: string;

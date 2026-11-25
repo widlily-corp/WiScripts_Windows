@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools, persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { createSystemSlice, SystemSlice } from './slices/systemSlice';
 import { createUpdaterSlice, UpdaterSlice } from './slices/updaterSlice';
 import { createUiSlice, UiSlice, PendingSafetyModal } from './slices/uiSlice';
@@ -30,6 +30,46 @@ export type AppState = SystemSlice &
   HardwareHealthSlice &
   DiskAnalyzerSlice;
 
+const lastPersistedPayloads = new Map<string, string>();
+
+const cachedLocalStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return null;
+    }
+    try {
+      return window.localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return;
+    }
+    if (lastPersistedPayloads.get(name) === value) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(name, value);
+      lastPersistedPayloads.set(name, value);
+    } catch (err) {
+      console.warn('[Store] Failed to persist preferences to localStorage:', err);
+    }
+  },
+  removeItem: (name) => {
+    lastPersistedPayloads.delete(name);
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return;
+    }
+    try {
+      window.localStorage.removeItem(name);
+    } catch {
+      // Ignore storage removal errors
+    }
+  },
+};
+
 export const useAppStore = create<AppState>()(
   devtools(
     persist(
@@ -50,6 +90,7 @@ export const useAppStore = create<AppState>()(
       }),
       {
         name: 'wiscripts-app-store',
+        storage: createJSONStorage(() => cachedLocalStorage),
         partialize: (state) => ({
           dryRunMode: state.dryRunMode,
           autoCheckUpdates: state.autoCheckUpdates,
@@ -62,10 +103,13 @@ export const useAppStore = create<AppState>()(
           selectedDrive: state.selectedDrive,
           customPath: state.customPath,
           viewMode: state.viewMode,
-          executionHistory: state.executionHistory,
         }),
       }
     )
   )
 );
+
+if (typeof window !== 'undefined') {
+  void useAppStore.getState().hydrateExecutionHistory();
+}
 

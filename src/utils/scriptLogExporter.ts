@@ -6,7 +6,7 @@
  * and terminal stream outputs, and triggers browser downloads.
  */
 
-import type { ScriptExecutionRecord } from '../store/slices/scriptRunnerSlice';
+import type { ScriptExecutionRecord, ScriptOutputLine } from '../store/slices/scriptRunnerSlice';
 
 export interface LogExportMetadata {
   scriptName: string;
@@ -19,6 +19,21 @@ export interface LogExportMetadata {
   exitCode: number;
   timestamp: string;
   totalLines: number;
+}
+
+/**
+ * Triggers a client-side file download for plain-text log content.
+ */
+function triggerTextLogDownload(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -77,13 +92,38 @@ export function downloadScriptLogFile(record: ScriptExecutionRecord): void {
     .replace(/[:.]/g, '-');
   const filename = `${safeName}_${dateStr}.log`;
 
-  const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  triggerTextLogDownload(logContent, filename);
+}
+
+/**
+ * Downloads the current live terminal output buffer as a structured `.log` file.
+ */
+export function exportLiveOutputLogs(
+  outputLogs: ScriptOutputLine[],
+  scriptType: 'ps1' | 'bat' | 'cmd',
+  scriptName?: string | null
+): void {
+  if (outputLogs.length === 0) {
+    return;
+  }
+
+  const border = '='.repeat(67);
+  const header = [
+    border,
+    'WiScripts Windows - Script Execution Output Log',
+    scriptName ? `Script: ${scriptName}` : null,
+    `Timestamp: ${new Date().toISOString()}`,
+    `Script Type: .${scriptType}`,
+    border,
+    '',
+  ]
+    .filter((line): line is string => line !== null)
+    .join('\n');
+
+  const body = outputLogs
+    .map((item) => `[${item.timestamp}] [${item.stream.toUpperCase()}] ${item.line}`)
+    .join('\n');
+
+  const footer = ['', border, 'End of Log'].join('\n');
+  triggerTextLogDownload(`${header}${body}${footer}`, `wiscripts_execution_log_${Date.now()}.log`);
 }

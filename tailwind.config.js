@@ -45,8 +45,23 @@ export default {
         lg: '8px',
       },
       fontFamily: {
-        sans: ['Inter', 'Geist Sans', '-apple-system', 'sans-serif'],
-        mono: ['"Geist Mono"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        sans: [
+          'var(--font-sans)',
+          '"Segoe UI Variable Text"',
+          '"Segoe UI"',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
+        ],
+        mono: [
+          'var(--font-mono)',
+          '"Cascadia Code"',
+          '"Cascadia Mono"',
+          'Consolas',
+          'ui-monospace',
+          'monospace',
+        ],
       },
       animation: {
         'fade-in': 'fadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1)',

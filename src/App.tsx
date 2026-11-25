@@ -1,5 +1,4 @@
-import React, { useEffect, Suspense, lazy } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useEffect, Suspense, lazy } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { Navigation } from './components/Navigation';
 import { Header } from './components/Header';
@@ -11,7 +10,7 @@ import { ReleaseNotesModal } from './components/ReleaseNotesModal';
 import { UpdateBanner } from './components/UpdateBanner';
 import { ToastContainer } from './components/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { SystemInfo } from './types';
+import { getErrorMessage } from './utils';
 
 // Route-level code-splitting: Lazy-load heavy views to minimize initial bundle footprint
 const Dashboard = lazy(() =>
@@ -49,9 +48,6 @@ const UninstallerView = lazy(() =>
 );
 const PresetsView = lazy(() =>
   import('./components/PresetsView').then((m) => ({ default: m.PresetsView }))
-);
-const SystemCleaner = lazy(() =>
-  import('./components/SystemCleaner').then((m) => ({ default: m.SystemCleaner }))
 );
 const StorageUtilities = lazy(() =>
   import('./components/StorageUtilities').then((m) => ({ default: m.StorageUtilities }))
@@ -92,72 +88,92 @@ const SettingsView = lazy(() =>
 
 export function App() {
   const activeTab = useAppStore((s) => s.activeTab);
-  const odtConfig = useAppStore((s) => s.odtConfig);
-  const setGeneratedXml = useAppStore((s) => s.setGeneratedXml);
   const addLog = useAppStore((s) => s.addLog);
-  const setSystemInfo = useAppStore((s) => s.setSystemInfo);
   const checkElevation = useAppStore((s) => s.checkElevation);
   const fetchAppVersion = useAppStore((s) => s.fetchAppVersion);
   const autoCheckUpdates = useAppStore((s) => s.autoCheckUpdates);
   const checkForUpdates = useAppStore((s) => s.checkForUpdates);
 
   useEffect(() => {
+    let isMounted = true;
+    let updateTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
     async function fetchSystemInfoOnMount() {
       try {
-        await checkElevation();
-        const ver = await fetchAppVersion();
-        const info = await invoke<SystemInfo>('get_system_info');
-        setSystemInfo(info);
-        addLog({
-          level: 'info',
-          message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${info.isElevated}, App v${ver})`,
-        });
+        const [elevated, ver] = await Promise.all([checkElevation(), fetchAppVersion()]);
+        if (!isMounted) return;
+
+        const info = useAppStore.getState().systemInfo;
+        if (info) {
+          addLog({
+            level: 'info',
+            message: `System metrics loaded: OS=${info.osName} (${info.osBuild}), CPU=${info.cpuUsagePercent}%, RAM=${Math.round(info.memoryUsedMb / 1024)}/${Math.round(info.memoryTotalMb / 1024)}GB (Elevated: ${elevated}, App v${ver})`,
+          });
+        }
 
         if (autoCheckUpdates) {
-          setTimeout(() => {
-            checkForUpdates(true);
+          updateTimeoutId = setTimeout(() => {
+            if (isMounted) {
+              void checkForUpdates(true);
+            }
           }, 3000);
         }
       } catch (err) {
         addLog({
           level: 'error',
-          message: `Failed to fetch system info on mount: ${String(err)}`,
+          message: `Failed to fetch system info on mount: ${getErrorMessage(err)}`,
         });
       }
     }
-    fetchSystemInfoOnMount();
-  }, [setSystemInfo, checkElevation, addLog, fetchAppVersion, autoCheckUpdates, checkForUpdates]);
+
+    void fetchSystemInfoOnMount();
+
+    return () => {
+      isMounted = false;
+      if (updateTimeoutId) {
+        clearTimeout(updateTimeoutId);
+      }
+    };
+  }, [checkElevation, addLog, fetchAppVersion, autoCheckUpdates, checkForUpdates]);
 
   useEffect(() => {
-    async function generateXmlPreview() {
-      try {
-        const xml = await invoke<string>('generate_odt_xml', { config: odtConfig });
-        setGeneratedXml(xml);
-      } catch (err) {}
-    }
-    generateXmlPreview();
-  }, [odtConfig, setGeneratedXml]);
+    const hasBlockingModalOpen = () => {
+      const state = useAppStore.getState();
+      return (
+        Boolean(state.pendingSafetyModal?.isOpen) ||
+        state.isExecuting ||
+        state.isDeleteModalOpen ||
+        state.isImpactSimulatorOpen ||
+        Boolean(state.parameterDialogScript) ||
+        Boolean(state.previewScript)
+      );
+    };
 
-  useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Ctrl+K or Cmd+K
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        const state = useAppStore.getState();
+        if (!state.isCommandPaletteOpen && hasBlockingModalOpen()) {
+          return;
+        }
         e.preventDefault();
-        useAppStore.getState().toggleCommandPalette();
+        state.toggleCommandPalette();
         return;
       }
 
-      // '/' key when not focused in an input/textarea/contentEditable
+      // '/' key when not focused in an input/textarea/select/contentEditable and no modal is open
       if (e.key === '/') {
         const activeElem = document.activeElement;
         const isInput =
           activeElem instanceof HTMLInputElement ||
           activeElem instanceof HTMLTextAreaElement ||
+          activeElem instanceof HTMLSelectElement ||
           (activeElem as HTMLElement | null)?.isContentEditable;
 
-        if (!isInput) {
+        const state = useAppStore.getState();
+        if (!isInput && !state.isCommandPaletteOpen && !hasBlockingModalOpen()) {
           e.preventDefault();
-          useAppStore.getState().setCommandPaletteOpen(true);
+          state.setCommandPaletteOpen(true);
         }
       }
     };

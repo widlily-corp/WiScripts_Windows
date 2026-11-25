@@ -1,10 +1,12 @@
 import { StateCreator } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { check, type DownloadEvent } from '@tauri-apps/plugin-updater';
+import { check, type DownloadEvent, type Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { UpdateStatus, UpdateInfo } from '../../types';
 import type { AppState } from '../useAppStore';
 import { getErrorMessage } from '../../utils';
+
+let cachedPendingUpdate: Update | null = null;
 
 interface DownloadEventPayload {
   contentLength?: number;
@@ -103,12 +105,16 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
   openReleaseNotesModal: () => set({ bannerDismissed: false }),
 
   triggerMockUpdate: (mockInfo) => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    const currentVer = get().appVersion || '1.8.0';
     const info: UpdateInfo = {
-      version: mockInfo?.version || '1.2.0',
-      currentVersion: get().appVersion || '1.1.0',
+      version: mockInfo?.version || '1.8.1-dev',
+      currentVersion: currentVer,
       body:
         mockInfo?.body ||
-        `# What's New in v1.2.0\n\n### Online Scripts & Backend Security\n- **Strict Path Traversal Protection**: Sandbox normalization prevents directory traversal.\n- **Process Supervision & Cancellation**: 300s execution limits and process tree termination.\n- **PowerShell 5.1 & CP1251 AST Fixes**: Clean UTF-8 BOM encoding and \`param()\` position protection.\n\n### Frontend Performance & i18n\n- **Memory Leak Protection**: Bounded log ring buffer (1,000 max).\n- **Preset Batching**: 18.5x faster batch operations.\n- **100% i18n Parity**: Full parity across 1,173 localized keys.`,
+        `# What's New in v${mockInfo?.version || '1.8.1-dev'}\n\n- Development preview release notes.`,
       date: mockInfo?.date || new Date().toISOString().split('T')[0],
     };
     set({
@@ -134,6 +140,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
       set({ lastUpdateCheckTime: now });
 
       if (!update?.available) {
+        cachedPendingUpdate = null;
         set({ updateStatus: 'upToDate', updateInfo: null });
         if (!silent) {
           get().addLog({ level: 'info', message: 'Application is up to date.' });
@@ -146,6 +153,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
         return false;
       }
 
+      cachedPendingUpdate = update;
       let releaseBody = update.body?.trim();
       if (!releaseBody) {
         releaseBody = await fetchReleaseNotesFallback(update.version);
@@ -175,6 +183,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
       });
       return true;
     } catch (err) {
+      cachedPendingUpdate = null;
       let errMsg = getErrorMessage(err);
 
       if (
@@ -202,8 +211,9 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     set({ updateStatus: 'downloading', updateProgress: 0 });
     get().addLog({ level: 'cmd', message: 'Downloading & installing update package...' });
     try {
-      const update = await check();
-      if (!update) {
+      const update = cachedPendingUpdate ?? (await check());
+      if (!update?.available) {
+        cachedPendingUpdate = null;
         const errMsg = 'No update package available for installation.';
         set({ updateStatus: 'error', updateError: errMsg });
         get().addLog({ level: 'error', message: `Download/install failed: ${errMsg}` });
@@ -236,6 +246,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
         }
       });
 
+      cachedPendingUpdate = null;
       set({ updateStatus: 'ready' });
       get().addLog({ level: 'info', message: 'Update installation complete. Relaunching application...' });
       get().addToast({

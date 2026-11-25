@@ -196,6 +196,63 @@ function stripBlockComments(str: string): string {
 }
 
 /**
+ * Splits a single PowerShell line on non-quoted `;` delimiters and strips trailing
+ * `#` comments outside quotes so multi-statement lines attribute each cmdlet accurately.
+ */
+function splitPowerShellStatements(line: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const prev = i > 0 ? line[i - 1] : '';
+
+    if (ch === "'" && !inDoubleQuote) {
+      if (inSingleQuote && line[i + 1] === "'") {
+        current += "''";
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"' && !inSingleQuote) {
+      if (prev !== '`') {
+        inDoubleQuote = !inDoubleQuote;
+      }
+      current += ch;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (ch === '#') {
+        break;
+      }
+      if (ch === ';') {
+        const stmt = current.trim();
+        if (stmt) {
+          statements.push(stmt);
+        }
+        current = '';
+        continue;
+      }
+    }
+
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail) {
+    statements.push(tail);
+  }
+  return statements;
+}
+
+/**
  * Resolves variable assignments, environment variables, loops, and Join-Path expressions
  */
 export function parsePowerShellVariables(code: string): Map<string, string | string[]> {
@@ -213,43 +270,45 @@ export function parsePowerShellVariables(code: string): Map<string, string | str
   const clean = stripBlockComments(code.replace(/^\uFEFF/, ''));
   const lines = clean.split(/\r?\n/);
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
+    const lineTrimmed = line.trim();
+    if (!lineTrimmed || lineTrimmed.startsWith('#')) continue;
 
-    // Join-Path: $var = Join-Path -Path $base -ChildPath "sub"
-    if (trimmed.includes('Join-Path')) {
-      const joinMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*Join-Path\s+(?:-Path\s+)?([^\s]+)\s+(?:-ChildPath\s+)?["']([^"']+)["']/i.exec(trimmed);
-      if (joinMatch) {
-        const varName = joinMatch[1];
-        const basePathRaw = joinMatch[2].replace(/["']/g, '');
-        const child = joinMatch[3];
-        let base = basePathRaw;
-        if (base.startsWith('$')) {
-          const resolvedBase = vars.get(base.substring(1));
-          if (typeof resolvedBase === 'string') {
-            base = resolvedBase;
+    for (const trimmed of splitPowerShellStatements(lineTrimmed)) {
+      // Join-Path: $var = Join-Path -Path $base -ChildPath "sub"
+      if (trimmed.includes('Join-Path')) {
+        const joinMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*Join-Path\s+(?:-Path\s+)?([^\s]+)\s+(?:-ChildPath\s+)?["']([^"']+)["']/i.exec(trimmed);
+        if (joinMatch) {
+          const varName = joinMatch[1];
+          const basePathRaw = joinMatch[2].replace(/["']/g, '');
+          const child = joinMatch[3];
+          let base = basePathRaw;
+          if (base.startsWith('$')) {
+            const resolvedBase = vars.get(base.substring(1));
+            if (typeof resolvedBase === 'string') {
+              base = resolvedBase;
+            }
           }
+          vars.set(varName, `${base}\\${child}`.replace(/\\\\/g, '\\'));
+          continue;
         }
-        vars.set(varName, `${base}\\${child}`.replace(/\\\\/g, '\\'));
+      }
+
+      // Single string assignment: $var = "..." or '...'
+      const strMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*["']([^"']+)["']/i.exec(trimmed);
+      if (strMatch) {
+        vars.set(strMatch[1], strMatch[2]);
         continue;
       }
-    }
 
-    // Single string assignment: $var = "..." or '...'
-    const strMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*["']([^"']+)["']/i.exec(trimmed);
-    if (strMatch) {
-      vars.set(strMatch[1], strMatch[2]);
-      continue;
-    }
-
-    // Array assignment: $var = @("item1", "item2", ...)
-    const arrMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*@\(\s*([^)]*)\s*\)/i.exec(trimmed);
-    if (arrMatch) {
-      const items = Array.from(arrMatch[2].matchAll(/["']([^"']+)["']/g)).map(m => m[1]);
-      if (items.length > 0) {
-        vars.set(arrMatch[1], items);
+      // Array assignment: $var = @("item1", "item2", ...)
+      const arrMatch = /^\$([a-zA-Z0-9_]+)\s*=\s*@\(\s*([^)]*)\s*\)/i.exec(trimmed);
+      if (arrMatch) {
+        const items = Array.from(arrMatch[2].matchAll(/["']([^"']+)["']/g)).map(m => m[1]);
+        if (items.length > 0) {
+          vars.set(arrMatch[1], items);
+        }
+        continue;
       }
-      continue;
     }
   }
 
@@ -449,8 +508,10 @@ export function analyzeScriptImpact(
 
   lines.forEach((line, idx) => {
     const lineNum = idx + 1;
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return;
+    const rawTrimmed = line.trim();
+    if (!rawTrimmed || rawTrimmed.startsWith('#')) return;
+
+    for (const trimmed of splitPowerShellStatements(rawTrimmed)) {
 
     // Generic foreach loop binding during traversal
     if (/foreach/i.test(trimmed)) {
@@ -868,6 +929,7 @@ export function analyzeScriptImpact(
           rawLine: trimmed,
         });
       }
+    }
     }
   });
 

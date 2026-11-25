@@ -7,13 +7,15 @@ import {
   ExecutionSummary,
 } from '../../types';
 import type { AppState } from '../useAppStore';
-import { getErrorMessage } from '../../utils';
+import { getErrorMessage, parseAppError, isFileNotFoundError } from '../../utils';
 
 export interface PackageManagerSlice {
   wingetPackages: WingetPackage[];
   isWingetSearching: boolean;
   uwpApps: UwpAppInfo[];
   isUwpLoading: boolean;
+  uwpLoaded: boolean;
+  uwpFetchError: string | null;
   wingetSearch: (query: string) => Promise<WingetPackage[]>;
   wingetInstall: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
   wingetUpdate: (packageId: string, dryRun?: boolean) => Promise<ExecutionSummary | null>;
@@ -33,6 +35,8 @@ export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageMa
   isWingetSearching: false,
   uwpApps: [],
   isUwpLoading: false,
+  uwpLoaded: false,
+  uwpFetchError: null,
 
   wingetSearch: async (query: string) => {
     set({ isWingetSearching: true });
@@ -118,18 +122,18 @@ export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageMa
   },
 
   fetchUwpApps: async () => {
-    set({ isUwpLoading: true });
+    set({ isUwpLoading: true, uwpFetchError: null });
     get().addLog({ level: 'cmd', message: 'Querying installed UWP AppX packages' });
     try {
       const apps = await invoke<UwpAppInfo[]>('get_uwp_apps');
-      set({ uwpApps: apps });
+      set({ uwpApps: apps, uwpLoaded: true, uwpFetchError: null });
       get().addLog({ level: 'info', message: `Retrieved ${apps.length} UWP packages` });
       return apps;
     } catch (err) {
       const errMsg = getErrorMessage(err);
       get().addLog({ level: 'error', message: `Fetch UWP apps failed: ${errMsg}` });
       get().addToast({ type: 'error', title: 'Fetch UWP Apps Error', message: errMsg });
-      set({ uwpApps: [] });
+      set({ uwpApps: [], uwpLoaded: true, uwpFetchError: errMsg });
       return [];
     } finally {
       set({ isUwpLoading: false });
@@ -158,7 +162,13 @@ export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageMa
         return summary;
       }
 
-      if (!currentDryRun) {
+      if (currentDryRun) {
+        addToast({
+          type: 'info',
+          title: 'Dry-Run Simulation',
+          message: `Simulated removal of AppX package ${packageFullName}. No packages were modified.`,
+        });
+      } else {
         set((state) => ({
           uwpApps: state.uwpApps.filter((a) => a.packageFullName !== packageFullName),
         }));
@@ -232,29 +242,19 @@ export const createPackageManagerSlice: StateCreator<AppState, [], [], PackageMa
       await get().fetchInstalledApps();
       return summary;
     } catch (err) {
-      const errMsg = getErrorMessage(err);
+      const parsed = parseAppError(err);
+      const errMsg = parsed.message;
       addLog({ level: 'error', message: `Uninstall command error: ${errMsg}` });
 
-      const isFileNotFound =
-        errMsg.toLowerCase().includes('filenotfound') ||
-        errMsg.toLowerCase().includes('not found') ||
-        errMsg.toLowerCase().includes('os error 2');
-
-      if (isFileNotFound) {
-        addToast({
-          type: 'warning',
-          title: 'Uninstaller Missing',
-          message: `The uninstaller for "${app.name}" was not found on disk. Clean orphaned registry record?`,
-          actionLabel: 'Remove from Registry',
-          onAction: () => {
-            get().removeInstalledAppEntry(app.registryPath);
-          },
-          durationMs: 12000,
-        });
-      } else {
+      if (!isFileNotFoundError(err)) {
         addToast({ type: 'error', title: 'Uninstall Error', message: errMsg });
       }
-      throw err;
+
+      const structuredErr =
+        err instanceof Error
+          ? Object.assign(err, { code: parsed.code, key: parsed.key })
+          : Object.assign(new Error(errMsg), { code: parsed.code, key: parsed.key });
+      throw structuredErr;
     } finally {
       setIsExecuting(false);
     }

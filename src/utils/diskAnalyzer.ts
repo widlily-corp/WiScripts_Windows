@@ -66,14 +66,29 @@ export function isSystemProtectedPath(path: string): boolean {
 export function syncTreeAfterDeletion(
   rootNode: FsTreeNode,
   deletedPath: string,
-  _bytesFreed: number,
-  _itemsDeleted: number = 1
+  bytesFreed: number,
+  itemsDeleted: number = 1
 ): FsTreeNode {
   if (!rootNode || !deletedPath) return rootNode;
   const targetNorm = deletedPath.replace(/\//g, '\\').toLowerCase();
   const rootNorm = rootNode.path.replace(/\//g, '\\').toLowerCase();
+  const safeFreed = Number.isFinite(bytesFreed) && bytesFreed > 0 ? bytesFreed : 0;
+  const safeItems = Number.isFinite(itemsDeleted) && itemsDeleted > 0 ? itemsDeleted : 1;
 
   if (rootNorm === targetNorm) {
+    const isRootDir = Boolean(rootNode.isDir || rootNode.isDirectory);
+    if (isRootDir && safeFreed > 0 && safeFreed < rootNode.sizeBytes) {
+      const nextSize = Math.max(0, rootNode.sizeBytes - safeFreed);
+      const nextFiles = Math.max(0, (rootNode.fileCount || 0) - safeItems);
+      return {
+        ...rootNode,
+        sizeBytes: nextSize,
+        fileCount: nextFiles,
+        percentageOfParent: 100,
+        percentageOfRoot: 100,
+      };
+    }
+
     return {
       ...rootNode,
       sizeBytes: 0,
@@ -88,7 +103,17 @@ export function syncTreeAfterDeletion(
   const updateSubtree = (node: FsTreeNode): { node: FsTreeNode | null; freed: number; items: number } => {
     const nodeNorm = node.path.replace(/\//g, '\\').toLowerCase();
     if (nodeNorm === targetNorm) {
-      const count = (node.isDir || node.isDirectory)
+      const isDir = Boolean(node.isDir || node.isDirectory);
+      if (isDir && safeFreed > 0 && safeFreed < node.sizeBytes) {
+        const nextSize = Math.max(0, node.sizeBytes - safeFreed);
+        const nextFiles = Math.max(0, (node.fileCount || 0) - safeItems);
+        return {
+          node: { ...node, sizeBytes: nextSize, fileCount: nextFiles },
+          freed: safeFreed,
+          items: Math.min(node.fileCount || 0, safeItems),
+        };
+      }
+      const count = isDir
         ? ((node.fileCount || 0) + (node.dirCount || node.folderCount || 0) + 1)
         : 1;
       return { node: null, freed: node.sizeBytes, items: count };
@@ -107,12 +132,25 @@ export function syncTreeAfterDeletion(
       const childNorm = child.path.replace(/\//g, '\\').toLowerCase();
       if (childNorm === targetNorm) {
         modified = true;
-        const count = (child.isDir || child.isDirectory)
-          ? ((child.fileCount || 0) + (child.dirCount || child.folderCount || 0) + 1)
-          : 1;
-        totalFreedInSubtree += child.sizeBytes;
-        totalItemsInSubtree += count;
-        // Omit deleted child from newChildren
+        const isDir = Boolean(child.isDir || child.isDirectory);
+        if (isDir && safeFreed > 0 && safeFreed < child.sizeBytes) {
+          const nextChildSize = Math.max(0, child.sizeBytes - safeFreed);
+          const decrementedFiles = Math.min(child.fileCount || 0, safeItems);
+          newChildren.push({
+            ...child,
+            sizeBytes: nextChildSize,
+            fileCount: Math.max(0, (child.fileCount || 0) - decrementedFiles),
+          });
+          totalFreedInSubtree += safeFreed;
+          totalItemsInSubtree += decrementedFiles;
+        } else {
+          const count = isDir
+            ? ((child.fileCount || 0) + (child.dirCount || child.folderCount || 0) + 1)
+            : 1;
+          totalFreedInSubtree += child.sizeBytes;
+          totalItemsInSubtree += count;
+          // Omit deleted child from newChildren
+        }
       } else {
         const childRes = updateSubtree(child);
         if (childRes.freed > 0 || childRes.node === null || childRes.node !== child) {

@@ -3,9 +3,9 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use walkdir::WalkDir;
 
@@ -365,13 +365,24 @@ pub fn scan_directory_tree(
     scan_directory_tree_with_options(app, target_path, scan_id_opt, false)
 }
 
+static SCAN_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+fn generate_unique_scan_id() -> String {
+    let ts_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let seq = SCAN_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("scan-{}-{}", ts_ms, seq)
+}
+
 pub fn scan_directory_tree_with_options(
     app: Option<&tauri::AppHandle>,
     target_path: String,
     scan_id_opt: Option<String>,
     fast_drilldown: bool,
 ) -> Result<DiskScanResult, AppError> {
-    let scan_id = scan_id_opt.unwrap_or_else(|| format!("scan-{}", Instant::now().elapsed().as_nanos()));
+    let scan_id = scan_id_opt.unwrap_or_else(generate_unique_scan_id);
     let cancel_token = register_cancellation_token(&scan_id);
     let _guard = CancellationGuard {
         scan_id: scan_id.clone(),
@@ -497,9 +508,17 @@ pub fn scan_directory_tree_with_options(
                 }
             } else if file_type.is_file() {
                 files_scanned = files_scanned.saturating_add(1);
-                let file_size = match entry.metadata() {
-                    Ok(m) => m.len(),
-                    Err(_) => 0,
+                let (file_size, mod_time) = match entry.metadata() {
+                    Ok(m) => {
+                        let ts = m
+                            .modified()
+                            .ok()
+                            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        (m.len(), ts)
+                    }
+                    Err(_) => (0, 0),
                 };
                 total_bytes_scanned = total_bytes_scanned.saturating_add(file_size);
 
@@ -507,7 +526,6 @@ pub fn scan_directory_tree_with_options(
                 let extension = entry_path
                     .extension()
                     .map(|e| e.to_string_lossy().to_string());
-                let mod_time = get_modified_timestamp(&entry_path);
 
                 let compact_file = CompactFileEntry {
                     name: file_name.clone(),

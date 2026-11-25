@@ -231,9 +231,20 @@ pub fn is_system_protected_path(path: &Path) -> (bool, Option<&'static str>) {
         return (true, Some("Windows SystemRoot and its subdirectories cannot be deleted"));
     }
 
-    // Common Windows directory pattern fallback if drive letter differs or unanchored
-    if norm_trimmed.ends_with(r"\windows")
-        || norm_trimmed.contains(r"\windows\")
+    // Common Windows OS root fallback if drive letter differs (e.g. D:\Windows, D:\Windows\...)
+    // Avoid broad `contains("\windows\")` substring checks that false-positive on user folders like C:\Users\me\windows\dev.
+    let drive_relative = if norm_trimmed.len() >= 3
+        && norm_trimmed.as_bytes()[0].is_ascii_alphabetic()
+        && norm_trimmed.as_bytes()[1] == b':'
+        && norm_trimmed.as_bytes()[2] == b'\\'
+    {
+        &norm_trimmed[3..]
+    } else {
+        ""
+    };
+
+    if drive_relative == "windows"
+        || drive_relative.starts_with(r"windows\")
         || norm_trimmed.ends_with(r"\windows\system32")
         || norm_trimmed.contains(r"\windows\system32\")
         || norm_trimmed.ends_with(r"\windows\syswow64")
@@ -548,5 +559,11 @@ mod tests {
         let status = check_path_protection_status(&safe_sub);
         assert!(!status.is_protected);
         assert_eq!(status.protection_level, "Safe");
+
+        let user_win_dev = Path::new(r"C:\Users\me\windows-dev\project");
+        let user_win_sub = Path::new(r"C:\Users\me\windows\project");
+        assert!(!is_system_protected_path(user_win_dev).0);
+        assert!(!is_system_protected_path(user_win_sub).0);
+        assert!(is_system_protected_path(Path::new(r"D:\Windows\System32")).0);
     }
 }

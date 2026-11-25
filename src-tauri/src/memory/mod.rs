@@ -332,6 +332,18 @@ pub fn purge_standby_memory(mode: StandbyPurgeMode) -> Result<PurgeResult, AppEr
 
 #[tauri::command]
 pub fn purge_working_sets(excluded_pids: Vec<u32>) -> Result<PurgeResult, AppError> {
+    let configured_exclusions = AUTO_TRIMMER_CONFIG
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|c| c.excluded_process_names.clone()))
+        .unwrap_or_default();
+    purge_working_sets_with_exclusions(excluded_pids, &configured_exclusions)
+}
+
+fn purge_working_sets_with_exclusions(
+    excluded_pids: Vec<u32>,
+    excluded_names: &[String],
+) -> Result<PurgeResult, AppError> {
     #[cfg(windows)]
     {
         let system_exclusions = [
@@ -343,22 +355,38 @@ pub fn purge_working_sets(excluded_pids: Vec<u32>) -> Result<PurgeResult, AppErr
             "wiscripts.exe",
             "wiscripts_windows.exe",
         ];
+        let custom_exclusions: Vec<String> = excluded_names
+            .iter()
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
 
-        let mut pids = [0u32; 2048];
-        let mut bytes_returned = 0u32;
-        let enum_res = unsafe {
-            K32EnumProcesses(
-                pids.as_mut_ptr(),
-                (pids.len() * std::mem::size_of::<u32>()) as u32,
-                &mut bytes_returned,
-            )
-        };
+        // Dynamically grow K32EnumProcesses buffer so systems with >2048 processes are never truncated
+        let mut capacity = 2048usize;
+        let mut pids: Vec<u32>;
+        let mut pid_count;
+        loop {
+            pids = vec![0u32; capacity];
+            let mut bytes_returned = 0u32;
+            let enum_res = unsafe {
+                K32EnumProcesses(
+                    pids.as_mut_ptr(),
+                    (pids.len() * std::mem::size_of::<u32>()) as u32,
+                    &mut bytes_returned,
+                )
+            };
 
-        if !enum_res.as_bool() {
-            return Err(AppError::System("K32EnumProcesses failed".to_string()));
+            if !enum_res.as_bool() {
+                return Err(AppError::System("K32EnumProcesses failed".to_string()));
+            }
+
+            pid_count = (bytes_returned as usize) / std::mem::size_of::<u32>();
+            if pid_count < capacity || capacity >= 65536 {
+                break;
+            }
+            capacity *= 2;
         }
 
-        let pid_count = (bytes_returned as usize) / std::mem::size_of::<u32>();
         let mut total_freed_bytes = 0u64;
         let mut trimmed_count = 0u32;
 
@@ -378,20 +406,20 @@ pub fn purge_working_sets(excluded_pids: Vec<u32>) -> Result<PurgeResult, AppErr
                     // Check process name
                     let mut name_buf = [0u16; 260];
                     let name_len = K32GetProcessImageFileNameW(handle, &mut name_buf);
-                    let mut is_system = false;
+                    let mut is_excluded = false;
 
                     if name_len > 0 {
                         let full_path = String::from_utf16_lossy(&name_buf[..name_len as usize]);
                         let process_name = full_path.rsplit('\\').next().unwrap_or(&full_path).to_lowercase();
-                        for excluded in &system_exclusions {
-                            if process_name == *excluded {
-                                is_system = true;
-                                break;
-                            }
+                        let process_stem = process_name.strip_suffix(".exe").unwrap_or(&process_name);
+                        if system_exclusions.contains(&process_name.as_str())
+                            || custom_exclusions.iter().any(|ex| ex == &process_name || ex == process_stem)
+                        {
+                            is_excluded = true;
                         }
                     }
 
-                    if !is_system {
+                    if !is_excluded {
                         let mut mem_counters_before = PROCESS_MEMORY_COUNTERS {
                             cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
                             ..Default::default()
@@ -440,6 +468,7 @@ pub fn purge_working_sets(excluded_pids: Vec<u32>) -> Result<PurgeResult, AppErr
     }
     #[cfg(not(windows))]
     {
+        let _ = (excluded_pids, excluded_names);
         Ok(PurgeResult {
             bytes_freed: 256 * 1024 * 1024,
             mb_freed: 256.0,
@@ -480,7 +509,10 @@ fn start_background_auto_trimmer_if_needed() {
                                 }
 
                                 if config.purge_working_sets {
-                                    let _ = purge_working_sets(Vec::new());
+                                    let _ = purge_working_sets_with_exclusions(
+                                        Vec::new(),
+                                        &config.excluded_process_names,
+                                    );
                                 }
                             }
                         }
@@ -515,6 +547,8 @@ pub fn configure_ram_auto_trimmer(
 
     if config.enabled {
         start_background_auto_trimmer_if_needed();
+    } else {
+        AUTO_TRIMMER_RUNNING.store(false, Ordering::SeqCst);
     }
 
     Ok(config)

@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::CloseHandle;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
@@ -44,6 +46,7 @@ pub struct GovernorStatus {
 
 struct GovernorState {
     rules: HashMap<String, ResourceGovernorRule>,
+    throttled_priorities: HashMap<u32, String>,
     pro_balance_events_triggered: u64,
     total_memory_trimmed_mb: u64,
 }
@@ -52,6 +55,7 @@ impl GovernorState {
     fn new() -> Self {
         Self {
             rules: HashMap::new(),
+            throttled_priorities: HashMap::new(),
             pro_balance_events_triggered: 0,
             total_memory_trimmed_mb: 0,
         }
@@ -59,11 +63,71 @@ impl GovernorState {
 }
 
 static GOVERNOR_STATE: OnceLock<Arc<Mutex<GovernorState>>> = OnceLock::new();
+static GOVERNOR_SYS: OnceLock<Mutex<sysinfo::System>> = OnceLock::new();
 
 fn get_state() -> Arc<Mutex<GovernorState>> {
     GOVERNOR_STATE
         .get_or_init(|| Arc::new(Mutex::new(GovernorState::new())))
         .clone()
+}
+
+fn get_persistent_sys() -> &'static Mutex<sysinfo::System> {
+    GOVERNOR_SYS.get_or_init(|| {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes();
+        Mutex::new(sys)
+    })
+}
+
+/// Returns true if a process must never be throttled by ProBalance.
+pub fn is_pro_balance_excluded(name_lower: &str, pid: u32, foreground_pid: Option<u32>) -> bool {
+    if pid <= 4 || foreground_pid == Some(pid) {
+        return true;
+    }
+    matches!(
+        name_lower,
+        "system"
+            | "registry"
+            | "idle"
+            | "smss.exe"
+            | "csrss.exe"
+            | "wininit.exe"
+            | "winlogon.exe"
+            | "services.exe"
+            | "lsass.exe"
+            | "svchost.exe"
+            | "dwm.exe"
+            | "audiodg.exe"
+            | "fontdrvhost.exe"
+            | "conhost.exe"
+            | "explorer.exe"
+            | "sihost.exe"
+            | "taskmgr.exe"
+            | "wiscripts.exe"
+            | "wiscripts_windows.exe"
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn get_foreground_pid() -> Option<u32> {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid > 4 {
+            Some(pid)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_foreground_pid() -> Option<u32> {
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -454,32 +518,50 @@ pub fn list_active_rules() -> Result<Vec<ResourceGovernorRule>, String> {
 }
 
 pub fn get_governor_status() -> Result<GovernorStatus, String> {
-    let mut sys = sysinfo::System::new_all();
-    sys.refresh_all();
+    // 1. Refresh persistent sysinfo::System under its own short-lived lock
+    let process_snapshots: Vec<(u32, String, f32, u64)> = {
+        let mut sys = get_persistent_sys()
+            .lock()
+            .map_err(|e| format!("System monitor lock poison: {}", e))?;
+        sys.refresh_processes();
+        sys.processes()
+            .iter()
+            .map(|(pid, proc_info)| {
+                (
+                    pid.as_u32(),
+                    proc_info.name().to_string(),
+                    proc_info.cpu_usage(),
+                    proc_info.memory() / (1024 * 1024),
+                )
+            })
+            .collect()
+    };
 
-    let state_arc = get_state();
-    let mut state = state_arc
-        .lock()
-        .map_err(|e| format!("State lock poison: {}", e))?;
+    // 2. Snapshot rules and throttled history briefly, then drop GOVERNOR_STATE before Win32 calls
+    let (rules_snapshot, throttled_snapshot) = {
+        let state_arc = get_state();
+        let state = state_arc
+            .lock()
+            .map_err(|e| format!("State lock poison: {}", e))?;
+        (state.rules.clone(), state.throttled_priorities.clone())
+    };
 
-    let mut managed_processes = Vec::new();
+    let foreground_pid = get_foreground_pid();
+    let mut managed_processes = Vec::with_capacity(process_snapshots.len());
+    let mut new_throttled: Vec<(u32, String)> = Vec::new();
+    let mut restored_pids: Vec<u32> = Vec::new();
+    let mut delta_pro_balance_events: u64 = 0;
+    let mut delta_trimmed_mb: u64 = 0;
 
-    for (pid, process) in sys.processes() {
-        let pid_u32 = pid.as_u32();
-        let name = process.name().to_string();
-        let cpu_usage = process.cpu_usage();
+    for (pid_u32, name, cpu_usage, mem_mb) in process_snapshots {
         let name_lower = name.to_lowercase();
         let name_no_ext = name_lower.strip_suffix(".exe").unwrap_or(&name_lower);
 
-        // Check if matching rule exists
-        let matching_rule = state
-            .rules
+        let matching_rule = rules_snapshot
             .get(&name_lower)
-            .or_else(|| state.rules.get(name_no_ext))
-            .cloned();
+            .or_else(|| rules_snapshot.get(name_no_ext));
 
-        let current_priority = if let Some(ref rule) = matching_rule {
-            // Enforce priority rule if different
+        let mut current_priority = if let Some(rule) = matching_rule {
             let curr = get_process_priority(pid_u32);
             if curr.to_uppercase() != rule.target_priority.to_uppercase() {
                 let _ = set_process_priority(pid_u32, &rule.target_priority);
@@ -489,31 +571,43 @@ pub fn get_governor_status() -> Result<GovernorStatus, String> {
             get_process_priority(pid_u32)
         };
 
-        let assigned_cores = if let Some(ref rule) = matching_rule {
+        let assigned_cores = if let Some(rule) = matching_rule {
             let _ = set_process_affinity(pid_u32, &rule.core_affinity_mask);
             format_assigned_cores(parse_affinity_mask(&rule.core_affinity_mask).unwrap_or(!0))
         } else {
             get_process_affinity(pid_u32)
         };
 
-        // ProBalance Dynamic CPU Spike Suppressor Check
-        if matching_rule.is_none() && cpu_usage > 25.0 {
-            // High CPU spike detected on an unruled process!
-            // ProBalance dynamically suppresses spike by lowering priority to BELOW_NORMAL
-            if (current_priority == "NORMAL" || current_priority == "HIGH" || current_priority == "ABOVE_NORMAL")
-                && set_process_priority(pid_u32, "BELOW_NORMAL").is_ok()
-            {
-                state.pro_balance_events_triggered += 1;
+        // ProBalance Dynamic CPU Spike Suppressor & Restoration (excludes system & foreground processes)
+        if matching_rule.is_none() && !is_pro_balance_excluded(&name_lower, pid_u32, foreground_pid)
+        {
+            if cpu_usage > 25.0 {
+                if (current_priority == "NORMAL"
+                    || current_priority == "HIGH"
+                    || current_priority == "ABOVE_NORMAL")
+                    && !throttled_snapshot.contains_key(&pid_u32)
+                    && set_process_priority(pid_u32, "BELOW_NORMAL").is_ok()
+                {
+                    new_throttled.push((pid_u32, current_priority.clone()));
+                    current_priority = "BELOW_NORMAL".to_string();
+                    delta_pro_balance_events += 1;
+                }
+            } else if cpu_usage < 10.0 {
+                if let Some(orig_prio) = throttled_snapshot.get(&pid_u32) {
+                    if set_process_priority(pid_u32, orig_prio).is_ok() {
+                        current_priority = orig_prio.clone();
+                        restored_pids.push(pid_u32);
+                    }
+                }
             }
         }
 
         // Auto trim memory check for ruled processes
-        if let Some(ref rule) = matching_rule {
+        if let Some(rule) = matching_rule {
             if let Some(thresh_mb) = rule.auto_trim_memory_mb_threshold {
-                let mem_mb = process.memory() / (1024 * 1024);
                 if mem_mb >= thresh_mb {
                     if let Ok(trimmed) = trim_process_working_set_internal(pid_u32) {
-                        state.total_memory_trimmed_mb += trimmed;
+                        delta_trimmed_mb += trimmed;
                     }
                 }
             }
@@ -528,13 +622,38 @@ pub fn get_governor_status() -> Result<GovernorStatus, String> {
         });
     }
 
+    // 3. Re-acquire state lock briefly to persist counters and throttled priority map
+    let (active_rules_count, pro_balance_events_triggered, total_memory_trimmed_mb) = {
+        let state_arc = get_state();
+        let mut state = state_arc
+            .lock()
+            .map_err(|e| format!("State lock poison: {}", e))?;
+        for pid in restored_pids {
+            state.throttled_priorities.remove(&pid);
+        }
+        for (pid, orig) in new_throttled {
+            state.throttled_priorities.insert(pid, orig);
+        }
+        state.pro_balance_events_triggered += delta_pro_balance_events;
+        state.total_memory_trimmed_mb += delta_trimmed_mb;
+        (
+            state.rules.len(),
+            state.pro_balance_events_triggered,
+            state.total_memory_trimmed_mb,
+        )
+    };
+
     // Sort managed processes by CPU usage descending
-    managed_processes.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap_or(std::cmp::Ordering::Equal));
+    managed_processes.sort_by(|a, b| {
+        b.cpu_usage
+            .partial_cmp(&a.cpu_usage)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     Ok(GovernorStatus {
-        active_rules_count: state.rules.len(),
-        pro_balance_events_triggered: state.pro_balance_events_triggered,
-        total_memory_trimmed_mb: state.total_memory_trimmed_mb,
+        active_rules_count,
+        pro_balance_events_triggered,
+        total_memory_trimmed_mb,
         managed_processes,
     })
 }

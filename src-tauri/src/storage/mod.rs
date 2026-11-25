@@ -22,10 +22,12 @@ use crate::error::AppError;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
@@ -77,7 +79,13 @@ pub fn validate_path_in_user_profile<P: AsRef<Path>>(path: P) -> Result<PathBuf,
     let user_profile_canon = user_profile
         .canonicalize()
         .map(strip_unc_prefix)
-        .unwrap_or_else(|_| normalize_path(&user_profile));
+        .map_err(|e| {
+            AppError::InvalidConfig(format!(
+                "Security Violation: Failed to canonicalize USERPROFILE '{}': {}",
+                user_profile.display(),
+                e
+            ))
+        })?;
 
     let absolute_target = if target.is_absolute() {
         target.to_path_buf()
@@ -85,17 +93,28 @@ pub fn validate_path_in_user_profile<P: AsRef<Path>>(path: P) -> Result<PathBuf,
         user_profile.join(target)
     };
 
-    let normalized_target = normalize_path(&absolute_target);
     let target_canon = absolute_target
         .canonicalize()
         .map(strip_unc_prefix)
-        .unwrap_or(normalized_target.clone());
+        .map_err(|e| {
+            AppError::InvalidConfig(format!(
+                "Security Violation: Failed to canonicalize target path '{}': {}",
+                absolute_target.display(),
+                e
+            ))
+        })?;
 
     let target_str = target_canon.to_string_lossy().to_lowercase();
     let profile_str = user_profile_canon.to_string_lossy().to_lowercase();
 
-    if target_str == profile_str
-        || target_str.starts_with(&format!("{}\\", profile_str))
+    if target_str == profile_str {
+        return Err(AppError::InvalidConfig(format!(
+            "Security Violation: Deleting or targeting USERPROFILE root ('{}') directly is forbidden",
+            user_profile_canon.display()
+        )));
+    }
+
+    if target_str.starts_with(&format!("{}\\", profile_str))
         || target_str.starts_with(&format!("{}/", profile_str))
     {
         Ok(target_canon)
@@ -130,11 +149,39 @@ pub fn compute_partial_file_hash<P: AsRef<Path>>(path: P) -> Result<String, std:
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn modified_timestamp_from_meta(meta: &std::fs::Metadata) -> u64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 fn get_modified_timestamp(path: &Path) -> u64 {
     path.metadata()
-        .and_then(|m| m.modified())
-        .map(|t| t.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs())
+        .map(|m| modified_timestamp_from_meta(&m))
         .unwrap_or(0)
+}
+
+#[derive(Eq, PartialEq)]
+struct BoundedLargeCandidate {
+    size_bytes: u64,
+    modified_timestamp: u64,
+    path: PathBuf,
+}
+
+impl Ord for BoundedLargeCandidate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.size_bytes
+            .cmp(&other.size_bytes)
+            .then_with(|| self.path.cmp(&other.path))
+    }
+}
+
+impl PartialOrd for BoundedLargeCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateGroup>, AppError> {
@@ -143,12 +190,16 @@ pub fn scan_duplicate_files(target_dir: Option<String>) -> Result<Vec<DuplicateG
         None => get_user_profile_dir()?,
     };
 
+    let cancel_token = register_cancellation_token("duplicate_files");
     log::info!("[Storage] Scanning for duplicate files in {:?}", base_dir);
 
     // Phase 1: Collect size > 0 files & group by size
     let mut size_map: HashMap<u64, Vec<PathBuf>> = HashMap::new();
 
     for entry in WalkDir::new(&base_dir).into_iter().filter_map(|e| e.ok()) {
+        if cancel_token.load(Ordering::Relaxed) {
+            break;
+        }
         if entry.file_type().is_file() {
             if let Ok(meta) = entry.metadata() {
                 let sz = meta.len();
@@ -274,44 +325,70 @@ pub fn scan_large_files(
     };
 
     let max_items = limit.unwrap_or(50);
+    if max_items == 0 {
+        return Ok(Vec::new());
+    }
+
+    let cancel_token = register_cancellation_token("large_files");
     log::info!(
         "[Storage] Scanning for top {} large files in {:?}",
         max_items,
         base_dir
     );
 
-    let mut large_files = Vec::new();
+    let mut min_heap: BinaryHeap<Reverse<BoundedLargeCandidate>> =
+        BinaryHeap::with_capacity(max_items.saturating_add(1));
 
     for entry in WalkDir::new(&base_dir).into_iter().filter_map(|e| e.ok()) {
+        if cancel_token.load(Ordering::Relaxed) {
+            break;
+        }
         if entry.file_type().is_file() {
             if let Ok(meta) = entry.metadata() {
                 let sz = meta.len();
                 if sz > 0 {
-                    let path = entry.path();
-                    let name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "Unknown".to_string());
-                    let extension = path
-                        .extension()
-                        .map(|e| e.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    let modified_timestamp = get_modified_timestamp(path);
-
-                    large_files.push(LargeFileItem {
-                        path: path.to_string_lossy().to_string(),
-                        name,
+                    let candidate = BoundedLargeCandidate {
                         size_bytes: sz,
-                        extension,
-                        modified_timestamp,
-                    });
+                        modified_timestamp: modified_timestamp_from_meta(&meta),
+                        path: entry.path().to_path_buf(),
+                    };
+                    if min_heap.len() < max_items {
+                        min_heap.push(Reverse(candidate));
+                    } else if let Some(smallest) = min_heap.peek() {
+                        if candidate > smallest.0 {
+                            min_heap.pop();
+                            min_heap.push(Reverse(candidate));
+                        }
+                    }
                 }
             }
         }
     }
 
+    let mut large_files: Vec<LargeFileItem> = min_heap
+        .into_iter()
+        .map(|Reverse(c)| {
+            let name = c
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Unknown".to_string());
+            let extension = c
+                .path
+                .extension()
+                .map(|e| e.to_string_lossy().to_string())
+                .unwrap_or_default();
+            LargeFileItem {
+                path: c.path.to_string_lossy().to_string(),
+                name,
+                size_bytes: c.size_bytes,
+                extension,
+                modified_timestamp: c.modified_timestamp,
+            }
+        })
+        .collect();
+
     large_files.sort_by_key(|b| std::cmp::Reverse(b.size_bytes));
-    large_files.truncate(max_items);
 
     log::info!(
         "[Storage] Large files scan finished. Returning top {} files",
@@ -329,28 +406,53 @@ pub fn delete_target_files(paths: Vec<String>) -> Result<DeleteResult, AppError>
     let mut errors: Vec<String> = Vec::new();
 
     for path_str in paths {
-        let path = Path::new(&path_str);
-        if let Err(e) = validate_path_in_user_profile(path) {
-            log::error!("[Storage] Path validation failed for {:?}: {:?}", path, e);
-            return Err(e);
+        let raw_path = Path::new(&path_str);
+        if let (true, reason_opt) = is_system_protected_path(raw_path) {
+            return Err(AppError::InvalidConfig(format!(
+                "Security Violation: Path '{}' is protected ({})",
+                path_str,
+                reason_opt.unwrap_or("Protected OS path")
+            )));
         }
 
-        if !path.exists() {
-            errors.push(format!("File does not exist: {}", path_str));
+        let target_canon = match validate_path_in_user_profile(raw_path) {
+            Ok(p) => p,
+            Err(e) => {
+                log::error!("[Storage] Path validation failed for {:?}: {:?}", raw_path, e);
+                return Err(e);
+            }
+        };
+
+        if let (true, reason_opt) = is_system_protected_path(&target_canon) {
+            return Err(AppError::InvalidConfig(format!(
+                "Security Violation: Canonical path '{}' is protected ({})",
+                target_canon.display(),
+                reason_opt.unwrap_or("Protected OS path")
+            )));
+        }
+
+        if !target_canon.exists() {
+            errors.push(format!("File does not exist: {}", target_canon.display()));
             continue;
         }
 
-        let sz = path.metadata().map(|m| m.len()).unwrap_or(0);
+        let sz = target_canon
+            .symlink_metadata()
+            .map(|m| m.len())
+            .unwrap_or(0);
 
-        // Attempt trash deletion first, fallback to standard fs deletion
-        let delete_res = trash::delete(path).or_else(|_| std::fs::remove_file(path));
-        match delete_res {
+        // Move to Recycle Bin strictly — never silently fall back to permanent std::fs::remove_file
+        match trash::delete(&target_canon) {
             Ok(_) => {
                 files_deleted += 1;
                 bytes_freed += sz;
             }
             Err(e) => {
-                let err_msg = format!("Failed to delete {:?}: {}", path_str, e);
+                let err_msg = format!(
+                    "Failed to move '{}' to Recycle Bin: {}",
+                    target_canon.display(),
+                    e
+                );
                 log::warn!("[Storage] {}", err_msg);
                 errors.push(err_msg);
             }
@@ -485,11 +587,27 @@ mod tests {
         assert!(validate_path_in_user_profile(rel_escape).is_err());
 
         if let Ok(user_profile) = get_user_profile_dir() {
-            let valid_sub = user_profile.join("Downloads");
-            assert!(validate_path_in_user_profile(&valid_sub).is_ok());
+            // USERPROFILE root itself must be rejected
+            assert!(
+                validate_path_in_user_profile(&user_profile).is_err(),
+                "USERPROFILE root must be rejected"
+            );
+            assert!(
+                delete_target_files(vec![user_profile.to_string_lossy().to_string()]).is_err(),
+                "delete_target_files must reject USERPROFILE root"
+            );
 
-            let traversal_inside = user_profile.join("Downloads").join("..").join("Documents");
-            assert!(validate_path_in_user_profile(&traversal_inside).is_ok());
+            // Nonexistent path must fail closed on canonicalize()
+            let missing = user_profile.join("nonexistent_guard_test_dir_998877");
+            assert!(validate_path_in_user_profile(&missing).is_err());
+
+            let valid_sub = user_profile.join("Downloads");
+            if valid_sub.exists() {
+                assert!(validate_path_in_user_profile(&valid_sub).is_ok());
+            }
+
+            let temp_sub = tempdir().unwrap();
+            assert!(validate_path_in_user_profile(temp_sub.path()).is_ok());
 
             let traversal_outside = user_profile.join("..").join("Windows");
             assert!(validate_path_in_user_profile(&traversal_outside).is_err());

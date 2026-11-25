@@ -315,23 +315,23 @@ pub fn check_status(
     let mut status = std::collections::HashMap::new();
 
     // 1. Native Win32 SCM Service Queries (sub-millisecond latency)
-    let diagtrack_disabled = crate::winapi::services::is_service_disabled("DiagTrack").unwrap_or(true);
+    let diagtrack_disabled = crate::winapi::services::is_service_disabled("DiagTrack").unwrap_or(false);
     status.insert("telemetry_diagtrack".to_string(), diagtrack_disabled);
 
-    let dmwappush_disabled = crate::winapi::services::is_service_disabled("dmwappushservice").unwrap_or(true);
+    let dmwappush_disabled = crate::winapi::services::is_service_disabled("dmwappushservice").unwrap_or(false);
     status.insert("telemetry_dmwappush".to_string(), dmwappush_disabled);
 
-    let sysmain_disabled = crate::winapi::services::is_service_disabled("SysMain").unwrap_or(true);
+    let sysmain_disabled = crate::winapi::services::is_service_disabled("SysMain").unwrap_or(false);
     status.insert("services_sysmain".to_string(), sysmain_disabled);
 
     let wsearch_start = crate::winapi::services::query_service_start_type("WSearch");
     let wsearch_manual_or_disabled = match wsearch_start {
         Ok(st) => st == 3 || st == 4, // 3 = Manual, 4 = Disabled
-        Err(_) => true,
+        Err(_) => false,
     };
     status.insert("services_search_indexing".to_string(), wsearch_manual_or_disabled);
 
-    let fax_disabled = crate::winapi::services::is_service_disabled("Fax").unwrap_or(true);
+    let fax_disabled = crate::winapi::services::is_service_disabled("Fax").unwrap_or(false);
     status.insert("services_fax_spooler".to_string(), fax_disabled);
 
     // 2. Native Win32 Registry Queries (sub-millisecond latency)
@@ -420,27 +420,74 @@ pub fn check_status(
     let onedrive_absent = !onedrive_setup1.exists() && !onedrive_setup2.exists();
     status.insert("bloatware_onedrive".to_string(), onedrive_absent);
 
-    // CEIP Scheduled tasks fast registry check
-    let ceip_task_exists = crate::winapi::registry::key_exists(
-        "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
-    )
-    .unwrap_or(false);
-    let ceip_disabled = !ceip_task_exists || crate::winapi::registry::get_dword(
+    // CEIP Scheduled tasks check (policy OR actual scheduled task disabled state)
+    let ceip_policy_disabled = crate::winapi::registry::get_dword(
         "HKLM:\\SOFTWARE\\Policies\\Microsoft\\SQMClient\\Windows",
         "CEIPEnable",
-    ).map(|v| v == 0).unwrap_or(false);
+    )
+    .map(|v| v == 0)
+    .unwrap_or(false);
+    let ceip_disabled = if ceip_policy_disabled {
+        true
+    } else {
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            let out = std::process::Command::new("schtasks")
+                .creation_flags(0x08000000)
+                .args([
+                    "/Query",
+                    "/TN",
+                    r"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+                    "/FO",
+                    "CSV",
+                    "/NH",
+                ])
+                .output();
+            match out {
+                Ok(o) if o.status.success() => {
+                    let text = crate::runner::decode_bytes(&o.stdout).to_lowercase();
+                    text.contains("disabled") || text.contains("отключено")
+                }
+                _ => false,
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            false
+        }
+    };
     status.insert("telemetry_ceip_tasks".to_string(), ceip_disabled);
 
-    // Fast AppX registry existence check for Xbox and 3D Viewer
-    let xbox_absent = !crate::winapi::registry::key_exists(
-        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Appx\\AppxAllUserStore\\Applications\\Microsoft.XboxApp",
-    ).unwrap_or(false);
-    status.insert("bloatware_xbox_apps".to_string(), xbox_absent);
+    // Prefix-based AppX registry existence check (Appx subkeys include version_arch__publisher suffix)
+    const APPX_SYSTEM_STORE: &str =
+        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Appx\\AppxAllUserStore\\Applications";
+    const APPX_USER_PACKAGES: &str =
+        "HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\Repository\\Packages";
 
-    let viewer_absent = !crate::winapi::registry::key_exists(
-        "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Appx\\AppxAllUserStore\\Applications\\Microsoft.Microsoft3DViewer",
-    ).unwrap_or(false);
-    status.insert("bloatware_3d_viewer".to_string(), viewer_absent);
+    let xbox_present = crate::winapi::registry::has_subkey_with_prefix(
+        APPX_SYSTEM_STORE,
+        "Microsoft.XboxApp_",
+    )
+    .unwrap_or(false)
+        || crate::winapi::registry::has_subkey_with_prefix(
+            APPX_USER_PACKAGES,
+            "Microsoft.XboxApp_",
+        )
+        .unwrap_or(false);
+    status.insert("bloatware_xbox_apps".to_string(), !xbox_present);
+
+    let viewer_present = crate::winapi::registry::has_subkey_with_prefix(
+        APPX_SYSTEM_STORE,
+        "Microsoft.Microsoft3DViewer_",
+    )
+    .unwrap_or(false)
+        || crate::winapi::registry::has_subkey_with_prefix(
+            APPX_USER_PACKAGES,
+            "Microsoft.Microsoft3DViewer_",
+        )
+        .unwrap_or(false);
+    status.insert("bloatware_3d_viewer".to_string(), !viewer_present);
 
     // Action items (always false on initial status)
     status.insert("disk_clean_temp".to_string(), false);
@@ -572,16 +619,20 @@ pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
             }
         }
         "win11_disable_copilot" => {
-            let _ = crate::winapi::registry::set_dword(
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsCopilot",
                 "TurnOffWindowsCopilot",
                 1,
-            );
-            let _ = crate::winapi::registry::set_dword(
+            ) {
+                return Some(Err(e));
+            }
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsCopilot",
                 "TurnOffWindowsCopilot",
                 1,
-            );
+            ) {
+                return Some(Err(e));
+            }
             match crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                 "ShowCopilotButton",
@@ -592,16 +643,20 @@ pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
             }
         }
         "win11_disable_recall_ai" => {
-            let _ = crate::winapi::registry::set_dword(
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
                 "DisableAIDataAnalysis",
                 1,
-            );
-            let _ = crate::winapi::registry::set_dword(
+            ) {
+                return Some(Err(e));
+            }
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Policies\\Microsoft\\Windows\\Recall",
                 "AllowSnapshot",
                 0,
-            );
+            ) {
+                return Some(Err(e));
+            }
             match crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Policies\\Microsoft\\Windows\\WindowsAI",
                 "AllowSnapshot",
@@ -612,16 +667,20 @@ pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
             }
         }
         "win11_disable_start_recommendations" => {
-            let _ = crate::winapi::registry::set_dword(
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                 "Start_IrisRecommendations",
                 0,
-            );
-            let _ = crate::winapi::registry::set_dword(
+            ) {
+                return Some(Err(e));
+            }
+            if let Err(e) = crate::winapi::registry::set_dword(
                 "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
                 "ShowRecommendations",
                 0,
-            );
+            ) {
+                return Some(Err(e));
+            }
             match crate::winapi::registry::set_dword(
                 "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
                 "HideRecommendedSection",
@@ -633,6 +692,36 @@ pub fn execute_native_rule(rule_id: &str) -> Option<Result<String, String>> {
         }
         _ => None,
     }
+}
+
+fn run_ps_rule_with_progress(
+    app: Option<&tauri::AppHandle>,
+    runner: &dyn CommandRunner,
+    rule: &OptimizationItem,
+    current_step: usize,
+    total_steps: usize,
+) -> Result<crate::runner::CommandOutput, AppError> {
+    use tauri::Emitter;
+    runner.run_powershell(&rule.powershell_command).map_err(|e| {
+        log::error!(
+            "[OptimizationEngine] Rule '{}' failed to run: {}",
+            rule.id,
+            e
+        );
+        if let Some(app_handle) = app {
+            let payload = TaskProgressPayload {
+                current_step,
+                total_steps,
+                message: format!(
+                    "Failed step {}/{}: {}: {}",
+                    current_step, total_steps, rule.title, e
+                ),
+                is_error: true,
+            };
+            let _ = app_handle.emit("task-progress", &payload);
+        }
+        AppError::Execution(e)
+    })
 }
 
 pub fn execute(
@@ -719,29 +808,7 @@ pub fn execute(
         }
 
         let output = if runner.is_dry_run() {
-            match runner.run_powershell(&rule.powershell_command) {
-                Ok(out) => out,
-                Err(e) => {
-                    log::error!(
-                        "[OptimizationEngine] Rule '{}' failed to run in dry run: {}",
-                        rule.id,
-                        e
-                    );
-                    if let Some(app_handle) = app {
-                        let payload = TaskProgressPayload {
-                            current_step,
-                            total_steps,
-                            message: format!(
-                                "Failed step {}/{}: {}: {}",
-                                current_step, total_steps, rule.title, e
-                            ),
-                            is_error: true,
-                        };
-                        let _ = app_handle.emit("task-progress", &payload);
-                    }
-                    return Err(AppError::Execution(e));
-                }
-            }
+            run_ps_rule_with_progress(app, runner, &rule, current_step, total_steps)?
         } else if runner.is_native_enabled() {
             if let Some(native_res) = execute_native_rule(&rule.id) {
                 match native_res {
@@ -757,54 +824,10 @@ pub fn execute(
                     },
                 }
             } else {
-                match runner.run_powershell(&rule.powershell_command) {
-                    Ok(out) => out,
-                    Err(e) => {
-                        log::error!(
-                            "[OptimizationEngine] Rule '{}' failed to run: {}",
-                            rule.id,
-                            e
-                        );
-                        if let Some(app_handle) = app {
-                            let payload = TaskProgressPayload {
-                                current_step,
-                                total_steps,
-                                message: format!(
-                                    "Failed step {}/{}: {}: {}",
-                                    current_step, total_steps, rule.title, e
-                                ),
-                                is_error: true,
-                            };
-                            let _ = app_handle.emit("task-progress", &payload);
-                        }
-                        return Err(AppError::Execution(e));
-                    }
-                }
+                run_ps_rule_with_progress(app, runner, &rule, current_step, total_steps)?
             }
         } else {
-            match runner.run_powershell(&rule.powershell_command) {
-                Ok(out) => out,
-                Err(e) => {
-                    log::error!(
-                        "[OptimizationEngine] Rule '{}' failed to run: {}",
-                        rule.id,
-                        e
-                    );
-                    if let Some(app_handle) = app {
-                        let payload = TaskProgressPayload {
-                            current_step,
-                            total_steps,
-                            message: format!(
-                                "Failed step {}/{}: {}: {}",
-                                current_step, total_steps, rule.title, e
-                            ),
-                            is_error: true,
-                        };
-                        let _ = app_handle.emit("task-progress", &payload);
-                    }
-                    return Err(AppError::Execution(e));
-                }
-            }
+            run_ps_rule_with_progress(app, runner, &rule, current_step, total_steps)?
         };
 
         let action_success = output.exit_code == 0;

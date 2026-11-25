@@ -64,7 +64,13 @@ function Get-FastFolderSize {
 
     # Fast Path 2: Multi-Threaded Robocopy /L (List-only, 16 threads, skips junctions)
     try {
-        $roboOut = robocopy "$Path" "$Path" *.* /L /E /BYTES /NFL /NDL /NJH /NC /NS /NP /MT:16 /XJ /R:0 /W:0 2>$null
+        # Prevent trailing backslash from escaping the closing double quote in robocopy args
+        $roboPath = if ($Path.Length -le 3 -and $Path -match '^[A-Za-z]:\\?$') {
+            $Path.TrimEnd('\') + '\.'
+        } else {
+            $Path.TrimEnd('\')
+        }
+        $roboOut = robocopy "$roboPath" "$roboPath" *.* /L /E /BYTES /NFL /NDL /NJH /NC /NS /NP /MT:16 /XJ /R:0 /W:0 2>$null
         $numbers = @()
         foreach ($line in $roboOut) {
             if ($line -match '^\s*[^:]+:\s+(\d+)\s+') {

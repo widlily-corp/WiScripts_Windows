@@ -4,8 +4,12 @@ pub mod sessions;
 pub mod types;
 
 use crate::error::AppError;
-use std::sync::{Arc, Mutex};
-use types::{AppAudioSession, AudioDevice, AudioDevicesPayload, AudioFlow, DeviceState};
+use std::sync::Arc;
+#[cfg(any(test, debug_assertions))]
+use std::sync::Mutex;
+use types::{AppAudioSession, AudioDevicesPayload, AudioFlow};
+#[cfg(any(test, debug_assertions))]
+use types::{AudioDevice, DeviceState};
 
 /// Trait abstraction for audio hardware & COM engine interface, enabling clean mockability in tests.
 pub trait AudioBackend: Send + Sync {
@@ -41,12 +45,14 @@ impl AudioBackend for WindowsAudioBackend {
     }
 }
 
-/// Thread-safe Mock Audio Backend for unit testing and fallback execution.
+/// Thread-safe Mock Audio Backend for unit and integration testing only.
+#[cfg(any(test, debug_assertions))]
 pub struct MockAudioBackend {
     pub devices: Mutex<AudioDevicesPayload>,
     pub sessions: Mutex<Vec<AppAudioSession>>,
 }
 
+#[cfg(any(test, debug_assertions))]
 impl MockAudioBackend {
     pub fn new_with_sample_data() -> Self {
         let render_1 = AudioDevice {
@@ -124,6 +130,7 @@ impl MockAudioBackend {
     }
 }
 
+#[cfg(any(test, debug_assertions))]
 impl AudioBackend for MockAudioBackend {
     fn get_audio_devices(&self) -> Result<AudioDevicesPayload, AppError> {
         let lock = self
@@ -234,79 +241,29 @@ impl AudioBackend for MockAudioBackend {
     }
 }
 
-// Global default backend instance using Windows Core Audio API, falling back to mock state if unavailable.
+// Global default backend instance using Windows Core Audio API (no mock fallback in production).
 fn get_backend() -> Arc<dyn AudioBackend> {
     Arc::new(WindowsAudioBackend)
 }
 
 pub fn get_audio_devices() -> Result<AudioDevicesPayload, AppError> {
-    let backend = get_backend();
-    match backend.get_audio_devices() {
-        Ok(payload) => Ok(payload),
-        Err(e) => {
-            log::warn!(
-                "Windows Core Audio device enumeration failed ({}), falling back to mock provider",
-                e
-            );
-            MockAudioBackend::new_with_sample_data().get_audio_devices()
-        }
-    }
+    get_backend().get_audio_devices()
 }
 
 pub fn set_global_audio_device(device_id: &str, flow: AudioFlow) -> Result<(), AppError> {
-    let backend = get_backend();
-    match backend.set_global_audio_device(device_id, flow) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            log::warn!(
-                "Windows Core Audio set_global_device failed ({}), applying fallback mock update",
-                e
-            );
-            MockAudioBackend::new_with_sample_data().set_global_audio_device(device_id, flow)
-        }
-    }
+    get_backend().set_global_audio_device(device_id, flow)
 }
 
 pub fn get_app_audio_sessions() -> Result<Vec<AppAudioSession>, AppError> {
-    let backend = get_backend();
-    match backend.get_app_audio_sessions() {
-        Ok(sessions) => Ok(sessions),
-        Err(e) => {
-            log::warn!(
-                "Windows Core Audio session enumeration failed ({}), falling back to mock provider",
-                e
-            );
-            MockAudioBackend::new_with_sample_data().get_app_audio_sessions()
-        }
-    }
+    get_backend().get_app_audio_sessions()
 }
 
 pub fn set_app_audio_device(pid: u32, device_id: &str, flow: AudioFlow) -> Result<(), AppError> {
-    let backend = get_backend();
-    match backend.set_app_audio_device(pid, device_id, flow) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            log::warn!(
-                "Windows Core Audio set_app_audio_device failed ({}), applying fallback mock update",
-                e
-            );
-            MockAudioBackend::new_with_sample_data().set_app_audio_device(pid, device_id, flow)
-        }
-    }
+    get_backend().set_app_audio_device(pid, device_id, flow)
 }
 
 pub fn set_app_volume(pid: u32, volume: f32, muted: bool) -> Result<(), AppError> {
-    let backend = get_backend();
-    match backend.set_app_volume(pid, volume, muted) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            log::warn!(
-                "Windows Core Audio set_app_volume failed ({}), applying fallback mock update",
-                e
-            );
-            MockAudioBackend::new_with_sample_data().set_app_volume(pid, volume, muted)
-        }
-    }
+    get_backend().set_app_volume(pid, volume, muted)
 }
 
 #[cfg(test)]
@@ -444,14 +401,37 @@ mod tests {
     }
 
     #[test]
-    fn test_real_or_fallback_engine_facade() {
-        // Arrange & Act
-        let devices_res = get_audio_devices();
-        let sessions_res = get_app_audio_sessions();
+    fn test_real_engine_no_mock_fallback_and_validation() {
+        // Invalid inputs must fail loudly without falling back to mock state
+        assert!(matches!(
+            set_global_audio_device("  ", AudioFlow::Render),
+            Err(AppError::InvalidConfig(_))
+        ));
+        assert!(matches!(
+            set_app_audio_device(999999, "  ", AudioFlow::Render),
+            Err(AppError::InvalidConfig(_))
+        ));
+        assert!(set_app_volume(u32::MAX - 1, 0.5, false).is_ok());
 
-        // Assert
-        assert!(devices_res.is_ok(), "get_audio_devices should return Ok");
-        assert!(sessions_res.is_ok(), "get_app_audio_sessions should return Ok");
+        // Verify official CPolicyConfigClient CLSID
+        assert_eq!(
+            com::CLSID_POLICY_CONFIG_CLIENT,
+            windows::core::GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9)
+        );
+
+        // Real COM enumeration either succeeds with live system state or returns an explicit AppError
+        if let Ok(payload) = get_audio_devices() {
+            assert!(
+                !payload.render_devices.iter().any(|d| d.id == "{0.0.0.00000000}.{dev-speakers-1}"),
+                "Production get_audio_devices must never return mock sample data"
+            );
+        }
+        if let Ok(sessions) = get_app_audio_sessions() {
+            assert!(
+                !sessions.iter().any(|s| s.session_id == "spotify-session-4120"),
+                "Production get_app_audio_sessions must never return mock sample data"
+            );
+        }
     }
 
     #[test]

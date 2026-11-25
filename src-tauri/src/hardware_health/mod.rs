@@ -3,6 +3,17 @@ use std::process::Command;
 use crate::error::AppError;
 
 #[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Offset of protocol data relative to `STORAGE_PROTOCOL_SPECIFIC_DATA` (40 bytes).
+pub const NVME_PROTOCOL_DATA_OFFSET: u32 = 40;
+/// Total header bytes before the NVMe payload (`STORAGE_PROPERTY_QUERY` 8B + `STORAGE_PROTOCOL_SPECIFIC_DATA` 40B).
+pub const NVME_BUFFER_HEADER_SIZE: u32 = 48;
+
+#[cfg(windows)]
 use windows::{
     core::{s, PCWSTR},
     Win32::{
@@ -370,8 +381,8 @@ pub fn parse_nvme_health_log(log_bytes: &[u8]) -> Option<StorageDeviceHealth> {
         smart_status,
         firmware_revision: String::new(),
         serial_number: String::new(),
-        transfer_mode: "PCIe 4.0 x4 / PCIe 3.0 x4".to_string(),
-        standard: "NVM Express 1.4".to_string(),
+        transfer_mode: String::new(),
+        standard: "NVM Express".to_string(),
         drive_letters: Vec::new(),
         size_bytes: 0,
         media_type: "SSD".to_string(),
@@ -486,7 +497,7 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
             data_type: 2,
             protocol_data_request_value: 2,
             protocol_data_sub_value: 0,
-            protocol_data_offset: 48,
+            protocol_data_offset: NVME_PROTOCOL_DATA_OFFSET,
             protocol_data_length: 512,
             fixed_padding: [0; 4],
             data: [0; 512],
@@ -526,7 +537,7 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
             data_type: 1,
             protocol_data_request_value: 1,
             protocol_data_sub_value: 0,
-            protocol_data_offset: 48,
+            protocol_data_offset: NVME_PROTOCOL_DATA_OFFSET,
             protocol_data_length: 4096,
             fixed_padding: [0; 4],
             data: [0; 4096],
@@ -572,13 +583,13 @@ fn query_nvme_drive_ioctl(drive_index: u32) -> Option<StorageDeviceHealth> {
 
         let _ = CloseHandle(handle);
 
-        if ioctl_res.is_ok() && bytes_returned >= 48 {
+        if ioctl_res.is_ok() && bytes_returned >= NVME_BUFFER_HEADER_SIZE + 512 {
             if let Some(mut health) = parse_nvme_health_log(&query.data) {
                 health.device_id = drive_path;
                 health.drive_letters = query_drive_letters_for_disk(drive_index);
 
-                // Populate from Identify Controller data if available
-                if id_res.is_ok() && id_bytes_returned >= 48 {
+                // Populate from Identify Controller data if available (requires up to offset 516 for VER)
+                if id_res.is_ok() && id_bytes_returned >= NVME_BUFFER_HEADER_SIZE + 516 {
                     let serial = String::from_utf8_lossy(&id_query.data[4..24]).trim().to_string();
                     let model = String::from_utf8_lossy(&id_query.data[24..64]).trim().to_string();
                     let firmware = String::from_utf8_lossy(&id_query.data[64..72]).trim().to_string();
@@ -840,7 +851,7 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
             drives.push(StorageDeviceHealth {
                 device_id: format!("\\\\.\\PhysicalDrive{}", dev_id_raw),
                 model: friendly_name,
-                bus_type: if !bus_type_raw.is_empty() { bus_type_raw } else { media_type_raw.clone() },
+                bus_type: if !bus_type_raw.is_empty() { bus_type_raw.clone() } else { media_type_raw.clone() },
                 temperature_celsius: temp_c,
                 health_percentage,
                 critical_warning: 0,
@@ -854,8 +865,8 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
                 smart_status,
                 firmware_revision: firmware_raw,
                 serial_number: serial_number_raw,
-                transfer_mode: "SATA / NVMe".to_string(),
-                standard: "Standard Storage Specification".to_string(),
+                transfer_mode: bus_type_raw.clone(),
+                standard: "Windows Storage Management".to_string(),
                 drive_letters: partitions,
                 size_bytes: size_raw,
                 media_type: media_type_raw,
@@ -874,65 +885,89 @@ fn query_powershell_physical_disks() -> Vec<StorageDeviceHealth> {
     drives
 }
 
-#[cfg(windows)]
-fn query_sysinfo_fallback_drives() -> Vec<StorageDeviceHealth> {
-    let mut drives = Vec::new();
-    let mut disks = sysinfo::Disks::new_with_refreshed_list();
-    disks.refresh_list();
-
-    for (i, disk) in disks.iter().enumerate() {
-        let name = disk.name().to_string_lossy().to_string();
-        let mount = disk.mount_point().to_string_lossy().to_string();
-
-        drives.push(StorageDeviceHealth {
-            device_id: format!("\\\\.\\PhysicalDrive{}", i),
-            model: if name.is_empty() { format!("System Drive ({})", mount) } else { name },
-            bus_type: "Storage".to_string(),
-            temperature_celsius: 0.0,
-            health_percentage: 100,
-            critical_warning: 0,
-            available_spare_percent: 100,
-            percentage_used: 0,
-            total_bytes_written_tb: 0.0,
-            total_bytes_read_tb: 0.0,
-            power_on_hours: 0,
-            power_cycles: 0,
-            unsafe_shutdowns: 0,
-            smart_status: "Healthy".to_string(),
-            firmware_revision: "N/A".to_string(),
-            serial_number: "N/A".to_string(),
-            transfer_mode: "SATA / NVMe".to_string(),
-            standard: "Standard Storage Device".to_string(),
-            drive_letters: vec![mount],
-            size_bytes: disk.total_space(),
-            media_type: "SSD".to_string(),
-            rotation_rate_rpm: None,
-            features_supported: vec!["S.M.A.R.T.".to_string()],
-            media_errors: 0,
-            error_log_entries: 0,
-            warning_temp_time_mins: 0,
-            critical_temp_time_mins: 0,
-            sensor_temperatures: Vec::new(),
-            smart_attributes: Vec::new(),
-        });
-    }
-
-    drives
-}
-
 #[tauri::command]
 pub fn get_storage_devices_health() -> Result<Vec<StorageDeviceHealth>, AppError> {
     #[cfg(windows)]
     {
-        let mut devices = query_powershell_physical_disks();
-        if devices.is_empty() {
-            devices = query_sysinfo_fallback_drives();
-        }
-        Ok(devices)
+        // Zero-Mock Policy (AGENTS.md §3): return authentic PowerShell/IOCTL telemetry only,
+        // never fabricate synthetic 100%/Healthy SMART fallback entries from logical volumes.
+        Ok(query_powershell_physical_disks())
     }
     #[cfg(not(windows))]
     {
         Ok(Vec::new())
+    }
+}
+
+/// Computes battery wear percentage from `designed_capacity_mwh` and `full_charge_capacity_mwh`.
+/// Returns `None` when either capacity is missing or zero.
+pub fn compute_battery_wear_percent(
+    designed_capacity_mwh: Option<u32>,
+    full_charge_capacity_mwh: Option<u32>,
+) -> Option<f32> {
+    let designed = designed_capacity_mwh?;
+    let full = full_charge_capacity_mwh?;
+    if designed == 0 {
+        return None;
+    }
+    if full >= designed {
+        Some(0.0)
+    } else {
+        Some(((1.0 - (full as f32 / designed as f32)) * 100.0).clamp(0.0, 100.0))
+    }
+}
+
+#[cfg(windows)]
+#[derive(Default)]
+struct WmiBatteryExtras {
+    designed_capacity_mwh: Option<u32>,
+    full_charge_capacity_mwh: Option<u32>,
+    cycle_count: Option<u32>,
+}
+
+#[cfg(windows)]
+fn query_wmi_battery_extras() -> WmiBatteryExtras {
+    let mut cmd = Command::new("powershell.exe");
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$sd = Get-CimInstance -Namespace root\\wmi -ClassName BatteryStaticData -ErrorAction SilentlyContinue | Select-Object -First 1; \
+         $fc = Get-CimInstance -Namespace root\\wmi -ClassName BatteryFullChargedCapacity -ErrorAction SilentlyContinue | Select-Object -First 1; \
+         $cc = Get-CimInstance -Namespace root\\wmi -ClassName BatteryCycleCount -ErrorAction SilentlyContinue | Select-Object -First 1; \
+         [PSCustomObject]@{ \
+             Designed = if ($sd -and $sd.DesignedCapacity) { [uint32]$sd.DesignedCapacity } else { $null }; \
+             Full = if ($fc -and $fc.FullChargedCapacity) { [uint32]$fc.FullChargedCapacity } else { $null }; \
+             Cycles = if ($cc -and $cc.CycleCount -ne $null) { [uint32]$cc.CycleCount } else { $null } \
+         } | ConvertTo-Json -Compress",
+    ]);
+
+    let output = match cmd.output() {
+        Ok(out) if out.status.success() => crate::runner::decode_bytes(&out.stdout),
+        _ => return WmiBatteryExtras::default(),
+    };
+
+    let val: serde_json::Value = match serde_json::from_str(output.trim()) {
+        Ok(v) => v,
+        Err(_) => return WmiBatteryExtras::default(),
+    };
+
+    WmiBatteryExtras {
+        designed_capacity_mwh: val
+            .get("Designed")
+            .and_then(|v| v.as_u64())
+            .filter(|&v| v > 0)
+            .map(|v| v as u32),
+        full_charge_capacity_mwh: val
+            .get("Full")
+            .and_then(|v| v.as_u64())
+            .filter(|&v| v > 0)
+            .map(|v| v as u32),
+        cycle_count: val
+            .get("Cycles")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32),
     }
 }
 
@@ -991,21 +1026,22 @@ pub fn get_battery_health_analytics() -> Result<BatteryHealthAnalytics, AppError
             None
         };
 
-        let max_cap = if nt_power_ok && battery_state.max_capacity > 0 {
+        let nt_max_cap = if nt_power_ok && battery_state.max_capacity > 0 {
             Some(battery_state.max_capacity)
         } else {
             None
         };
 
-        let wear_level = if let (Some(cur), Some(max)) = (current_cap, max_cap) {
-            if max > 0 && max >= cur {
-                Some(((1.0 - (cur as f32 / max as f32)) * 100.0).clamp(0.0, 100.0))
-            } else {
-                Some(0.0)
-            }
+        let wmi_extras = if has_battery {
+            query_wmi_battery_extras()
         } else {
-            None
+            WmiBatteryExtras::default()
         };
+
+        let designed_cap = wmi_extras.designed_capacity_mwh;
+        let full_charge_cap = wmi_extras.full_charge_capacity_mwh.or(nt_max_cap);
+        let wear_level = compute_battery_wear_percent(designed_cap, full_charge_cap);
+        let cycle_count = if has_battery { wmi_extras.cycle_count } else { None };
 
         let status_desc = if !has_battery {
             "Desktop PC (AC Powered, No Battery)".to_string()
@@ -1024,29 +1060,29 @@ pub fn get_battery_health_analytics() -> Result<BatteryHealthAnalytics, AppError
             battery_percentage,
             discharge_rate_mw,
             estimated_remaining_time_minutes: remaining_mins,
-            designed_capacity_mwh: max_cap,
-            full_charge_capacity_mwh: max_cap,
+            designed_capacity_mwh: designed_cap,
+            full_charge_capacity_mwh: full_charge_cap,
             current_capacity_mwh: current_cap,
             wear_level_percent: wear_level,
-            cycle_count: if has_battery { Some(120) } else { None },
+            cycle_count,
             power_profile_status: status_desc,
         })
     }
     #[cfg(not(windows))]
     {
         Ok(BatteryHealthAnalytics {
-            has_battery: true,
+            has_battery: false,
             is_charging: false,
             is_ac_online: true,
-            battery_percentage: 95,
-            discharge_rate_mw: -12500,
-            estimated_remaining_time_minutes: Some(240),
-            designed_capacity_mwh: Some(56000),
-            full_charge_capacity_mwh: Some(54000),
-            current_capacity_mwh: Some(51300),
-            wear_level_percent: Some(3.57),
-            cycle_count: Some(85),
-            power_profile_status: "Battery Discharging".to_string(),
+            battery_percentage: 100,
+            discharge_rate_mw: 0,
+            estimated_remaining_time_minutes: None,
+            designed_capacity_mwh: None,
+            full_charge_capacity_mwh: None,
+            current_capacity_mwh: None,
+            wear_level_percent: None,
+            cycle_count: None,
+            power_profile_status: "Battery telemetry only available on Windows".to_string(),
         })
     }
 }
@@ -1106,6 +1142,7 @@ pub fn get_power_schemes() -> Result<Vec<PowerSchemeInfo>, AppError> {
     #[cfg(windows)]
     {
         let output = Command::new("powercfg")
+            .creation_flags(CREATE_NO_WINDOW)
             .arg("/list")
             .output()
             .map_err(|e| AppError::System(format!("Failed to execute powercfg /list: {}", e)))?;
@@ -1170,6 +1207,7 @@ pub fn set_active_power_scheme(scheme_guid: String) -> Result<bool, AppError> {
     #[cfg(windows)]
     {
         let output = Command::new("powercfg")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["/setactive", &scheme_guid])
             .output()
             .map_err(|e| AppError::System(format!("Failed to execute powercfg /setactive: {}", e)))?;
@@ -1202,6 +1240,7 @@ pub fn enable_ultimate_performance_scheme() -> Result<PowerSchemeInfo, AppError>
         } else {
             // Duplicate the well-known Ultimate Performance scheme
             let dup_output = Command::new("powercfg")
+                .creation_flags(CREATE_NO_WINDOW)
                 .args(["-duplicatescheme", ULTIMATE_GUID])
                 .output()
                 .map_err(|e| AppError::System(format!("Failed to duplicate Ultimate Performance scheme: {}", e)))?;
@@ -1380,5 +1419,22 @@ GUID схемы питания: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate 
         assert!(json.contains("batteryPercentage"));
         assert!(json.contains("dischargeRateMw"));
         assert!(json.contains("wearLevelPercent"));
+    }
+
+    #[test]
+    fn test_nvme_protocol_offset_and_header_size_constants() {
+        assert_eq!(NVME_PROTOCOL_DATA_OFFSET, 40);
+        assert_eq!(NVME_BUFFER_HEADER_SIZE, 48);
+        assert_eq!(NVME_BUFFER_HEADER_SIZE + 512, 560);
+    }
+
+    #[test]
+    fn test_compute_battery_wear_percent_logic() {
+        assert_eq!(compute_battery_wear_percent(None, Some(50000)), None);
+        assert_eq!(compute_battery_wear_percent(Some(60000), None), None);
+        assert_eq!(compute_battery_wear_percent(Some(0), Some(50000)), None);
+        assert_eq!(compute_battery_wear_percent(Some(60000), Some(60000)), Some(0.0));
+        let wear = compute_battery_wear_percent(Some(100_000), Some(85_000)).unwrap();
+        assert!((wear - 15.0).abs() < 0.01);
     }
 }

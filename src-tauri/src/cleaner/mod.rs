@@ -124,7 +124,10 @@ static CLEANER_LOCK: Mutex<()> = Mutex::new(());
 
 fn force_remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let p = path.as_ref();
-    if let Ok(metadata) = p.metadata() {
+    if let Ok(metadata) = std::fs::symlink_metadata(p) {
+        if metadata.file_type().is_symlink() {
+            return std::fs::remove_file(p);
+        }
         let mut permissions = metadata.permissions();
         if permissions.readonly() {
             #[allow(clippy::permissions_set_readonly_false)]
@@ -133,6 +136,18 @@ fn force_remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
         }
     }
     std::fs::remove_file(p)
+}
+
+fn is_active_event_log_file(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase().replace('/', "\\");
+    if lower.contains("\\winevt\\logs\\") {
+        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+            let name_lower = name.to_lowercase();
+            // Protect live Windows Event Log channels (.evtx); allow only archived logs (Archive-*.evtx)
+            return name_lower.ends_with(".evtx") && !name_lower.starts_with("archive-");
+        }
+    }
+    false
 }
 
 pub fn scan_system() -> Result<CleanerScanResult, AppError> {
@@ -208,7 +223,11 @@ pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppE
             }
 
             if path.is_file() {
-                let sz = path.metadata().map(|m| m.len()).unwrap_or(0);
+                if is_active_event_log_file(&path) {
+                    skipped_files_count += 1;
+                    continue;
+                }
+                let sz = std::fs::symlink_metadata(&path).map(|m| m.len()).unwrap_or(0);
                 match force_remove_file(&path) {
                     Ok(_) => {
                         bytes_freed += sz;
@@ -222,45 +241,39 @@ pub fn clean_items(category_ids: Vec<String>) -> Result<CleanerCleanResult, AppE
                     }
                 }
             } else if path.is_dir() {
-                // Collect file entries inside target directory
-                let mut files_to_delete = Vec::new();
-                let mut dirs_to_check = Vec::new();
-
+                // Stream deletions directly during bottom-up WalkDir traversal to avoid large Vec buffering
                 for entry in WalkDir::new(&path)
                     .contents_first(true)
+                    .follow_links(false)
                     .into_iter()
                     .filter_map(|e| e.ok())
                 {
-                    let entry_path = entry.path().to_path_buf();
+                    let entry_path = entry.path();
                     if entry_path == path {
                         continue; // Do not delete root category folder itself
                     }
 
                     if entry.file_type().is_file() {
-                        files_to_delete.push(entry_path);
-                    } else if entry.file_type().is_dir() {
-                        dirs_to_check.push(entry_path);
-                    }
-                }
-
-                for file_path in files_to_delete {
-                    let sz = file_path.metadata().map(|m| m.len()).unwrap_or(0);
-                    match force_remove_file(&file_path) {
-                        Ok(_) => {
-                            bytes_freed += sz;
-                            files_removed += 1;
-                        }
-                        Err(e) => {
+                        if is_active_event_log_file(entry_path) {
                             skipped_files_count += 1;
-                            let err_msg = format!("Skipped file {:?}: {}", file_path, e);
-                            log::warn!("[Cleaner] {}", err_msg);
-                            errors.push(err_msg);
+                            continue;
                         }
+                        let sz = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        match force_remove_file(entry_path) {
+                            Ok(_) => {
+                                bytes_freed += sz;
+                                files_removed += 1;
+                            }
+                            Err(e) => {
+                                skipped_files_count += 1;
+                                let err_msg = format!("Skipped file {:?}: {}", entry_path, e);
+                                log::warn!("[Cleaner] {}", err_msg);
+                                errors.push(err_msg);
+                            }
+                        }
+                    } else if entry.file_type().is_dir() {
+                        let _ = std::fs::remove_dir(entry_path); // remove empty subdirs if possible
                     }
-                }
-
-                for dir_path in dirs_to_check {
-                    let _ = std::fs::remove_dir(&dir_path); // remove empty subdirs if possible
                 }
             }
         }

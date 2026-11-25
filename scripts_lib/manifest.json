@@ -723,7 +723,7 @@
           "description": "List partition table and volume drive letters for each physical disk"
         }
       ],
-      "sha256": "ac8a2bc6fe504080a84f5c8bd3dc7457e2f3c3fb9c931a7c9ac27641c0c37243"
+      "sha256": "50a7d7d591da5d218dc19843df51689be9baa5d917e10e8199f9d9de308a49ea"
     },
     {
       "id": "net-flush-dns-renew-ip",
@@ -914,7 +914,7 @@
           "description": "Output structured JSON report"
         }
       ],
-      "sha256": "7d1378156457664d8d80a66e82f726d4dc104232a77f52f9107fd58ac85a6212"
+      "sha256": "5d6a52f9b9a627997485d3991a61844ab92fb8f723108964045afdd9626d962a"
     },
     {
       "id": "maint-safe-browser-cache-cleaner",
@@ -1100,7 +1100,7 @@
           "description": "Target memory pool to purge (StandbyList, WorkingSets, All)"
         }
       ],
-      "sha256": "37f7d784e86b23e9beef9220ca1b899bbf1bb56e8ed429f7184719e825cd078d"
+      "sha256": "587ef2db4ac318693ea17b3a4b83dd26a9c586dab5aa2652aab5967e1c51f8e3"
     },
     {
       "id": "perf-optimize-visual-effects",

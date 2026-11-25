@@ -19,20 +19,6 @@ if (-not $disks -or $disks.Count -eq 0) {
     exit 0
 }
 
-# Query WMI SMART failure prediction flags
-$smartFlags = @{}
-try {
-    $smartWmi = Get-CimInstance -Namespace "root\wmi" -ClassName "MSStorageDriver_FailurePredictStatus" -ErrorAction SilentlyContinue
-    if ($smartWmi) {
-        foreach ($s in $smartWmi) {
-            $instanceName = $s.InstanceName
-            $smartFlags[$instanceName] = $s.PredictFailure
-        }
-    }
-} catch {
-    # Non-fatal if WMI namespace is unpopulated
-}
-
 $diskIndex = 0
 foreach ($disk in $disks) {
     $diskIndex++

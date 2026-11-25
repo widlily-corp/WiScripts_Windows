@@ -1,9 +1,9 @@
-use crate::audio::com::{ComInitializer, IAudioPolicyConfig, CLSID_AUDIO_POLICY_CONFIG_FACTORY};
+use crate::audio::com::{set_persisted_default_audio_endpoint, ComInitializer};
 use crate::audio::types::{AppAudioSession, AudioFlow};
 use crate::error::AppError;
 use std::collections::HashSet;
-use windows::core::{Interface, PCWSTR};
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::core::Interface;
+use windows::Win32::Foundation::{CloseHandle, HANDLE, S_OK};
 use windows::Win32::Media::Audio::{
     eCapture, eCommunications, eConsole, eMultimedia, eRender, IAudioSessionControl2,
     IAudioSessionEnumerator, IAudioSessionManager2, ISimpleAudioVolume, IMMDeviceEnumerator,
@@ -125,7 +125,8 @@ pub fn enumerate_app_sessions() -> Result<Vec<AppAudioSession>, AppError> {
                         continue;
                     }
 
-                    if session_ctrl2.IsSystemSoundsSession().is_ok() {
+                    // IsSystemSoundsSession returns S_OK (0) for system sounds and S_FALSE (1) for normal app sessions.
+                    if session_ctrl2.IsSystemSoundsSession() == S_OK {
                         continue;
                     }
 
@@ -175,7 +176,11 @@ pub fn enumerate_app_sessions() -> Result<Vec<AppAudioSession>, AppError> {
 }
 
 pub fn set_app_volume(pid: u32, volume: f32, muted: bool) -> Result<(), AppError> {
-    let clamped_vol = volume.clamp(0.0, 1.0);
+    let clamped_vol = if volume.is_nan() {
+        0.0
+    } else {
+        volume.clamp(0.0, 1.0)
+    };
     let _com = ComInitializer::new()
         .map_err(|e| AppError::System(format!("COM initialization failed: {}", e)))?;
 
@@ -232,11 +237,25 @@ pub fn set_app_volume(pid: u32, volume: f32, muted: bool) -> Result<(), AppError
                     if let Ok(session_pid) = session_ctrl2.GetProcessId() {
                         if session_pid == pid {
                             if let Ok(simple_vol) = session_ctrl.cast::<ISimpleAudioVolume>() {
-                                let _ = simple_vol.SetMasterVolume(clamped_vol, std::ptr::null());
-                                let _ = simple_vol.SetMute(
-                                    windows::Win32::Foundation::BOOL::from(muted),
-                                    std::ptr::null(),
-                                );
+                                simple_vol.SetMasterVolume(clamped_vol, std::ptr::null()).map_err(
+                                    |e| {
+                                        AppError::Execution(format!(
+                                            "Failed to set volume for PID {}: {}",
+                                            pid, e
+                                        ))
+                                    },
+                                )?;
+                                simple_vol
+                                    .SetMute(
+                                        windows::Win32::Foundation::BOOL::from(muted),
+                                        std::ptr::null(),
+                                    )
+                                    .map_err(|e| {
+                                        AppError::Execution(format!(
+                                            "Failed to set mute for PID {}: {}",
+                                            pid, e
+                                        ))
+                                    })?;
                             }
                         }
                     }
@@ -257,21 +276,15 @@ pub fn set_app_audio_device(pid: u32, device_id: &str, flow: AudioFlow) -> Resul
         .map_err(|e| AppError::System(format!("COM initialization failed: {}", e)))?;
 
     unsafe {
-        let policy: IAudioPolicyConfig =
-            CoCreateInstance(&CLSID_AUDIO_POLICY_CONFIG_FACTORY, None, CLSCTX_ALL)
-                .map_err(|e| AppError::System(format!("Failed to create IAudioPolicyConfig COM instance: {}", e)))?;
-
-        let wide_id: Vec<u16> = device_id.encode_utf16().chain(std::iter::once(0)).collect();
-        let pcwstr = PCWSTR(wide_id.as_ptr());
-
         let win_flow = match flow {
             AudioFlow::Render => eRender,
             AudioFlow::Capture => eCapture,
         };
 
-        let hr_console = policy.SetPersistedDefaultAudioEndpoint(pid, win_flow, eConsole, pcwstr);
-        let hr_multi = policy.SetPersistedDefaultAudioEndpoint(pid, win_flow, eMultimedia, pcwstr);
-        let hr_comm = policy.SetPersistedDefaultAudioEndpoint(pid, win_flow, eCommunications, pcwstr);
+        let hr_console = set_persisted_default_audio_endpoint(pid, win_flow, eConsole, device_id);
+        let hr_multi = set_persisted_default_audio_endpoint(pid, win_flow, eMultimedia, device_id);
+        let hr_comm =
+            set_persisted_default_audio_endpoint(pid, win_flow, eCommunications, device_id);
 
         if hr_console.is_err() && hr_multi.is_err() && hr_comm.is_err() {
             return Err(AppError::Execution(format!(

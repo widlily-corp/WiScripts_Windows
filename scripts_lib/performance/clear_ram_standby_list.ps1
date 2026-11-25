@@ -82,6 +82,9 @@ namespace WiScripts.Performance
             IntPtr ReturnLength
         );
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CloseHandle(IntPtr hObject);
+
         public const int SE_PRIVILEGE_ENABLED = 0x00000002;
         public const int SystemMemoryListInformation = 80;
 
@@ -91,16 +94,26 @@ namespace WiScripts.Performance
             if (!OpenProcessToken(System.Diagnostics.Process.GetCurrentProcess().Handle, 0x0020 | 0x0008, out tokenHandle))
                 return false;
 
-            long luid;
-            if (!LookupPrivilegeValue(null, privilege, out luid))
-                return false;
+            try
+            {
+                long luid;
+                if (!LookupPrivilegeValue(null, privilege, out luid))
+                    return false;
 
-            TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
-            tp.PrivilegeCount = 1;
-            tp.Luid = luid;
-            tp.Attributes = SE_PRIVILEGE_ENABLED;
+                TOKEN_PRIVILEGES tp = new TOKEN_PRIVILEGES();
+                tp.PrivilegeCount = 1;
+                tp.Luid = luid;
+                tp.Attributes = SE_PRIVILEGE_ENABLED;
 
-            return AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+                return AdjustTokenPrivileges(tokenHandle, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+            }
+            finally
+            {
+                if (tokenHandle != IntPtr.Zero)
+                {
+                    CloseHandle(tokenHandle);
+                }
+            }
         }
 
         public static uint ExecuteMemoryCommand(MemoryListCommand command)

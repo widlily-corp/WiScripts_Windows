@@ -1,25 +1,23 @@
 #[cfg(windows)]
+use super::to_u16_vec;
+#[cfg(windows)]
 use windows::{
     core::PCWSTR,
     Win32::System::Services::{
         ChangeServiceConfigW, CloseServiceHandle, ControlService, OpenSCManagerW, OpenServiceW,
-        QueryServiceConfigW, QueryServiceStatusEx, SC_MANAGER_ALL_ACCESS, SC_STATUS_PROCESS_INFO,
+        QueryServiceConfigW, QueryServiceStatusEx, SC_MANAGER_CONNECT, SC_STATUS_PROCESS_INFO,
         SERVICE_CHANGE_CONFIG, SERVICE_CONTROL_STOP, SERVICE_ERROR, SERVICE_NO_CHANGE,
         SERVICE_QUERY_CONFIG, SERVICE_QUERY_STATUS, SERVICE_START_TYPE, SERVICE_STATUS_PROCESS,
         SERVICE_STOP, SERVICE_STOPPED, SERVICE_STOP_PENDING,
     },
 };
 
-fn to_u16_vec(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
 #[cfg(windows)]
 pub fn configure_service(service_name: &str, start_type: u32) -> Result<(), String> {
     let name_u16 = to_u16_vec(service_name);
 
     unsafe {
-        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
+        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT)
             .map_err(|e| {
                 format!(
                     "OpenSCManagerW failed for service '{}': {:?}",
@@ -113,7 +111,7 @@ pub fn stop_service(service_name: &str) -> Result<(), String> {
     let name_u16 = to_u16_vec(service_name);
 
     unsafe {
-        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
+        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT)
             .map_err(|e| {
                 format!(
                     "OpenSCManagerW failed for service '{}': {:?}",
@@ -224,7 +222,7 @@ pub fn start_service(service_name: &str) -> Result<(), String> {
     let name_u16 = to_u16_vec(service_name);
 
     unsafe {
-        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_ALL_ACCESS)
+        let scm_handle = OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT)
             .map_err(|e| {
                 format!(
                     "OpenSCManagerW failed for service '{}': {:?}",

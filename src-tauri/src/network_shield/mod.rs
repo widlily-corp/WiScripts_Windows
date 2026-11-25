@@ -5,6 +5,12 @@ use std::process::Command;
 use crate::error::AppError;
 
 #[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+#[cfg(windows)]
 use windows::Win32::{
     Foundation::CloseHandle,
     NetworkManagement::IpHelper::{
@@ -132,11 +138,37 @@ fn resolve_process(
     (format!("Process [{}]", pid), None)
 }
 
+/// Safely reads `Row` entries from a Windows MIB_*TABLE_OWNER_PID byte buffer using
+/// unaligned reads and strict bounds checking against `dwNumEntries`.
+#[cfg(windows)]
+fn parse_mib_table_rows<Row: Copy>(buffer: &[u8], rows_offset: usize) -> Vec<Row> {
+    if buffer.len() < 4 || buffer.len() < rows_offset {
+        return Vec::new();
+    }
+    let declared_entries = u32::from_ne_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) as usize;
+    let row_size = std::mem::size_of::<Row>();
+    if row_size == 0 {
+        return Vec::new();
+    }
+    let max_possible = (buffer.len() - rows_offset) / row_size;
+    let safe_entries = declared_entries.min(max_possible);
+    let mut rows = Vec::with_capacity(safe_entries);
+    for i in 0..safe_entries {
+        let offset = rows_offset + i * row_size;
+        // SAFETY: `offset + row_size <= buffer.len()` is guaranteed by `safe_entries`.
+        let row = unsafe { std::ptr::read_unaligned(buffer.as_ptr().add(offset) as *const Row) };
+        rows.push(row);
+    }
+    rows
+}
+
 #[cfg(windows)]
 fn fetch_tcp_ipv4_connections(
     connections: &mut Vec<NetworkConnection>,
     process_map: &HashMap<u32, (String, Option<String>)>,
 ) {
+    use windows::Win32::NetworkManagement::IpHelper::MIB_TCPROW_OWNER_PID;
+
     unsafe {
         let mut size = 0u32;
         let _ = GetExtendedTcpTable(
@@ -163,12 +195,9 @@ fn fetch_tcp_ipv4_connections(
         );
 
         if res == 0 {
-            let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
-            let entries = table.dwNumEntries as usize;
-            let rows_ptr = table.table.as_ptr();
-
-            for i in 0..entries {
-                let row = *rows_ptr.add(i);
+            let valid_len = (size as usize).min(buffer.len());
+            let rows_offset = std::mem::offset_of!(MIB_TCPTABLE_OWNER_PID, table);
+            for row in parse_mib_table_rows::<MIB_TCPROW_OWNER_PID>(&buffer[..valid_len], rows_offset) {
                 let local_ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr)).to_string();
                 let local_port = decode_port(row.dwLocalPort);
                 let remote_ip = Ipv4Addr::from(u32::from_be(row.dwRemoteAddr)).to_string();
@@ -198,6 +227,8 @@ fn fetch_tcp_ipv6_connections(
     connections: &mut Vec<NetworkConnection>,
     process_map: &HashMap<u32, (String, Option<String>)>,
 ) {
+    use windows::Win32::NetworkManagement::IpHelper::MIB_TCP6ROW_OWNER_PID;
+
     unsafe {
         let mut size = 0u32;
         let _ = GetExtendedTcpTable(
@@ -224,12 +255,9 @@ fn fetch_tcp_ipv6_connections(
         );
 
         if res == 0 {
-            let table = &*(buffer.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
-            let entries = table.dwNumEntries as usize;
-            let rows_ptr = table.table.as_ptr();
-
-            for i in 0..entries {
-                let row = *rows_ptr.add(i);
+            let valid_len = (size as usize).min(buffer.len());
+            let rows_offset = std::mem::offset_of!(MIB_TCP6TABLE_OWNER_PID, table);
+            for row in parse_mib_table_rows::<MIB_TCP6ROW_OWNER_PID>(&buffer[..valid_len], rows_offset) {
                 let local_ip = Ipv6Addr::from(row.ucLocalAddr).to_string();
                 let local_port = decode_port(row.dwLocalPort);
                 let remote_ip = Ipv6Addr::from(row.ucRemoteAddr).to_string();
@@ -259,6 +287,8 @@ fn fetch_udp_ipv4_connections(
     connections: &mut Vec<NetworkConnection>,
     process_map: &HashMap<u32, (String, Option<String>)>,
 ) {
+    use windows::Win32::NetworkManagement::IpHelper::MIB_UDPROW_OWNER_PID;
+
     unsafe {
         let mut size = 0u32;
         let _ = GetExtendedUdpTable(
@@ -285,12 +315,9 @@ fn fetch_udp_ipv4_connections(
         );
 
         if res == 0 {
-            let table = &*(buffer.as_ptr() as *const MIB_UDPTABLE_OWNER_PID);
-            let entries = table.dwNumEntries as usize;
-            let rows_ptr = table.table.as_ptr();
-
-            for i in 0..entries {
-                let row = *rows_ptr.add(i);
+            let valid_len = (size as usize).min(buffer.len());
+            let rows_offset = std::mem::offset_of!(MIB_UDPTABLE_OWNER_PID, table);
+            for row in parse_mib_table_rows::<MIB_UDPROW_OWNER_PID>(&buffer[..valid_len], rows_offset) {
                 let local_ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr)).to_string();
                 let local_port = decode_port(row.dwLocalPort);
                 let pid = row.dwOwningPid;
@@ -317,6 +344,8 @@ fn fetch_udp_ipv6_connections(
     connections: &mut Vec<NetworkConnection>,
     process_map: &HashMap<u32, (String, Option<String>)>,
 ) {
+    use windows::Win32::NetworkManagement::IpHelper::MIB_UDP6ROW_OWNER_PID;
+
     unsafe {
         let mut size = 0u32;
         let _ = GetExtendedUdpTable(
@@ -343,12 +372,9 @@ fn fetch_udp_ipv6_connections(
         );
 
         if res == 0 {
-            let table = &*(buffer.as_ptr() as *const MIB_UDP6TABLE_OWNER_PID);
-            let entries = table.dwNumEntries as usize;
-            let rows_ptr = table.table.as_ptr();
-
-            for i in 0..entries {
-                let row = *rows_ptr.add(i);
+            let valid_len = (size as usize).min(buffer.len());
+            let rows_offset = std::mem::offset_of!(MIB_UDP6TABLE_OWNER_PID, table);
+            for row in parse_mib_table_rows::<MIB_UDP6ROW_OWNER_PID>(&buffer[..valid_len], rows_offset) {
                 let local_ip = Ipv6Addr::from(row.ucLocalAddr).to_string();
                 let local_port = decode_port(row.dwLocalPort);
                 let pid = row.dwOwningPid;
@@ -421,9 +447,21 @@ pub fn get_firewall_rules() -> Result<Vec<FirewallRuleInfo>, AppError> {
     #[cfg(windows)]
     {
         let output = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["advfirewall", "firewall", "show", "rule", "name=all"])
             .output()
             .map_err(|e| AppError::System(format!("Failed to execute netsh: {}", e)))?;
+
+        if !output.status.success() {
+            let err_msg = crate::runner::decode_bytes(&output.stderr);
+            let out_msg = crate::runner::decode_bytes(&output.stdout);
+            return Err(AppError::Execution(format!(
+                "netsh advfirewall show rule failed (exit {:?}): {} {}",
+                output.status.code(),
+                err_msg.trim(),
+                out_msg.trim()
+            )));
+        }
 
         let text = crate::runner::decode_bytes(&output.stdout);
 
@@ -533,20 +571,60 @@ pub fn get_firewall_rules() -> Result<Vec<FirewallRuleInfo>, AppError> {
     }
 }
 
+/// Validates a firewall rule name against a strict allowlist (must start with `WiScripts ` or
+/// `WiScripts_`, never equal `"all"`, and contain no quotes, newlines, or control/meta characters).
+pub fn validate_firewall_rule_name(rule_name: &str) -> Result<String, AppError> {
+    let trimmed = rule_name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::InvalidConfig("Rule name cannot be empty".to_string()));
+    }
+    if trimmed.eq_ignore_ascii_case("all") {
+        return Err(AppError::InvalidConfig(
+            "Security Violation: Rule name 'all' is strictly forbidden".to_string(),
+        ));
+    }
+    if !(trimmed.starts_with("WiScripts ") || trimmed.starts_with("WiScripts_")) {
+        return Err(AppError::InvalidConfig(format!(
+            "Security Violation: Rule name '{}' must start with 'WiScripts ' or 'WiScripts_'",
+            trimmed
+        )));
+    }
+    if trimmed.len() > 128 {
+        return Err(AppError::InvalidConfig(
+            "Rule name exceeds maximum length (128 characters)".to_string(),
+        ));
+    }
+    if !trimmed.chars().all(|c| {
+        c.is_alphanumeric() || matches!(c, ' ' | ':' | '.' | '-' | '_' | '(' | ')')
+    }) {
+        return Err(AppError::InvalidConfig(format!(
+            "Rule name '{}' contains disallowed characters",
+            trimmed
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
 #[tauri::command]
 pub fn block_process_firewall(
     process_path: String,
     rule_name: String,
 ) -> Result<FirewallActionResult, AppError> {
-    if process_path.trim().is_empty() {
+    let trimmed_path = process_path.trim();
+    if trimmed_path.is_empty() {
         return Err(AppError::InvalidConfig("Process path cannot be empty".to_string()));
+    }
+    if trimmed_path.contains(['"', '\'', '\r', '\n', '\0']) {
+        return Err(AppError::InvalidConfig(
+            "Process path contains disallowed control or quote characters".to_string(),
+        ));
     }
 
     let sanitized_name = if rule_name.trim().is_empty() {
-        let exe_name = process_path.rsplit(['\\', '/']).next().unwrap_or("App");
-        format!("WiScripts Block: {}", exe_name)
+        let exe_name = trimmed_path.rsplit(['\\', '/']).next().unwrap_or("App");
+        validate_firewall_rule_name(&format!("WiScripts Block: {}", exe_name))?
     } else {
-        rule_name
+        validate_firewall_rule_name(&rule_name)?
     };
 
     #[cfg(windows)]
@@ -554,12 +632,13 @@ pub fn block_process_firewall(
         // 1. Inbound rule
         let in_name = format!("{}_In", sanitized_name);
         let in_output = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args([
                 "advfirewall", "firewall", "add", "rule",
                 &format!("name={}", in_name),
                 "dir=in",
                 "action=block",
-                &format!("program={}", process_path),
+                &format!("program={}", trimmed_path),
                 "enable=yes",
             ])
             .output()
@@ -568,12 +647,13 @@ pub fn block_process_firewall(
         // 2. Outbound rule
         let out_name = format!("{}_Out", sanitized_name);
         let out_output = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args([
                 "advfirewall", "firewall", "add", "rule",
                 &format!("name={}", out_name),
                 "dir=out",
                 "action=block",
-                &format!("program={}", process_path),
+                &format!("program={}", trimmed_path),
                 "enable=yes",
             ])
             .output()
@@ -581,11 +661,19 @@ pub fn block_process_firewall(
 
         let success = in_output.status.success() && out_output.status.success();
         let message = if success {
-            format!("Firewall block rules successfully added for '{}'", process_path)
+            format!("Firewall block rules successfully added for '{}'", trimmed_path)
         } else {
-            let err_in = String::from_utf8_lossy(&in_output.stderr);
-            let err_out = String::from_utf8_lossy(&out_output.stderr);
-            format!("Failed to add firewall rule: {} {}", err_in, err_out)
+            let err_in = crate::runner::decode_bytes(&in_output.stderr);
+            let err_out = crate::runner::decode_bytes(&out_output.stderr);
+            let out_in = crate::runner::decode_bytes(&in_output.stdout);
+            let out_out = crate::runner::decode_bytes(&out_output.stdout);
+            format!(
+                "Failed to add firewall rule: {} {} {} {}",
+                err_in.trim(),
+                err_out.trim(),
+                out_in.trim(),
+                out_out.trim()
+            )
         };
 
         Ok(FirewallActionResult {
@@ -599,7 +687,7 @@ pub fn block_process_firewall(
         Ok(FirewallActionResult {
             success: true,
             rule_name: sanitized_name,
-            message: format!("Mock blocked '{}' in firewall", process_path),
+            message: format!("Mock blocked '{}' in firewall", trimmed_path),
         })
     }
 }
@@ -608,40 +696,58 @@ pub fn block_process_firewall(
 pub fn unblock_process_firewall(
     rule_name: String,
 ) -> Result<FirewallActionResult, AppError> {
-    if rule_name.trim().is_empty() {
-        return Err(AppError::InvalidConfig("Rule name cannot be empty".to_string()));
-    }
+    let valid_name = validate_firewall_rule_name(&rule_name)?;
 
     #[cfg(windows)]
     {
         // Try deleting base name, _In suffix, and _Out suffix
-        let in_name = format!("{}_In", rule_name);
-        let out_name = format!("{}_Out", rule_name);
+        let in_name = format!("{}_In", valid_name);
+        let out_name = format!("{}_Out", valid_name);
 
-        let _ = Command::new("netsh")
-            .args(["advfirewall", "firewall", "delete", "rule", &format!("name={}", rule_name)])
-            .output();
+        let res_base = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["advfirewall", "firewall", "delete", "rule", &format!("name={}", valid_name)])
+            .output()
+            .map_err(|e| AppError::System(format!("Failed to execute netsh delete (base): {}", e)))?;
 
-        let _ = Command::new("netsh")
+        let res_in = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["advfirewall", "firewall", "delete", "rule", &format!("name={}", in_name)])
-            .output();
+            .output()
+            .map_err(|e| AppError::System(format!("Failed to execute netsh delete (in): {}", e)))?;
 
-        let _ = Command::new("netsh")
+        let res_out = Command::new("netsh")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["advfirewall", "firewall", "delete", "rule", &format!("name={}", out_name)])
-            .output();
+            .output()
+            .map_err(|e| AppError::System(format!("Failed to execute netsh delete (out): {}", e)))?;
+
+        let success = res_base.status.success() || res_in.status.success() || res_out.status.success();
+        let message = if success {
+            format!("Firewall rules for '{}' deleted successfully", valid_name)
+        } else {
+            let err_base = crate::runner::decode_bytes(&res_base.stderr);
+            let out_base = crate::runner::decode_bytes(&res_base.stdout);
+            format!(
+                "Failed to delete firewall rule '{}': {} {}",
+                valid_name,
+                err_base.trim(),
+                out_base.trim()
+            )
+        };
 
         Ok(FirewallActionResult {
-            success: true,
-            rule_name: rule_name.clone(),
-            message: format!("Firewall rules for '{}' deleted successfully", rule_name),
+            success,
+            rule_name: valid_name,
+            message,
         })
     }
     #[cfg(not(windows))]
     {
         Ok(FirewallActionResult {
             success: true,
-            rule_name: rule_name.clone(),
-            message: format!("Mock unblocked '{}' in firewall", rule_name),
+            rule_name: valid_name.clone(),
+            message: format!("Mock unblocked '{}' in firewall", valid_name),
         })
     }
 }
@@ -723,5 +829,44 @@ mod tests {
         assert!(json.contains("ruleName"));
         assert!(json.contains("success"));
         assert!(json.contains("message"));
+    }
+
+    #[test]
+    fn test_validate_firewall_rule_name_allowlist() {
+        assert!(validate_firewall_rule_name("all").is_err());
+        assert!(validate_firewall_rule_name("ALL").is_err());
+        assert!(validate_firewall_rule_name("Core Networking").is_err());
+        assert!(validate_firewall_rule_name("WiScripts Block: \"evil\"").is_err());
+        assert!(validate_firewall_rule_name("WiScripts Block: a\nb").is_err());
+        assert!(validate_firewall_rule_name("WiScripts Block: a=b").is_err());
+        assert!(unblock_process_firewall("all".to_string()).is_err());
+        assert!(unblock_process_firewall("OtherRule".to_string()).is_err());
+
+        assert_eq!(
+            validate_firewall_rule_name("WiScripts Block: app.exe").unwrap(),
+            "WiScripts Block: app.exe"
+        );
+        assert_eq!(
+            validate_firewall_rule_name("WiScripts_Block_app.exe").unwrap(),
+            "WiScripts_Block_app.exe"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_parse_mib_table_rows_bounds_and_unaligned() {
+        use windows::Win32::NetworkManagement::IpHelper::MIB_UDPROW_OWNER_PID;
+
+        // Buffer claims 9999 entries but only has space for 1 row at offset 5 (unaligned)
+        let row_size = std::mem::size_of::<MIB_UDPROW_OWNER_PID>();
+        let mut buf = vec![0u8; 5 + row_size];
+        buf[0..4].copy_from_slice(&9999u32.to_ne_bytes());
+        let rows = parse_mib_table_rows::<MIB_UDPROW_OWNER_PID>(&buf, 5);
+        assert_eq!(rows.len(), 1);
+
+        // Buffer smaller than rows_offset returns empty safely
+        let tiny = vec![10u8, 0, 0, 0];
+        let rows_tiny = parse_mib_table_rows::<MIB_UDPROW_OWNER_PID>(&tiny, 8);
+        assert!(rows_tiny.is_empty());
     }
 }

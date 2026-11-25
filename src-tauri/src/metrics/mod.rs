@@ -193,15 +193,23 @@ pub fn run_command_with_timeout(mut cmd: std::process::Command, timeout: std::ti
         Err(_) => return None,
     };
 
+    // Drain stdout concurrently on a background thread to prevent OS pipe buffer deadlocks.
+    let reader_handle = child.stdout.take().map(|mut stream| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stream.read_to_end(&mut buf);
+            buf
+        })
+    });
+
     let start = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
+                let stdout_bytes = reader_handle
+                    .and_then(|h| h.join().ok())
+                    .unwrap_or_default();
                 if status.success() {
-                    let mut stdout_bytes = Vec::new();
-                    if let Some(mut stream) = child.stdout.take() {
-                        let _ = stream.read_to_end(&mut stdout_bytes);
-                    }
                     return Some(crate::runner::decode_bytes(&stdout_bytes));
                 }
                 return None;
@@ -210,13 +218,19 @@ pub fn run_command_with_timeout(mut cmd: std::process::Command, timeout: std::ti
                 if start.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
+                    if let Some(h) = reader_handle {
+                        let _ = h.join();
+                    }
                     return None;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                std::thread::sleep(std::time::Duration::from_millis(25));
             }
             Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                if let Some(h) = reader_handle {
+                    let _ = h.join();
+                }
                 return None;
             }
         }
@@ -332,86 +346,117 @@ pub fn query_ohm_wmi_sensors() -> Vec<TemperatureSensorInfo> {
     Vec::new()
 }
 
-static NVML_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+#[cfg(target_os = "windows")]
+struct CachedNvml {
+    _lib: libloading::Library,
+    get_count: unsafe extern "C" fn(*mut u32) -> i32,
+    get_handle: unsafe extern "C" fn(u32, *mut *mut std::ffi::c_void) -> i32,
+    get_name: unsafe extern "C" fn(*mut std::ffi::c_void, *mut std::ffi::c_char, u32) -> i32,
+    get_temp: unsafe extern "C" fn(*mut std::ffi::c_void, u32, *mut u32) -> i32,
+}
 
-pub fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
-    let _lock = match NVML_MUTEX.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    let output = run_with_timeout(std::time::Duration::from_secs(2), || {
-        let mut sensors = Vec::new();
-        #[cfg(target_os = "windows")]
-        {
+#[cfg(target_os = "windows")]
+unsafe impl Send for CachedNvml {}
+#[cfg(target_os = "windows")]
+unsafe impl Sync for CachedNvml {}
+
+#[cfg(target_os = "windows")]
+static NVML_API: std::sync::OnceLock<Option<CachedNvml>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "windows")]
+fn get_nvml_api() -> Option<&'static CachedNvml> {
+    NVML_API
+        .get_or_init(|| {
             use libloading::Library;
-            use std::ffi::{c_char, c_void, CStr};
+            use std::ffi::{c_char, c_void};
 
             let lib = unsafe {
                 Library::new("nvml.dll")
                     .or_else(|_| Library::new("C:\\Windows\\System32\\nvml.dll"))
-                    .or_else(|_| Library::new("C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvml.dll"))
+                    .or_else(|_| {
+                        Library::new("C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvml.dll")
+                    })
+                    .ok()?
             };
 
-            if let Ok(lib) = lib {
-                unsafe {
-                    type NvmlInit = unsafe extern "C" fn() -> i32;
-                    type NvmlShutdown = unsafe extern "C" fn() -> i32;
-                    type NvmlDeviceGetCount = unsafe extern "C" fn(*mut u32) -> i32;
-                    type NvmlDeviceGetHandleByIndex = unsafe extern "C" fn(u32, *mut *mut c_void) -> i32;
-                    type NvmlDeviceGetName = unsafe extern "C" fn(*mut c_void, *mut c_char, u32) -> i32;
-                    type NvmlDeviceGetTemperature = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> i32;
+            unsafe {
+                type NvmlInit = unsafe extern "C" fn() -> i32;
+                type NvmlDeviceGetCount = unsafe extern "C" fn(*mut u32) -> i32;
+                type NvmlDeviceGetHandleByIndex =
+                    unsafe extern "C" fn(u32, *mut *mut c_void) -> i32;
+                type NvmlDeviceGetName = unsafe extern "C" fn(*mut c_void, *mut c_char, u32) -> i32;
+                type NvmlDeviceGetTemperature =
+                    unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> i32;
 
-                    let nvml_init: Result<libloading::Symbol<NvmlInit>, _> = lib.get(b"nvmlInit_v2\0");
-                    let nvml_shutdown: Result<libloading::Symbol<NvmlShutdown>, _> = lib.get(b"nvmlShutdown\0");
-                    let nvml_get_count: Result<libloading::Symbol<NvmlDeviceGetCount>, _> = lib.get(b"nvmlDeviceGetCount_v2\0");
-                    let nvml_get_handle: Result<libloading::Symbol<NvmlDeviceGetHandleByIndex>, _> = lib.get(b"nvmlDeviceGetHandleByIndex_v2\0");
-                    let nvml_get_name: Result<libloading::Symbol<NvmlDeviceGetName>, _> = lib.get(b"nvmlDeviceGetName\0");
-                    let nvml_get_temp: Result<libloading::Symbol<NvmlDeviceGetTemperature>, _> = lib.get(b"nvmlDeviceGetTemperature\0");
+                let init: NvmlInit = *lib.get::<NvmlInit>(b"nvmlInit_v2\0").ok()?;
+                if init() != 0 {
+                    return None;
+                }
+                let get_count: NvmlDeviceGetCount =
+                    *lib.get::<NvmlDeviceGetCount>(b"nvmlDeviceGetCount_v2\0").ok()?;
+                let get_handle: NvmlDeviceGetHandleByIndex = *lib
+                    .get::<NvmlDeviceGetHandleByIndex>(b"nvmlDeviceGetHandleByIndex_v2\0")
+                    .ok()?;
+                let get_name: NvmlDeviceGetName =
+                    *lib.get::<NvmlDeviceGetName>(b"nvmlDeviceGetName\0").ok()?;
+                let get_temp: NvmlDeviceGetTemperature = *lib
+                    .get::<NvmlDeviceGetTemperature>(b"nvmlDeviceGetTemperature\0")
+                    .ok()?;
 
-                    if let (Ok(init), Ok(shutdown), Ok(get_count), Ok(get_handle), Ok(get_name), Ok(get_temp)) =
-                        (nvml_init, nvml_shutdown, nvml_get_count, nvml_get_handle, nvml_get_name, nvml_get_temp)
-                    {
-                        if init() == 0 {
-                            let mut count: u32 = 0;
-                            if get_count(&mut count) == 0 {
-                                for i in 0..count {
-                                    let mut handle: *mut c_void = std::ptr::null_mut();
-                                    if get_handle(i, &mut handle) == 0 && !handle.is_null() {
-                                        let mut name_buf = [0i8; 64];
-                                        let name_res = get_name(handle, name_buf.as_mut_ptr(), 64);
-                                        let gpu_name = if name_res == 0 {
-                                            CStr::from_ptr(name_buf.as_ptr()).to_string_lossy().to_string()
-                                        } else {
-                                            format!("NVIDIA GPU #{}", i)
-                                        };
+                Some(CachedNvml {
+                    _lib: lib,
+                    get_count,
+                    get_handle,
+                    get_name,
+                    get_temp,
+                })
+            }
+        })
+        .as_ref()
+}
 
-                                        let mut temp_val: u32 = 0;
-                                        if get_temp(handle, 0, &mut temp_val) == 0 {
-                                            let temp_f = temp_val as f32;
-                                            if is_valid_temperature(temp_f) {
-                                                sensors.push(TemperatureSensorInfo {
-                                                    id: format!("nvml_gpu_{}", i),
-                                                    name: gpu_name.clone(),
-                                                    label: format!("{} (Core)", gpu_name),
-                                                    temperature_celsius: temp_f,
-                                                    sensor_type: "gpu".to_string(),
-                                                    provider: "NVML DLL".to_string(),
-                                                });
-                                            }
-                                        }
-                                    }
+pub fn query_nvml_sensors() -> Vec<TemperatureSensorInfo> {
+    let mut sensors = Vec::new();
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(nvml) = get_nvml_api() {
+            unsafe {
+                let mut count: u32 = 0;
+                if (nvml.get_count)(&mut count) == 0 {
+                    for i in 0..count {
+                        let mut handle: *mut std::ffi::c_void = std::ptr::null_mut();
+                        if (nvml.get_handle)(i, &mut handle) == 0 && !handle.is_null() {
+                            let mut name_buf = [0i8; 64];
+                            let name_res = (nvml.get_name)(handle, name_buf.as_mut_ptr(), 64);
+                            let gpu_name = if name_res == 0 {
+                                std::ffi::CStr::from_ptr(name_buf.as_ptr())
+                                    .to_string_lossy()
+                                    .to_string()
+                            } else {
+                                format!("NVIDIA GPU #{}", i)
+                            };
+
+                            let mut temp_val: u32 = 0;
+                            if (nvml.get_temp)(handle, 0, &mut temp_val) == 0 {
+                                let temp_f = temp_val as f32;
+                                if is_valid_temperature(temp_f) {
+                                    sensors.push(TemperatureSensorInfo {
+                                        id: format!("nvml_gpu_{}", i),
+                                        name: gpu_name.clone(),
+                                        label: format!("{} (Core)", gpu_name),
+                                        temperature_celsius: temp_f,
+                                        sensor_type: "gpu".to_string(),
+                                        provider: "NVML DLL".to_string(),
+                                    });
                                 }
                             }
-                            let _ = shutdown();
                         }
                     }
                 }
             }
         }
-        Some(sensors)
-    });
-
-    output.unwrap_or_default()
+    }
+    sensors
 }
 
 pub fn query_nvidia_smi_sensors() -> Vec<TemperatureSensorInfo> {
@@ -478,32 +523,64 @@ pub fn query_sysinfo_sensors() -> Vec<TemperatureSensorInfo> {
     sensors
 }
 
+static TEMP_CACHE: std::sync::OnceLock<
+    std::sync::Mutex<Option<(std::time::Instant, SystemTemperaturesPayload)>>,
+> = std::sync::OnceLock::new();
+
 pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
+    let cache = TEMP_CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some((ts, ref payload)) = *guard {
+            if ts.elapsed() < std::time::Duration::from_secs(3) {
+                return Ok(payload.clone());
+            }
+        }
+    }
+
     let mut sensor_items: Vec<TemperatureSensorInfo> = Vec::new();
     let mut existing_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // Tier 1: In-process GPU Dynamic DLLs (NVML for NVIDIA, ADL for AMD)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_nvml_sensors());
-    push_sensors(&mut sensor_items, &mut existing_ids, query_adl_sensors());
+    // Run slow WMI/PowerShell/DLL tiers in parallel to avoid 12s sequential poll stalls.
+    let (nvml, adl, lhm, ohm, acpi, storage, sysinfo_s) = std::thread::scope(|s| {
+        let h_nvml = s.spawn(query_nvml_sensors);
+        let h_adl = s.spawn(query_adl_sensors);
+        let h_lhm = s.spawn(query_lhm_wmi_sensors);
+        let h_ohm = s.spawn(query_ohm_wmi_sensors);
+        let h_acpi = s.spawn(query_all_acpi_thermal_zones);
+        let h_storage = s.spawn(query_physical_storage_sensors);
+        let h_sys = s.spawn(query_sysinfo_sensors);
 
-    // Tier 2: Dedicated Hardware Monitors (LHM & OHM)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_lhm_wmi_sensors());
-    push_sensors(&mut sensor_items, &mut existing_ids, query_ohm_wmi_sensors());
+        (
+            h_nvml.join().unwrap_or_default(),
+            h_adl.join().unwrap_or_default(),
+            h_lhm.join().unwrap_or_default(),
+            h_ohm.join().unwrap_or_default(),
+            h_acpi.join().unwrap_or_default(),
+            h_storage.join().unwrap_or_default(),
+            h_sys.join().unwrap_or_default(),
+        )
+    });
 
-    // Tier 3: Consolidated ACPI / Laptop Thermal Zones (root\wmi & root\cimv2)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_all_acpi_thermal_zones());
-
-    // Tier 4: Physical Storage Drives (NVMe / SSD / SMART)
-    push_sensors(&mut sensor_items, &mut existing_ids, query_physical_storage_sensors());
+    push_sensors(&mut sensor_items, &mut existing_ids, nvml);
+    push_sensors(&mut sensor_items, &mut existing_ids, adl);
+    push_sensors(&mut sensor_items, &mut existing_ids, lhm);
+    push_sensors(&mut sensor_items, &mut existing_ids, ohm);
+    push_sensors(&mut sensor_items, &mut existing_ids, acpi);
+    push_sensors(&mut sensor_items, &mut existing_ids, storage);
 
     // Tier 5: CLI GPU Fallbacks (only if no GPU sensor found yet)
     if !sensor_items.iter().any(|s| s.sensor_type == "gpu") {
-        push_sensors(&mut sensor_items, &mut existing_ids, query_nvidia_smi_sensors());
-        push_sensors(&mut sensor_items, &mut existing_ids, query_amd_smi_sensors());
+        let (n_smi, a_smi) = std::thread::scope(|s| {
+            let h1 = s.spawn(query_nvidia_smi_sensors);
+            let h2 = s.spawn(query_amd_smi_sensors);
+            (h1.join().unwrap_or_default(), h2.join().unwrap_or_default())
+        });
+        push_sensors(&mut sensor_items, &mut existing_ids, n_smi);
+        push_sensors(&mut sensor_items, &mut existing_ids, a_smi);
     }
 
     // Tier 6: sysinfo Components fallback
-    push_sensors(&mut sensor_items, &mut existing_ids, query_sysinfo_sensors());
+    push_sensors(&mut sensor_items, &mut existing_ids, sysinfo_s);
 
     // Primary CPU & GPU temperature selection with priority heuristics
     let (cpu_temp, selected_cpu_id) = select_primary_cpu_sensor(&sensor_items);
@@ -526,7 +603,7 @@ pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
         providers.join(" + ")
     };
 
-    Ok(SystemTemperaturesPayload {
+    let payload = SystemTemperaturesPayload {
         cpu_temp_celsius: cpu_temp,
         gpu_temp_celsius: gpu_temp,
         is_cpu_temp_available,
@@ -535,7 +612,13 @@ pub fn collect_temperatures() -> Result<SystemTemperaturesPayload, AppError> {
         sensor_items,
         selected_cpu_sensor_id: selected_cpu_id,
         selected_gpu_sensor_id: selected_gpu_id,
-    })
+    };
+
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some((std::time::Instant::now(), payload.clone()));
+    }
+
+    Ok(payload)
 }
 
 #[cfg(test)]

@@ -184,7 +184,12 @@ pub fn nuke_shader_caches(selected_ids: Option<Vec<String>>) -> Result<ShaderNuk
 
     let target_defs: Vec<&ShaderCacheDefinition> = if let Some(ref ids) = selected_ids {
         if ids.is_empty() {
-            defs.iter().collect()
+            return Ok(ShaderNukeResult {
+                bytes_freed: 0,
+                files_removed: 0,
+                skipped_locked_count: 0,
+                errors: Vec::new(),
+            });
         } else {
             defs.iter().filter(|d| ids.contains(&d.id.to_string())).collect()
         }
@@ -292,5 +297,13 @@ mod tests {
         assert_eq!(freed, size);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_nuke_shader_caches_empty_selection_deletes_nothing() {
+        let res = nuke_shader_caches(Some(Vec::new())).unwrap();
+        assert_eq!(res.files_removed, 0);
+        assert_eq!(res.bytes_freed, 0);
+        assert_eq!(res.skipped_locked_count, 0);
     }
 }

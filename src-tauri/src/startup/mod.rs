@@ -20,11 +20,38 @@ fn escape_ps_param(s: &str) -> String {
     s.replace('\'', "''")
 }
 
+fn validate_startup_value_name(value_name: &str) -> Result<&str, AppError> {
+    let trimmed = value_name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Execution(
+            "Startup item value_name cannot be empty".to_string(),
+        ));
+    }
+    if trimmed.contains("..")
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains(':')
+        || trimmed.contains('*')
+        || trimmed.contains('?')
+        || trimmed.contains('\0')
+        || trimmed.contains('\r')
+        || trimmed.contains('\n')
+    {
+        return Err(AppError::Execution(format!(
+            "Invalid characters in startup item value_name: '{}'",
+            trimmed
+        )));
+    }
+    Ok(trimmed)
+}
+
 const VALID_STARTUP_LOCATIONS: &[&str] = &[
     "HKCU Run",
     "HKLM Run",
     "HKCU RunOnce",
     "HKLM RunOnce",
+    "HKLM WOW6432Node Run",
+    "HKLM WOW6432Node RunOnce",
     "User Startup Folder",
     "Common Startup Folder",
     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -32,6 +59,7 @@ const VALID_STARTUP_LOCATIONS: &[&str] = &[
     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
     "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
     "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
     "StartupFolder",
     "CommonStartupFolder",
 ];
@@ -225,12 +253,7 @@ pub fn toggle_startup_item(
     enable: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = Instant::now();
-    let target_value_name = value_name.trim();
-    if target_value_name.is_empty() {
-        return Err(AppError::Execution(
-            "Startup item value_name cannot be empty".to_string(),
-        ));
-    }
+    let target_value_name = validate_startup_value_name(value_name)?;
 
     if !is_valid_location(location) {
         return Err(AppError::Execution(format!(
@@ -283,7 +306,7 @@ pub fn toggle_startup_item(
 $loc = '{safe_location}'
 $valueName = '{safe_value_name}'
 $isShortcut = ($loc -like "*Folder*") -or ($valueName -like "*.lnk")
-$apKey = if ($isShortcut) {{ "StartupFolder" }} else {{ "Run" }}
+$apKey = if ($isShortcut) {{ "StartupFolder" }} elseif ($loc -like "*WOW6432Node*") {{ "Run32" }} else {{ "Run" }}
 $apPath = if ($loc -like "*HKLM*" -or $loc -like "*Common*") {{
     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\$apKey"
 }} else {{
@@ -348,12 +371,7 @@ pub fn remove_startup_item(
     location: &str,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = Instant::now();
-    let target_value_name = value_name.trim();
-    if target_value_name.is_empty() {
-        return Err(AppError::Execution(
-            "Startup item value_name cannot be empty".to_string(),
-        ));
-    }
+    let target_value_name = validate_startup_value_name(value_name)?;
 
     if !is_valid_location(location) {
         return Err(AppError::Execution(format!(
@@ -391,59 +409,90 @@ pub fn remove_startup_item(
     #[cfg(target_os = "windows")]
     {
         let safe_value_name = escape_ps_param(target_value_name);
-        let safe_location = escape_ps_param(location);
+        let loc_norm = location.trim().to_ascii_lowercase();
 
-        let script = format!(
-            r#"
+        let script = if loc_norm.contains("folder") {
+            let is_common = loc_norm.contains("common");
+            let base_expr = if is_common {
+                r#"[System.IO.Path]::Combine($env:ProgramData, "Microsoft\Windows\Start Menu\Programs\Startup")"#
+            } else {
+                r#"[System.IO.Path]::Combine($env:APPDATA, "Microsoft\Windows\Start Menu\Programs\Startup")"#
+            };
+            let approved_path = if is_common {
+                r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"
+            } else {
+                r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"
+            };
+            format!(
+                r#"
+$ErrorActionPreference = 'Stop'
 $valueName = '{safe_value_name}'
-$loc = '{safe_location}'
-
-$regPaths = @(
-    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
-    "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
-    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
-    "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
-    "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
-    "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce"
-)
-
-$approvedPaths = @(
-    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
-    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder",
-    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
-    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder"
-)
-
-if ($loc -like "*Folder*") {{
-    $userStartup = [System.IO.Path]::Combine($env:APPDATA, "Microsoft\Windows\Start Menu\Programs\Startup")
-    $commonStartup = [System.IO.Path]::Combine($env:ProgramData, "Microsoft\Windows\Start Menu\Programs\Startup")
-    $shortcutUser = [System.IO.Path]::Combine($userStartup, $valueName)
-    $shortcutCommon = [System.IO.Path]::Combine($commonStartup, $valueName)
-    if (Test-Path $shortcutUser) {{
-        Remove-Item -Path $shortcutUser -Force
-    }}
-    if (Test-Path $shortcutCommon) {{
-        Remove-Item -Path $shortcutCommon -Force
-    }}
-}} else {{
-    foreach ($p in $regPaths) {{
-        if (Test-Path $p) {{
-            Remove-ItemProperty -Path $p -Name $valueName -ErrorAction SilentlyContinue
-        }}
-    }}
+$baseDir = [System.IO.Path]::GetFullPath({base_expr}).TrimEnd('\') + '\'
+$targetFull = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($baseDir, $valueName))
+if (-not $targetFull.StartsWith($baseDir, [System.StringComparison]::OrdinalIgnoreCase)) {{
+    throw "Security violation: startup item path escapes startup folder"
 }}
-
-foreach ($ap in $approvedPaths) {{
-    if (Test-Path $ap) {{
-        Remove-ItemProperty -Path $ap -Name $valueName -ErrorAction SilentlyContinue
-    }}
+if (Test-Path -LiteralPath $targetFull) {{
+    Remove-Item -LiteralPath $targetFull -Force
 }}
-
+$apPath = '{approved_path}'
+if (Test-Path $apPath) {{
+    Remove-ItemProperty -Path $apPath -Name $valueName -ErrorAction SilentlyContinue
+}}
 Write-Output "Removed startup entry $valueName"
-"#,
-            safe_value_name = safe_value_name,
-            safe_location = safe_location
-        );
+"#
+            )
+        } else {
+            let (reg_path, approved_path) = match loc_norm.as_str() {
+                "hkcu run" | "hkcu\\software\\microsoft\\windows\\currentversion\\run" => (
+                    r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
+                    r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+                ),
+                "hkcu runonce" | "hkcu\\software\\microsoft\\windows\\currentversion\\runonce" => (
+                    r"HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+                    r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+                ),
+                "hklm run" | "hklm\\software\\microsoft\\windows\\currentversion\\run" => (
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+                ),
+                "hklm runonce" | "hklm\\software\\microsoft\\windows\\currentversion\\runonce" => (
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run",
+                ),
+                "hklm wow6432node run"
+                | "hklm\\software\\wow6432node\\microsoft\\windows\\currentversion\\run" => (
+                    r"HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32",
+                ),
+                "hklm wow6432node runonce"
+                | "hklm\\software\\wow6432node\\microsoft\\windows\\currentversion\\runonce" => (
+                    r"HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce",
+                    r"HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32",
+                ),
+                _ => {
+                    return Err(AppError::Execution(format!(
+                        "Unsupported startup location: '{}'",
+                        location
+                    )))
+                }
+            };
+            format!(
+                r#"
+$ErrorActionPreference = 'Stop'
+$valueName = '{safe_value_name}'
+$regPath = '{reg_path}'
+$apPath = '{approved_path}'
+if (Test-Path $regPath) {{
+    Remove-ItemProperty -Path $regPath -Name $valueName -ErrorAction Stop
+}}
+if (Test-Path $apPath) {{
+    Remove-ItemProperty -Path $apPath -Name $valueName -ErrorAction SilentlyContinue
+}}
+Write-Output "Removed startup entry $valueName from $regPath"
+"#
+            )
+        };
         let output = runner
             .run_powershell(&script)
             .map_err(AppError::Execution)?;
@@ -737,5 +786,28 @@ mod tests {
         } else {
             panic!("Expected AppError::Execution for empty value_name");
         }
+    }
+
+    #[test]
+    fn test_remove_startup_item_rejects_traversal_and_supports_wow6432node() {
+        let runner = DryRunRunner::new();
+        for bad in &[
+            "..\\..\\evil.lnk",
+            "C:\\Windows\\notepad.exe",
+            "foo/bar",
+            "bad*name",
+            "bad?name",
+            "bad\0name",
+        ] {
+            assert!(
+                remove_startup_item(&runner, "id1", bad, "User Startup Folder").is_err(),
+                "Expected traversal/invalid value_name '{}' to be rejected",
+                bad
+            );
+        }
+
+        assert!(is_valid_location("HKLM WOW6432Node Run"));
+        assert!(is_valid_location("HKLM WOW6432Node RunOnce"));
+        assert!(remove_startup_item(&runner, "id2", "MyApp32", "HKLM WOW6432Node Run").is_ok());
     }
 }

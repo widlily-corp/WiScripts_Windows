@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -15,6 +15,10 @@ use windows::Win32::{
             TH32CS_SNAPPROCESS,
         },
         ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
+        SystemInformation::{
+            GetLogicalProcessorInformationEx, RelationProcessorCore,
+            SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX,
+        },
         Threading::{
             GetExitCodeProcess, GetProcessAffinityMask, OpenProcess, SetPriorityClass,
             SetProcessAffinityMask, SetProcessPriorityBoost, HIGH_PRIORITY_CLASS,
@@ -165,47 +169,53 @@ pub fn check_and_recover_daemon_session() -> Result<bool, AppError> {
     Ok(true)
 }
 
-fn ensure_daemon_initialized() {
-    let mut lock = DAEMON_STATE.lock().unwrap();
-    if lock.is_none() {
-        *lock = Some(DaemonInternalState {
-            status: DaemonStatus {
-                active: true,
-                auto_detect: false,
-                boosted_pid: None,
-                boosted_name: None,
-                timer_resolution_applied: false,
-                physical_affinity_applied: false,
-                suspended_services: Vec::new(),
-            },
-            active_config: None,
-            original_affinity: None,
-        });
+fn default_daemon_internal_state() -> DaemonInternalState {
+    DaemonInternalState {
+        status: DaemonStatus {
+            active: true,
+            auto_detect: false,
+            boosted_pid: None,
+            boosted_name: None,
+            timer_resolution_applied: false,
+            physical_affinity_applied: false,
+            suspended_services: Vec::new(),
+        },
+        active_config: None,
+        original_affinity: None,
     }
 }
 
-#[cfg(windows)]
-struct WindowEnumContext {
-    pid: u32,
-    title: String,
+fn lock_daemon_state() -> std::sync::MutexGuard<'static, Option<DaemonInternalState>> {
+    let mut lock = DAEMON_STATE.lock().unwrap_or_else(|e| e.into_inner());
+    if lock.is_none() {
+        *lock = Some(default_daemon_internal_state());
+    }
+    lock
+}
+
+fn ensure_daemon_initialized() {
+    drop(lock_daemon_state());
 }
 
 #[cfg(windows)]
-unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let ctx = &mut *(lparam.0 as *mut WindowEnumContext);
-    let mut win_pid = 0u32;
-    GetWindowThreadProcessId(hwnd, Some(&mut win_pid));
-
-    if win_pid == ctx.pid && IsWindowVisible(hwnd).as_bool() {
+unsafe extern "system" fn enum_all_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    if IsWindowVisible(hwnd).as_bool() {
         let len = GetWindowTextLengthW(hwnd);
         if len > 0 {
-            let mut buf = vec![0u16; (len + 1) as usize];
-            let copied = GetWindowTextW(hwnd, &mut buf);
-            if copied > 0 {
-                let text = String::from_utf16_lossy(&buf[..copied as usize]);
-                if !text.trim().is_empty() {
-                    ctx.title = text.trim().to_string();
-                    return BOOL(0); // Stop enumerating
+            let mut win_pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut win_pid));
+            if win_pid > 4 {
+                let map = &mut *(lparam.0 as *mut HashMap<u32, String>);
+                if !map.contains_key(&win_pid) {
+                    let mut buf = vec![0u16; (len + 1) as usize];
+                    let copied = GetWindowTextW(hwnd, &mut buf);
+                    if copied > 0 {
+                        let text = String::from_utf16_lossy(&buf[..copied as usize]);
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            map.insert(win_pid, trimmed.to_string());
+                        }
+                    }
                 }
             }
         }
@@ -214,23 +224,82 @@ unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 #[cfg(windows)]
-fn get_window_title_for_pid(pid: u32) -> String {
-    let mut ctx = WindowEnumContext {
-        pid,
-        title: String::new(),
-    };
+fn collect_visible_window_titles() -> HashMap<u32, String> {
+    let mut map: HashMap<u32, String> = HashMap::new();
     unsafe {
         let _ = EnumWindows(
-            Some(enum_windows_callback),
-            LPARAM(&mut ctx as *mut _ as isize),
+            Some(enum_all_windows_callback),
+            LPARAM(&mut map as *mut _ as isize),
         );
     }
-    ctx.title
+    map
+}
+
+/// Computes a bitmask selecting one logical processor per physical core, intersected with `original_mask`.
+pub fn compute_physical_core_mask(original_mask: usize, core_masks: &[usize]) -> usize {
+    let mut physical = 0usize;
+    for &core_mask in core_masks {
+        let available = core_mask & original_mask;
+        if available != 0 {
+            let lowest_bit = available & available.wrapping_neg();
+            physical |= lowest_bit;
+        }
+    }
+    physical
+}
+
+#[cfg(windows)]
+fn query_physical_core_affinity_mask(original_mask: usize) -> usize {
+    let mut len = 0u32;
+    unsafe {
+        let _ = GetLogicalProcessorInformationEx(RelationProcessorCore, None, &mut len);
+        if len == 0 {
+            return original_mask;
+        }
+        let mut buf = vec![0u8; len as usize];
+        if GetLogicalProcessorInformationEx(
+            RelationProcessorCore,
+            Some(buf.as_mut_ptr() as *mut SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX),
+            &mut len,
+        )
+        .is_err()
+        {
+            return original_mask;
+        }
+
+        let mut core_masks = Vec::new();
+        let mut offset = 0usize;
+        let total = (len as usize).min(buf.len());
+        while offset + std::mem::size_of::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>() <= total {
+            let info = std::ptr::read_unaligned(
+                buf.as_ptr().add(offset) as *const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX
+            );
+            if info.Size == 0 {
+                break;
+            }
+            if info.Relationship == RelationProcessorCore && info.Anonymous.Processor.GroupCount >= 1
+            {
+                let ga = info.Anonymous.Processor.GroupMask[0];
+                if ga.Group == 0 {
+                    core_masks.push(ga.Mask);
+                }
+            }
+            offset = offset.saturating_add(info.Size as usize);
+        }
+
+        let computed = compute_physical_core_mask(original_mask, &core_masks);
+        if computed > 0 {
+            computed
+        } else {
+            original_mask
+        }
+    }
 }
 
 pub fn get_running_processes_for_selector() -> Result<Vec<ProcessSelectorItem>, AppError> {
     #[cfg(windows)]
     {
+        let window_titles = collect_visible_window_titles();
         let mut results = Vec::new();
         unsafe {
             let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -292,7 +361,7 @@ pub fn get_running_processes_for_selector() -> Result<Vec<ProcessSelectorItem>, 
                                 let _ = CloseHandle(handle);
                             }
 
-                            let window_title = get_window_title_for_pid(pid);
+                            let window_title = window_titles.get(&pid).cloned().unwrap_or_default();
                             let known = is_known_game(&name);
 
                             // Only include processes that have either a visible window, are known games, or have > 50 MB RAM
@@ -375,8 +444,7 @@ pub fn optimize_game_process(config: GameOptimizationConfig) -> Result<DaemonSta
 
                 if config.pin_physical_cores {
                     if GetProcessAffinityMask(handle, &mut original_mask, &mut sys_mask).is_ok() {
-                        // Mask physical cores (even bits: 0, 2, 4...)
-                        let physical_mask = original_mask & 0x5555_5555_5555_5555usize;
+                        let physical_mask = query_physical_core_affinity_mask(original_mask);
                         if physical_mask > 0 {
                             let _ = SetProcessAffinityMask(handle, physical_mask);
                         }
@@ -425,8 +493,8 @@ pub fn optimize_game_process(config: GameOptimizationConfig) -> Result<DaemonSta
 
         // 6. Update internal daemon state
         let status = {
-            let mut lock = DAEMON_STATE.lock().unwrap();
-            let state = lock.as_mut().unwrap();
+            let mut lock = lock_daemon_state();
+            let state = lock.get_or_insert_with(default_daemon_internal_state);
             state.status.active = true;
             state.status.boosted_pid = Some(pid);
             state.status.boosted_name = Some(config.process_name.clone());
@@ -450,8 +518,8 @@ pub fn optimize_game_process(config: GameOptimizationConfig) -> Result<DaemonSta
 
     #[cfg(not(windows))]
     {
-        let mut lock = DAEMON_STATE.lock().unwrap();
-        let state = lock.as_mut().unwrap();
+        let mut lock = lock_daemon_state();
+        let state = lock.get_or_insert_with(default_daemon_internal_state);
         state.status.active = true;
         state.status.boosted_pid = Some(pid);
         state.status.boosted_name = Some(config.process_name);
@@ -467,8 +535,8 @@ pub fn restore_game_process() -> Result<DaemonStatus, AppError> {
     #[cfg(windows)]
     {
         let (boosted_pid, orig_affinity, suspended, timer_applied) = {
-            let mut lock = DAEMON_STATE.lock().unwrap();
-            let state = lock.as_mut().unwrap();
+            let mut lock = lock_daemon_state();
+            let state = lock.get_or_insert_with(default_daemon_internal_state);
             let pid = state.status.boosted_pid;
             let aff = state.original_affinity;
             let susp = state.status.suspended_services.clone();
@@ -508,14 +576,17 @@ pub fn restore_game_process() -> Result<DaemonStatus, AppError> {
         // 4. Remove session journal
         remove_session_journal();
 
-        let lock = DAEMON_STATE.lock().unwrap();
-        Ok(lock.as_ref().unwrap().status.clone())
+        let mut lock = lock_daemon_state();
+        Ok(lock
+            .get_or_insert_with(default_daemon_internal_state)
+            .status
+            .clone())
     }
 
     #[cfg(not(windows))]
     {
-        let mut lock = DAEMON_STATE.lock().unwrap();
-        let state = lock.as_mut().unwrap();
+        let mut lock = lock_daemon_state();
+        let state = lock.get_or_insert_with(default_daemon_internal_state);
         state.status.boosted_pid = None;
         state.status.boosted_name = None;
         state.status.timer_resolution_applied = false;
@@ -526,18 +597,22 @@ pub fn restore_game_process() -> Result<DaemonStatus, AppError> {
 }
 
 pub fn get_daemon_status() -> Result<DaemonStatus, AppError> {
-    ensure_daemon_initialized();
-    let lock = DAEMON_STATE.lock().unwrap();
-    Ok(lock.as_ref().unwrap().status.clone())
+    let mut lock = lock_daemon_state();
+    Ok(lock
+        .get_or_insert_with(default_daemon_internal_state)
+        .status
+        .clone())
 }
 
 pub fn set_daemon_auto_detect(enabled: bool) -> Result<DaemonStatus, AppError> {
-    ensure_daemon_initialized();
-    let mut lock = DAEMON_STATE.lock().unwrap();
-    let state = lock.as_mut().unwrap();
-    state.status.auto_detect = enabled;
+    let status = {
+        let mut lock = lock_daemon_state();
+        let state = lock.get_or_insert_with(default_daemon_internal_state);
+        state.status.auto_detect = enabled;
+        state.status.clone()
+    };
     ensure_monitor_thread_running();
-    Ok(state.status.clone())
+    Ok(status)
 }
 
 fn is_process_alive(pid: u32) -> bool {
@@ -569,7 +644,7 @@ fn ensure_monitor_thread_running() {
                 std::thread::sleep(std::time::Duration::from_millis(1500));
 
                 let (boosted_pid, auto_detect) = {
-                    let lock = DAEMON_STATE.lock().unwrap();
+                    let lock = DAEMON_STATE.lock().unwrap_or_else(|e| e.into_inner());
                     if let Some(ref state) = *lock {
                         (state.status.boosted_pid, state.status.auto_detect)
                     } else {
@@ -645,11 +720,17 @@ mod tests {
 
     #[test]
     fn test_physical_affinity_mask_calculation() {
-        // 8 logical cores mask (0xFF = 1111 1111)
-        let mask = 0xFFusize;
-        let physical_mask = mask & 0x5555_5555_5555_5555usize;
-        // Even bits: 0, 2, 4, 6 -> 0b01010101 = 0x55
-        assert_eq!(physical_mask, 0x55usize);
+        // 8 logical cores with SMT (4 physical cores: [0,1], [2,3], [4,5], [6,7])
+        let smt_cores = [0b0000_0011, 0b0000_1100, 0b0011_0000, 0b1100_0000];
+        assert_eq!(compute_physical_core_mask(0xFF, &smt_cores), 0x55);
+
+        // Non-SMT 4 cores: all 4 bits must remain enabled (not masked by 0x5555!)
+        let non_smt_cores = [0b0001, 0b0010, 0b0100, 0b1000];
+        assert_eq!(compute_physical_core_mask(0x0F, &non_smt_cores), 0x0F);
+
+        // Intel hybrid (2 SMT P-cores + 2 non-SMT E-cores)
+        let hybrid_cores = [0b0000_11, 0b0011_00, 0b0100_00, 0b1000_00];
+        assert_eq!(compute_physical_core_mask(0x3F, &hybrid_cores), 0b11_01_01);
     }
 
     #[test]

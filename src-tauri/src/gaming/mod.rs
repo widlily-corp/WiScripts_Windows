@@ -30,9 +30,12 @@ pub struct LatencyMetrics {
     pub average_latency_us: f64,
     pub max_latency_us: f64,
     pub dpc_count: u64,
+    /// Windows `SystemInterruptInformation` does not expose raw ISR counts; kept at 0 for schema compatibility.
     pub isr_count: u64,
     pub dpc_rate_per_sec: u64,
     pub isr_rate_per_sec: u64,
+    pub context_switches: u64,
+    pub context_switch_rate_per_sec: u64,
     pub timer_resolution_100ns: u32,
     pub status: String,
 }
@@ -62,7 +65,7 @@ struct LatencyTrackerState {
     total_latency_us: f64,
     max_latency_us: f64,
     last_dpc_count: u64,
-    last_isr_count: u64,
+    last_context_switches: u64,
     last_sample_time: Option<std::time::Instant>,
 }
 
@@ -80,7 +83,7 @@ static LATENCY_TRACKER: Mutex<LatencyTrackerState> = Mutex::new(LatencyTrackerSt
     total_latency_us: 0.0,
     max_latency_us: 0.0,
     last_dpc_count: 0,
-    last_isr_count: 0,
+    last_context_switches: 0,
     last_sample_time: None,
 });
 
@@ -189,34 +192,31 @@ fn set_nt_timer_resolution(desired_100ns: u32, enable: bool) -> Result<u32, Stri
     Ok(cur_res)
 }
 
+/// Measures real OS timer/scheduler wakeup jitter around a 1ms sleep using QPC.
 #[cfg(windows)]
-fn measure_qpc_jitter_us() -> f64 {
+fn measure_scheduler_wakeup_jitter_us() -> f64 {
     unsafe {
         let mut freq = 0i64;
         if QueryPerformanceFrequency(&mut freq).is_err() || freq <= 0 {
-            return 12.5;
+            return 0.0;
         }
 
         let mut t1 = 0i64;
         let mut t2 = 0i64;
         let _ = QueryPerformanceCounter(&mut t1);
-
-        // Calibrated microsecond delta check
-        let mut sum = 0u64;
-        for i in 0..1000 {
-            sum = std::hint::black_box(sum.wrapping_add(i));
-        }
-
+        std::thread::sleep(std::time::Duration::from_millis(1));
         let _ = QueryPerformanceCounter(&mut t2);
+
         let delta_ticks = (t2 - t1).max(0);
         let elapsed_us = (delta_ticks as f64 * 1_000_000.0) / (freq as f64);
-        
-        elapsed_us.max(0.1)
+        (elapsed_us - 1000.0).max(0.1)
     }
 }
 
+/// Queries `NtQuerySystemInformation(SystemInterruptInformation)` for DPC counts/rates and
+/// context switches (Windows does not expose per-CPU raw ISR counts in this struct).
 #[cfg(windows)]
-fn query_dpc_isr_info() -> (u64, u64, u64, u64) {
+fn query_dpc_and_context_switch_info() -> (u64, u64, u64) {
     let mut sys_info = SYSTEM_INFO::default();
     unsafe { GetSystemInfo(&mut sys_info) };
     let num_cpus = sys_info.dwNumberOfProcessors.max(1) as usize;
@@ -237,22 +237,22 @@ fn query_dpc_isr_info() -> (u64, u64, u64, u64) {
                 );
                 if status >= 0 {
                     let mut total_dpc = 0u64;
-                    let mut total_isr = 0u64;
+                    let mut total_context_switches = 0u64;
                     let mut total_dpc_rate = 0u64;
 
                     for item in &info_list {
                         total_dpc += item.dpc_count as u64;
-                        total_isr += item.context_switches as u64;
+                        total_context_switches += item.context_switches as u64;
                         total_dpc_rate += item.dpc_rate as u64;
                     }
 
-                    return (total_dpc, total_isr, total_dpc_rate, 0);
+                    return (total_dpc, total_context_switches, total_dpc_rate);
                 }
             }
         }
     }
 
-    (0, 0, 0, 0)
+    (0, 0, 0)
 }
 
 #[cfg(windows)]
@@ -305,8 +305,8 @@ pub fn calculate_latency_status(latency_us: f64) -> String {
 pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
     #[cfg(windows)]
     {
-        let current_latency = measure_qpc_jitter_us();
-        let (dpc_count, isr_count, dpc_rate_raw, _) = query_dpc_isr_info();
+        let current_latency = measure_scheduler_wakeup_jitter_us();
+        let (dpc_count, context_switches, dpc_rate_raw) = query_dpc_and_context_switch_info();
         let (_, _, cur_res) = query_nt_timer_resolution();
 
         let mut tracker = LATENCY_TRACKER
@@ -315,7 +315,7 @@ pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
 
         let now = std::time::Instant::now();
         let mut dpc_rate = dpc_rate_raw;
-        let mut isr_rate = 0u64;
+        let mut context_switch_rate = 0u64;
 
         if let Some(last_time) = tracker.last_sample_time {
             let elapsed_sec = now.duration_since(last_time).as_secs_f64();
@@ -323,8 +323,10 @@ pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
                 if dpc_rate == 0 && dpc_count >= tracker.last_dpc_count {
                     dpc_rate = ((dpc_count - tracker.last_dpc_count) as f64 / elapsed_sec) as u64;
                 }
-                if isr_count >= tracker.last_isr_count {
-                    isr_rate = ((isr_count - tracker.last_isr_count) as f64 / elapsed_sec) as u64;
+                if context_switches >= tracker.last_context_switches {
+                    context_switch_rate =
+                        ((context_switches - tracker.last_context_switches) as f64 / elapsed_sec)
+                            as u64;
                 }
             }
         }
@@ -335,7 +337,7 @@ pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
             tracker.max_latency_us = current_latency;
         }
         tracker.last_dpc_count = dpc_count;
-        tracker.last_isr_count = isr_count;
+        tracker.last_context_switches = context_switches;
         tracker.last_sample_time = Some(now);
 
         let avg_latency = tracker.total_latency_us / (tracker.sample_count as f64);
@@ -346,9 +348,11 @@ pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
             average_latency_us: (avg_latency * 100.0).round() / 100.0,
             max_latency_us: (tracker.max_latency_us * 100.0).round() / 100.0,
             dpc_count,
-            isr_count,
+            isr_count: 0,
             dpc_rate_per_sec: dpc_rate,
-            isr_rate_per_sec: isr_rate,
+            isr_rate_per_sec: 0,
+            context_switches,
+            context_switch_rate_per_sec: context_switch_rate,
             timer_resolution_100ns: cur_res,
             status,
         })
@@ -356,15 +360,17 @@ pub fn get_latency_metrics() -> Result<LatencyMetrics, AppError> {
     #[cfg(not(windows))]
     {
         Ok(LatencyMetrics {
-            current_latency_us: 15.0,
-            average_latency_us: 15.0,
-            max_latency_us: 15.0,
+            current_latency_us: 0.0,
+            average_latency_us: 0.0,
+            max_latency_us: 0.0,
             dpc_count: 0,
             isr_count: 0,
             dpc_rate_per_sec: 0,
             isr_rate_per_sec: 0,
+            context_switches: 0,
+            context_switch_rate_per_sec: 0,
             timer_resolution_100ns: 156250,
-            status: "Optimal".to_string(),
+            status: "Unavailable".to_string(),
         })
     }
 }
@@ -597,9 +603,11 @@ mod tests {
             average_latency_us: 14.56,
             max_latency_us: 88.90,
             dpc_count: 1000,
-            isr_count: 5000,
+            isr_count: 0,
             dpc_rate_per_sec: 250,
-            isr_rate_per_sec: 1200,
+            isr_rate_per_sec: 0,
+            context_switches: 5000,
+            context_switch_rate_per_sec: 1200,
             timer_resolution_100ns: 5000,
             status: "Optimal".to_string(),
         };
@@ -610,6 +618,8 @@ mod tests {
         assert!(json.contains("maxLatencyUs"));
         assert!(json.contains("dpcCount"));
         assert!(json.contains("isrCount"));
+        assert!(json.contains("contextSwitches"));
+        assert!(json.contains("contextSwitchRatePerSec"));
         assert!(json.contains("dpcRatePerSec"));
         assert!(json.contains("isrRatePerSec"));
         assert!(json.contains("timerResolution100ns"));

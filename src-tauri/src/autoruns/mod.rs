@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 
 #[cfg(target_os = "windows")]
 use std::ffi::OsStr;
@@ -264,6 +267,105 @@ pub fn calculate_risk_score(
     score.min(100) as u8
 }
 
+#[derive(Debug, Clone)]
+struct AutorunEntryMeta {
+    id: String,
+    location: String,
+    name: String,
+    image_path: String,
+    source_path: String,
+    source_name: String,
+    startup_approved_path: Option<String>,
+    raw_value: String,
+}
+
+static AUTORUN_META_CACHE: OnceLock<Mutex<HashMap<String, AutorunEntryMeta>>> = OnceLock::new();
+
+fn meta_cache() -> &'static Mutex<HashMap<String, AutorunEntryMeta>> {
+    AUTORUN_META_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn escape_ps_single_quoted(input: &str) -> Result<String, String> {
+    if input.contains('\0') || input.contains('\r') || input.contains('\n') {
+        return Err("Parameter contains invalid control characters".to_string());
+    }
+    Ok(input.replace('\'', "''"))
+}
+
+/// Extracts the target executable or script path from a command-line string.
+pub fn extract_executable_path(command_line: &str) -> Option<String> {
+    let trimmed = command_line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some(rest) = trimmed.strip_prefix('"') {
+        if let Some(end_quote) = rest.find('"') {
+            let candidate = rest[..end_quote].trim();
+            if !candidate.is_empty() {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+
+    // Try progressive prefix matching for unquoted paths containing spaces
+    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    for len in (1..=parts.len()).rev() {
+        let candidate = parts[..len].join(" ");
+        let p = Path::new(&candidate);
+        if p.is_absolute() && p.exists() {
+            return Some(candidate);
+        }
+    }
+
+    // Fallback to first whitespace-delimited token if it looks like a file path
+    parts
+        .first()
+        .map(|s| s.trim_matches('"').to_string())
+        .filter(|s| s.contains('\\') || s.contains('/'))
+}
+
+/// Returns true if the target path points to a critical Windows OS binary that must never be moved.
+pub fn is_protected_system_binary(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase().replace('/', "\\");
+    let system_dirs = [
+        "c:\\windows\\system32\\",
+        "c:\\windows\\syswow64\\",
+        "c:\\windows\\winsxs\\",
+        "c:\\windows\\servicing\\",
+    ];
+    if system_dirs.iter().any(|dir| lower.starts_with(dir)) {
+        return true;
+    }
+
+    if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+        let fname = file_name.to_lowercase();
+        const PROTECTED_NAMES: &[&str] = &[
+            "explorer.exe",
+            "svchost.exe",
+            "cmd.exe",
+            "powershell.exe",
+            "pwsh.exe",
+            "conhost.exe",
+            "csrss.exe",
+            "winlogon.exe",
+            "lsass.exe",
+            "services.exe",
+            "regedit.exe",
+            "rundll32.exe",
+            "regsvr32.exe",
+            "taskmgr.exe",
+            "msiexec.exe",
+            "userinit.exe",
+        ];
+        if PROTECTED_NAMES.contains(&fname.as_str()) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Scans 25+ autostart locations across Windows Registry, Tasks, Services, WMI, IFEO, Winlogon, etc.
 pub fn scan_autorun_entries() -> Result<Vec<AutorunEntry>, String> {
     #[cfg(target_os = "windows")]
@@ -272,7 +374,7 @@ pub fn scan_autorun_entries() -> Result<Vec<AutorunEntry>, String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(get_mock_autorun_entries())
+        Err("Autorun scanning is only supported on Windows".to_string())
     }
 }
 
@@ -307,20 +409,32 @@ function Get-SigInfo($path) {
     return @{ Status = "Unknown"; Publisher = "Unknown" }
 }
 
+# Helper to check StartupApproved status (byte[0]: 2=enabled, 3=disabled)
+function Get-StartupApprovedState($approvedPath, $itemName) {
+    if (-not $approvedPath -or -not (Test-Path $approvedPath)) { return $true }
+    try {
+        $prop = Get-ItemProperty -Path $approvedPath -Name $itemName -ErrorAction SilentlyContinue
+        if ($prop -and $prop.$itemName -is [byte[]] -and $prop.$itemName.Length -ge 1) {
+            return (($prop.$itemName[0] % 2) -eq 0)
+        }
+    } catch {}
+    return $true
+}
+
 # 1-12. Registry Run & RunOnce locations (HKCU, HKLM 32/64-bit, Policies, RunServices)
 $regLocations = @(
-    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKCU Run" },
-    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKCU RunOnce" },
-    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKLM Run" },
-    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKLM RunOnce" },
-    @{ Path = "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKLM WOW6432Node Run" },
-    @{ Path = "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKLM WOW6432Node RunOnce" },
-    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunServices"; Loc = "HKLM RunServices" },
-    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunServicesOnce"; Loc = "HKLM RunServicesOnce" },
-    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunServices"; Loc = "HKCU RunServices" },
-    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunServicesOnce"; Loc = "HKCU RunServicesOnce" },
-    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run"; Loc = "HKLM Policies Explorer Run" },
-    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run"; Loc = "HKCU Policies Explorer Run" }
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKCU Run"; Approved = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKCU RunOnce"; Approved = "" },
+    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKLM Run"; Approved = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" },
+    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKLM RunOnce"; Approved = "" },
+    @{ Path = "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"; Loc = "HKLM WOW6432Node Run"; Approved = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32" },
+    @{ Path = "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce"; Loc = "HKLM WOW6432Node RunOnce"; Approved = "" },
+    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunServices"; Loc = "HKLM RunServices"; Approved = "" },
+    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunServicesOnce"; Loc = "HKLM RunServicesOnce"; Approved = "" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunServices"; Loc = "HKCU RunServices"; Approved = "" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunServicesOnce"; Loc = "HKCU RunServicesOnce"; Approved = "" },
+    @{ Path = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run"; Loc = "HKLM Policies Explorer Run"; Approved = "" },
+    @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run"; Loc = "HKCU Policies Explorer Run"; Approved = "" }
 )
 
 foreach ($r in $regLocations) {
@@ -331,6 +445,7 @@ foreach ($r in $regLocations) {
                 $name = $_.Name
                 $cmd = if ($_.Value) { $_.Value.ToString() } else { "" }
                 $sig = Get-SigInfo $cmd
+                $isEnabled = Get-StartupApprovedState $r.Approved $name
                 $entries += [PSCustomObject]@{
                     id = ("reg_" + $r.Loc + "_" + $name) -replace "[^a-zA-Z0-9_]", "_"
                     location = $r.Loc
@@ -338,7 +453,11 @@ foreach ($r in $regLocations) {
                     imagePath = $cmd
                     publisher = $sig.Publisher
                     signatureStatus = $sig.Status
-                    enabled = $true
+                    enabled = $isEnabled
+                    sourcePath = $r.Path
+                    sourceName = $name
+                    startupApprovedPath = $r.Approved
+                    rawValue = $cmd
                 }
             }
         }
@@ -390,7 +509,7 @@ if (Test-Path $winlogonPath) {
 }
 
 # 16. Scheduled Tasks
-Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -ne 'Disabled' } | Select-Object -First 30 | ForEach-Object {
+Get-ScheduledTask -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object {
     $action = $_.Actions | Select-Object -First 1
     $cmd = if ($action -and $action.Execute) { $action.Execute + " " + $action.Arguments } else { "Scheduled Task Action" }
     $sig = Get-SigInfo ($action.Execute)
@@ -401,12 +520,16 @@ Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.State -ne 'D
         imagePath = $cmd.Trim()
         publisher = $sig.Publisher
         signatureStatus = $sig.Status
-        enabled = ($_.State -eq 'Ready' -or $_.State -eq 'Running')
+        enabled = ($_.State -ne 'Disabled')
+        sourcePath = $_.TaskPath
+        sourceName = $_.TaskName
+        startupApprovedPath = ""
+        rawValue = $cmd.Trim()
     }
 }
 
 # 17. Services Autostart
-Get-CimInstance -ClassName Win32_Service -Filter "StartMode = 'Auto'" -ErrorAction SilentlyContinue | Select-Object -First 30 | ForEach-Object {
+Get-CimInstance -ClassName Win32_Service -Filter "StartMode = 'Auto'" -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object {
     $sig = Get-SigInfo $_.PathName
     $entries += [PSCustomObject]@{
         id = ("service_" + $_.Name) -replace "[^a-zA-Z0-9_]", "_"
@@ -416,6 +539,10 @@ Get-CimInstance -ClassName Win32_Service -Filter "StartMode = 'Auto'" -ErrorActi
         publisher = $sig.Publisher
         signatureStatus = $sig.Status
         enabled = ($_.State -eq 'Running' -or $_.State -eq 'Starting')
+        sourcePath = $_.Name
+        sourceName = $_.Name
+        startupApprovedPath = ""
+        rawValue = if ($_.PathName) { $_.PathName } else { $_.Name }
     }
 }
 
@@ -423,13 +550,14 @@ Get-CimInstance -ClassName Win32_Service -Filter "StartMode = 'Auto'" -ErrorActi
 $userStartup = [System.IO.Path]::Combine($env:APPDATA, "Microsoft\Windows\Start Menu\Programs\Startup")
 $commonStartup = [System.IO.Path]::Combine($env:ProgramData, "Microsoft\Windows\Start Menu\Programs\Startup")
 $folders = @(
-    @{ Path = $userStartup; Loc = "User Startup Folder" },
-    @{ Path = $commonStartup; Loc = "Common Startup Folder" }
+    @{ Path = $userStartup; Loc = "User Startup Folder"; Approved = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder" },
+    @{ Path = $commonStartup; Loc = "Common Startup Folder"; Approved = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder" }
 )
 foreach ($f in $folders) {
     if (Test-Path $f.Path) {
         Get-ChildItem -Path $f.Path -File -ErrorAction SilentlyContinue | ForEach-Object {
             $sig = Get-SigInfo $_.FullName
+            $isEnabled = Get-StartupApprovedState $f.Approved $_.Name
             $entries += [PSCustomObject]@{
                 id = ("folder_" + $f.Loc + "_" + $_.Name) -replace "[^a-zA-Z0-9_]", "_"
                 location = $f.Loc
@@ -437,7 +565,11 @@ foreach ($f in $folders) {
                 imagePath = $_.FullName
                 publisher = $sig.Publisher
                 signatureStatus = $sig.Status
-                enabled = $true
+                enabled = $isEnabled
+                sourcePath = $_.FullName
+                sourceName = $_.Name
+                startupApprovedPath = $f.Approved
+                rawValue = $_.FullName
             }
         }
     }
@@ -456,6 +588,10 @@ try {
             publisher = $sig.Publisher
             signatureStatus = $sig.Status
             enabled = $true
+            sourcePath = $_.PSPath
+            sourceName = $_.Name
+            startupApprovedPath = ""
+            rawValue = $cmd
         }
     }
 } catch {}
@@ -475,6 +611,10 @@ if (Test-Path $ifeoPath) {
                 publisher = $sig.Publisher
                 signatureStatus = $sig.Status
                 enabled = $true
+                sourcePath = $_.PSPath
+                sourceName = "Debugger"
+                startupApprovedPath = ""
+                rawValue = $dbg
             }
         }
     }
@@ -498,6 +638,10 @@ foreach ($ai in $appInitPaths) {
                 publisher = $sig.Publisher
                 signatureStatus = $sig.Status
                 enabled = $true
+                sourcePath = $ai.Path
+                sourceName = "AppInit_DLLs"
+                startupApprovedPath = ""
+                rawValue = $dlls
             }
         }
     }
@@ -517,6 +661,10 @@ if (Test-Path $sehPath) {
                 publisher = "Unknown"
                 signatureStatus = "Unknown"
                 enabled = $true
+                sourcePath = $sehPath
+                sourceName = $_.Name
+                startupApprovedPath = ""
+                rawValue = $_.Value.ToString()
             }
         }
     }
@@ -536,6 +684,10 @@ if (Test-Path $smPath) {
             publisher = "Microsoft Corporation"
             signatureStatus = "Valid"
             enabled = $true
+            sourcePath = $smPath
+            sourceName = "BootExecute"
+            startupApprovedPath = ""
+            rawValue = $beStr
         }
     }
 }
@@ -557,6 +709,10 @@ if (Test-Path $asPath) {
                 publisher = $sig.Publisher
                 signatureStatus = $sig.Status
                 enabled = $true
+                sourcePath = $_.PSPath
+                sourceName = "StubPath"
+                startupApprovedPath = ""
+                rawValue = $stub
             }
         }
     }
@@ -572,53 +728,89 @@ if ($entries.Count -eq 0) { "[]" } else { $entries | ConvertTo-Json -Compress }
         .arg("-Command")
         .arg(script);
 
-    let output = cmd.output().map_err(|e| format!("Failed to run PowerShell scan: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run PowerShell autorun scan: {}", e))?;
 
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if stdout.is_empty() || stdout == "[]" {
-            return Ok(get_mock_autorun_entries());
-        }
-
-        let raw_entries: Vec<RawAutorunEntry> = if stdout.starts_with('[') {
-            serde_json::from_str(&stdout).unwrap_or_default()
-        } else if let Ok(single) = serde_json::from_str::<RawAutorunEntry>(&stdout) {
-            vec![single]
-        } else {
-            Vec::new()
-        };
-
-        if raw_entries.is_empty() {
-            return Ok(get_mock_autorun_entries());
-        }
-
-        let mut processed: Vec<AutorunEntry> = raw_entries
-            .into_iter()
-            .map(|r| {
-                let risk_score = calculate_risk_score(
-                    &r.location,
-                    &r.image_path,
-                    &r.signature_status,
-                    &r.publisher,
-                );
-                AutorunEntry {
-                    id: r.id,
-                    location: r.location,
-                    name: r.name,
-                    image_path: r.image_path,
-                    publisher: r.publisher,
-                    signature_status: r.signature_status,
-                    enabled: r.enabled,
-                    risk_score,
-                }
-            })
-            .collect();
-
-        processed.sort_by_key(|b| std::cmp::Reverse(b.risk_score));
-        Ok(processed)
-    } else {
-        Ok(get_mock_autorun_entries())
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(format!(
+            "Autorun scan failed (exit {:?}): {}",
+            output.status.code(),
+            if stderr.is_empty() {
+                "Unknown PowerShell error".to_string()
+            } else {
+                stderr
+            }
+        ));
     }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() || stdout == "[]" {
+        return Ok(Vec::new());
+    }
+
+    let raw_entries: Vec<RawAutorunEntry> = if stdout.starts_with('[') {
+        serde_json::from_str(&stdout)
+            .map_err(|e| format!("Failed to parse autorun scan JSON array: {}", e))?
+    } else {
+        let single = serde_json::from_str::<RawAutorunEntry>(&stdout)
+            .map_err(|e| format!("Failed to parse autorun scan JSON entry: {}", e))?;
+        vec![single]
+    };
+
+    if let Ok(mut cache) = meta_cache().lock() {
+        cache.clear();
+        for r in &raw_entries {
+            if let Some(source_path) = &r.source_path {
+                cache.insert(
+                    r.id.clone(),
+                    AutorunEntryMeta {
+                        id: r.id.clone(),
+                        location: r.location.clone(),
+                        name: r.name.clone(),
+                        image_path: r.image_path.clone(),
+                        source_path: source_path.clone(),
+                        source_name: r.source_name.clone().unwrap_or_else(|| r.name.clone()),
+                        startup_approved_path: r
+                            .startup_approved_path
+                            .as_ref()
+                            .filter(|s| !s.is_empty())
+                            .cloned(),
+                        raw_value: r
+                            .raw_value
+                            .clone()
+                            .unwrap_or_else(|| r.image_path.clone()),
+                    },
+                );
+            }
+        }
+    }
+
+    let mut processed: Vec<AutorunEntry> = raw_entries
+        .into_iter()
+        .map(|r| {
+            let risk_score = calculate_risk_score(
+                &r.location,
+                &r.image_path,
+                &r.signature_status,
+                &r.publisher,
+            );
+            AutorunEntry {
+                id: r.id,
+                location: r.location,
+                name: r.name,
+                image_path: r.image_path,
+                publisher: r.publisher,
+                signature_status: r.signature_status,
+                enabled: r.enabled,
+                risk_score,
+            }
+        })
+        .collect();
+
+    processed.sort_by_key(|b| std::cmp::Reverse(b.risk_score));
+    Ok(processed)
 }
 
 #[derive(Deserialize)]
@@ -631,6 +823,14 @@ struct RawAutorunEntry {
     publisher: String,
     signature_status: String,
     enabled: bool,
+    #[serde(default)]
+    source_path: Option<String>,
+    #[serde(default)]
+    source_name: Option<String>,
+    #[serde(default)]
+    startup_approved_path: Option<String>,
+    #[serde(default)]
+    raw_value: Option<String>,
 }
 
 /// Sanitizes an entry ID allowing only alphanumeric, underscore, and hyphen characters.
@@ -647,7 +847,29 @@ pub fn sanitize_entry_id(id: &str) -> String {
     }
 }
 
-/// Toggles autorun entry state (enable / disable).
+#[cfg(target_os = "windows")]
+fn run_ps_script_checked(script: &str) -> Result<String, String> {
+    let mut cmd = Command::new("powershell");
+    cmd.creation_flags(0x08000000);
+    cmd.arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(script);
+
+    let output = cmd.output().map_err(|e| format!("PowerShell execution error: {}", e))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if stderr.is_empty() {
+            format!("PowerShell exited with status {:?}", output.status.code())
+        } else {
+            stderr
+        })
+    }
+}
+
+/// Toggles autorun entry state (enable / disable) via real StartupApproved, ScheduledTask, Service, or Registry backup.
 pub fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, String> {
     if entry_id.trim().is_empty() {
         return Err("Entry ID cannot be empty".to_string());
@@ -658,41 +880,142 @@ pub fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, Stri
         return Err("Entry ID contains invalid characters".to_string());
     }
 
+    let meta = {
+        let guard = meta_cache()
+            .lock()
+            .map_err(|e| format!("Autorun cache lock error: {}", e))?;
+        guard
+            .get(&entry_id)
+            .or_else(|| guard.get(&sanitized_id))
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "Autorun entry '{}' not found in scan cache; rescan autoruns first",
+                    sanitized_id
+                )
+            })?
+    };
+
     #[cfg(target_os = "windows")]
     {
-        let script = format!(
-            r#"
-$id = '{safe_id}'
-$enable = ${enable}
-# Registry / StartupApproved safe toggle fallback
-Write-Output "Toggled entry $id to enable=$enable"
-"#,
-            safe_id = sanitized_id,
-            enable = enable
-        );
+        let source_path = escape_ps_single_quoted(&meta.source_path)?;
+        let source_name = escape_ps_single_quoted(&meta.source_name)?;
 
-        let mut cmd = Command::new("powershell");
-        cmd.creation_flags(0x08000000);
-        cmd.arg("-NoProfile")
-            .arg("-NonInteractive")
-            .arg("-Command")
-            .arg(script);
-
-        let output = cmd.output().map_err(|e| format!("Execution error: {}", e))?;
-        if output.status.success() {
-            Ok(enable)
+        let script = if let Some(approved_path) = &meta.startup_approved_path {
+            let safe_approved = escape_ps_single_quoted(approved_path)?;
+            let state_byte = if enable { 2u8 } else { 3u8 };
+            format!(
+                r#"
+$ErrorActionPreference = 'Stop'
+$approvedPath = '{safe_approved}'
+$itemName = '{source_name}'
+if (-not (Test-Path $approvedPath)) {{
+    New-Item -Path $approvedPath -Force | Out-Null
+}}
+$bytes = [byte[]]@({state_byte},0,0,0,0,0,0,0,0,0,0,0)
+Set-ItemProperty -Path $approvedPath -Name $itemName -Value $bytes -Type Binary -Force
+"#
+            )
+        } else if meta.location == "ScheduledTasks" {
+            let action = if enable {
+                "Enable-ScheduledTask"
+            } else {
+                "Disable-ScheduledTask"
+            };
+            format!(
+                r#"
+$ErrorActionPreference = 'Stop'
+{action} -TaskPath '{source_path}' -TaskName '{source_name}' | Out-Null
+"#
+            )
+        } else if meta.location == "Services" {
+            let start_type = if enable { "Automatic" } else { "Disabled" };
+            format!(
+                r#"
+$ErrorActionPreference = 'Stop'
+Set-Service -Name '{source_name}' -StartupType {start_type}
+"#
+            )
+        } else if meta.location.contains("Run")
+            || meta.location == "Explorer ShellExecuteHooks"
+            || meta.location == "Active Setup"
+        {
+            let hive = if meta.source_path.starts_with("HKLM:") {
+                "HKLM:"
+            } else {
+                "HKCU:"
+            };
+            let disabled_root = format!(
+                "{}\\Software\\WiScripts\\DisabledAutoruns\\{}",
+                hive,
+                escape_ps_single_quoted(&meta.id)?
+            );
+            if enable {
+                format!(
+                    r#"
+$ErrorActionPreference = 'Stop'
+$disabledKey = '{disabled_root}'
+if (-not (Test-Path $disabledKey)) {{
+    throw "No disabled backup found for entry '{source_name}'"
+}}
+$val = (Get-ItemProperty -Path $disabledKey -Name 'OriginalValue').OriginalValue
+Set-ItemProperty -Path '{source_path}' -Name '{source_name}' -Value $val -Force
+Remove-Item -Path $disabledKey -Recurse -Force
+"#
+                )
+            } else {
+                format!(
+                    r#"
+$ErrorActionPreference = 'Stop'
+$disabledKey = '{disabled_root}'
+$val = (Get-ItemProperty -Path '{source_path}' -Name '{source_name}').'{source_name}'
+if (-not (Test-Path $disabledKey)) {{
+    New-Item -Path $disabledKey -Force | Out-Null
+}}
+Set-ItemProperty -Path $disabledKey -Name 'OriginalValue' -Value $val -Force
+Remove-ItemProperty -Path '{source_path}' -Name '{source_name}' -Force
+"#
+                )
+            }
         } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
-        }
+            return Err(format!(
+                "Toggling '{}' entries is not supported; use quarantine for removal",
+                meta.location
+            ));
+        };
+
+        run_ps_script_checked(&script)?;
+        Ok(enable)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(enable)
+        let _ = meta;
+        Err("Autorun toggling is only supported on Windows".to_string())
     }
 }
 
-/// Quarantines an autorun entry by backing up its metadata/registry key and isolating binary file.
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let data = fs::read(path).map_err(|e| format!("Failed to read '{}': {}", path.display(), e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(&data);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn move_file_to_quarantine(src: &Path, dst: &Path) -> Result<(), String> {
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    fs::copy(src, dst).map_err(|e| format!("Failed to copy binary to quarantine: {}", e))?;
+    fs::remove_file(src).map_err(|e| {
+        let _ = fs::remove_file(dst);
+        format!("Failed to remove original binary after quarantine copy: {}", e)
+    })?;
+    Ok(())
+}
+
+/// Quarantines an autorun entry by backing up its metadata/registry key, disabling/removing the persistence
+/// trigger, and isolating the target binary (unless it is a protected Windows OS binary).
 pub fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, String> {
     if entry_id.contains("..") || entry_id.contains('/') || entry_id.contains('\\') {
         return Err("Entry ID contains path traversal sequence".to_string());
@@ -703,53 +1026,126 @@ pub fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, St
         return Err("Entry ID cannot be empty for quarantine operation".to_string());
     }
 
+    let meta = {
+        let guard = meta_cache()
+            .lock()
+            .map_err(|e| format!("Autorun cache lock error: {}", e))?;
+        guard
+            .get(&entry_id)
+            .or_else(|| guard.get(&clean_id))
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "Autorun entry '{}' not found in scan cache; rescan autoruns first",
+                    clean_id
+                )
+            })?
+    };
+
     let appdata = dirs::data_dir()
-        .unwrap_or_else(|| Path::new("C:\\Users\\Public\\AppData\\Roaming").to_path_buf());
+        .ok_or_else(|| "Unable to resolve AppData directory for quarantine".to_string())?;
     let quarantine_dir = appdata.join("WiScripts").join("Quarantine");
     let registry_backup_dir = quarantine_dir.join("registry_backups");
     let file_quarantine_dir = quarantine_dir.join("files");
 
-    let _ = fs::create_dir_all(&registry_backup_dir);
-    let _ = fs::create_dir_all(&file_quarantine_dir);
+    fs::create_dir_all(&registry_backup_dir)
+        .map_err(|e| format!("Failed to create quarantine backup dir: {}", e))?;
+    fs::create_dir_all(&file_quarantine_dir)
+        .map_err(|e| format!("Failed to create quarantine files dir: {}", e))?;
 
     let backup_key_file = registry_backup_dir.join(format!("{}.json", clean_id));
-    let isolated_file = file_quarantine_dir.join(format!("{}.quarantine", clean_id));
+    if !backup_key_file.starts_with(&registry_backup_dir) {
+        return Err("Quarantine backup path resolves outside designated directory".to_string());
+    }
 
-    if !backup_key_file.starts_with(&registry_backup_dir)
-        || !isolated_file.starts_with(&file_quarantine_dir)
+    let mut quarantined_binary_path = String::new();
+    let mut binary_sha256: Option<String> = None;
+    let mut binary_action = "none";
+
+    if let Some(exe_str) = extract_executable_path(&meta.image_path) {
+        let exe_path = PathBuf::from(&exe_str);
+        if exe_path.exists() && exe_path.is_file() {
+            if is_protected_system_binary(&exe_path) {
+                binary_action = "skipped_protected_os_binary";
+            } else {
+                let file_name = exe_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("payload.bin");
+                let safe_file_name = sanitize_entry_id(file_name);
+                let isolated_file =
+                    file_quarantine_dir.join(format!("{}_{}.quarantine", clean_id, safe_file_name));
+                if !isolated_file.starts_with(&file_quarantine_dir) {
+                    return Err("Quarantine file path resolves outside designated directory".to_string());
+                }
+                binary_sha256 = Some(sha256_file(&exe_path)?);
+                move_file_to_quarantine(&exe_path, &isolated_file)?;
+                quarantined_binary_path = isolated_file.to_string_lossy().to_string();
+                binary_action = "moved_to_quarantine";
+            }
+        }
+    }
+
+    let backup_payload = serde_json::json!({
+        "entryId": clean_id,
+        "timestamp": chrono_timestamp(),
+        "location": meta.location,
+        "name": meta.name,
+        "sourcePath": meta.source_path,
+        "sourceName": meta.source_name,
+        "imagePath": meta.image_path,
+        "rawValue": meta.raw_value,
+        "binaryAction": binary_action,
+        "binarySha256": binary_sha256,
+        "quarantinedBinaryPath": quarantined_binary_path,
+        "status": "Quarantined"
+    });
+    let backup_content = serde_json::to_string_pretty(&backup_payload)
+        .map_err(|e| format!("Failed to serialize quarantine backup: {}", e))?;
+
+    fs::write(&backup_key_file, backup_content)
+        .map_err(|e| format!("Failed to write quarantine backup: {}", e))?;
+
+    #[cfg(target_os = "windows")]
     {
-        return Err("Quarantine target path resolves outside designated quarantine directory".to_string());
+        let source_path = escape_ps_single_quoted(&meta.source_path)?;
+        let source_name = escape_ps_single_quoted(&meta.source_name)?;
+
+        let removal_script = match meta.location.as_str() {
+            "ScheduledTasks" => format!(
+                "$ErrorActionPreference = 'Stop'; Unregister-ScheduledTask -TaskPath '{source_path}' -TaskName '{source_name}' -Confirm:$false"
+            ),
+            "Services" => format!(
+                "$ErrorActionPreference = 'Stop'; Stop-Service -Name '{source_name}' -Force -ErrorAction SilentlyContinue; Set-Service -Name '{source_name}' -StartupType Disabled"
+            ),
+            "User Startup Folder" | "Common Startup Folder" => format!(
+                "$ErrorActionPreference = 'Stop'; if (Test-Path -LiteralPath '{source_path}') {{ Remove-Item -LiteralPath '{source_path}' -Force }}"
+            ),
+            "WMI" => format!(
+                "$ErrorActionPreference = 'Stop'; Get-CimInstance -Namespace root\\subscription -ClassName __EventConsumer | Where-Object {{ $_.Name -eq '{source_name}' }} | Remove-CimInstance"
+            ),
+            "Session Manager BootExecute" => {
+                return Err("Refusing to remove critical Session Manager BootExecute key".to_string());
+            }
+            _ => format!(
+                "$ErrorActionPreference = 'Stop'; Remove-ItemProperty -Path '{source_path}' -Name '{source_name}' -Force"
+            ),
+        };
+
+        if let Err(e) = run_ps_script_checked(&removal_script) {
+            return Ok(QuarantineResult {
+                entry_id: clean_id,
+                quarantined_path: quarantined_binary_path,
+                backup_registry_key: backup_key_file.to_string_lossy().to_string(),
+                success: false,
+                error: Some(format!("Backup created, but failed to remove persistence entry: {}", e)),
+            });
+        }
     }
-
-    let backup_content = format!(
-        r#"{{
-  "entryId": "{}",
-  "timestamp": "{}",
-  "status": "Quarantined"
-}}"#,
-        clean_id,
-        chrono_timestamp()
-    );
-
-    if let Err(e) = fs::write(&backup_key_file, backup_content) {
-        return Ok(QuarantineResult {
-            entry_id: clean_id.to_string(),
-            quarantined_path: String::new(),
-            backup_registry_key: String::new(),
-            success: false,
-            error: Some(format!("Failed to write quarantine backup: {}", e)),
-        });
-    }
-
-    // Touch isolated file placeholder for demonstration / safety
-    let _ = fs::write(&isolated_file, format!("Quarantined payload for {}", clean_id));
-
-    // Disable autorun entry after quarantine backup
-    let _ = toggle_autorun_entry(clean_id.to_string(), false);
 
     Ok(QuarantineResult {
-        entry_id: clean_id.to_string(),
-        quarantined_path: isolated_file.to_string_lossy().to_string(),
+        entry_id: clean_id,
+        quarantined_path: quarantined_binary_path,
         backup_registry_key: backup_key_file.to_string_lossy().to_string(),
         success: true,
         error: None,
@@ -762,7 +1158,8 @@ fn chrono_timestamp() -> String {
     format!("{}", datetime.as_secs())
 }
 
-/// Fallback / mock dataset covering 25+ autostart locations and signature statuses.
+/// Test-only dataset covering autostart locations and signature statuses.
+#[cfg(test)]
 pub fn get_mock_autorun_entries() -> Vec<AutorunEntry> {
     vec![
         AutorunEntry {
@@ -952,12 +1349,11 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_autorun_entries_returns_entries() {
+    fn test_scan_autorun_entries_no_mock_fallback() {
         let entries = scan_autorun_entries().expect("Scanning autorun entries should succeed");
-        assert!(!entries.is_empty(), "Scanner should return autorun entries");
         assert!(
-            entries.iter().any(|e| e.location == "WMI" || e.location == "HKCU Run"),
-            "Scanner results should include key autostart locations"
+            !entries.iter().any(|e| e.name == "XMRigMiner" && e.image_path.contains("pool.supportxmr.com")),
+            "Production scanner must never return mock XMRigMiner fallback data"
         );
     }
 
@@ -968,10 +1364,9 @@ mod tests {
     }
 
     #[test]
-    fn test_toggle_autorun_entry_valid() {
-        let res = toggle_autorun_entry("reg_hkcu_run_discord".to_string(), false);
-        assert!(res.is_ok());
-        assert!(!res.unwrap());
+    fn test_toggle_autorun_entry_unknown_id_returns_error() {
+        let res = toggle_autorun_entry("nonexistent_autorun_entry_xyz".to_string(), false);
+        assert!(res.is_err());
     }
 
     #[test]
@@ -981,12 +1376,31 @@ mod tests {
     }
 
     #[test]
-    fn test_quarantine_autorun_entry_success() {
-        let res = quarantine_autorun_entry("reg_hkcu_run_crypto_miner".to_string()).unwrap();
-        assert!(res.success);
-        assert_eq!(res.entry_id, "reg_hkcu_run_crypto_miner");
-        assert!(res.quarantined_path.contains("Quarantine"));
-        assert!(res.backup_registry_key.contains("registry_backups"));
+    fn test_quarantine_autorun_entry_unknown_id_returns_error() {
+        let res = quarantine_autorun_entry("nonexistent_autorun_entry_xyz".to_string());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_quarantine_helpers_and_system_binary_guard() {
+        assert!(is_protected_system_binary(Path::new(r"C:\Windows\System32\cmd.exe")));
+        assert!(is_protected_system_binary(Path::new(r"C:\Windows\explorer.exe")));
+        assert!(!is_protected_system_binary(Path::new(r"C:\Users\Public\Temp\miner.exe")));
+
+        assert_eq!(
+            extract_executable_path(r#""C:\Program Files\App\app.exe" --silent"#).as_deref(),
+            Some(r"C:\Program Files\App\app.exe")
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("payload.exe");
+        let dst = dir.path().join("payload.quarantine");
+        fs::write(&src, b"dummy binary").unwrap();
+        let hash = sha256_file(&src).unwrap();
+        assert_eq!(hash.len(), 64);
+        move_file_to_quarantine(&src, &dst).unwrap();
+        assert!(!src.exists());
+        assert!(dst.exists());
     }
 
     #[test]

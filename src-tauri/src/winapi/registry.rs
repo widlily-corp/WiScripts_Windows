@@ -1,11 +1,13 @@
 #[cfg(windows)]
+use super::to_u16_vec;
+#[cfg(windows)]
 use windows::{
-    core::PCWSTR,
+    core::{PCWSTR, PWSTR},
     Win32::System::Registry::{
         RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegDeleteTreeW, RegDeleteValueW,
-        RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CLASSES_ROOT,
-        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, KEY_ALL_ACCESS, KEY_READ, REG_BINARY,
-        REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ, REG_VALUE_TYPE,
+        RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CLASSES_ROOT,
+        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, KEY_ALL_ACCESS, KEY_ENUMERATE_SUB_KEYS,
+        KEY_READ, REG_BINARY, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ, REG_VALUE_TYPE,
     },
 };
 
@@ -47,10 +49,6 @@ pub fn parse_hive_and_subpath(key_path: &str) -> Result<(HKEY, String), String> 
     };
 
     Ok((hkey, subpath.to_string()))
-}
-
-fn to_u16_vec(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 #[cfg(windows)]
@@ -219,8 +217,11 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
         let read_str = String::from_utf16_lossy(&read_buf[..u16_len]);
         let trimmed_read_str = read_str.trim_matches('\0');
 
-        if trimmed_read_str != data {
-            return Err(format!("Read-back verification failed: string mismatch for '{}'\\'{}' (expected '{}', got '{}')", key_path, value_name, data, trimmed_read_str));
+        if trimmed_read_str != clean_data {
+            return Err(format!(
+                "Read-back verification failed: string mismatch for '{}'\\'{}' (expected '{}', got '{}')",
+                key_path, clean_val_name, clean_data, trimmed_read_str
+            ));
         }
     }
 
@@ -230,8 +231,9 @@ pub fn set_string(key_path: &str, value_name: &str, data: &str) -> Result<(), St
 #[cfg(windows)]
 pub fn set_binary(key_path: &str, value_name: &str, data: &[u8]) -> Result<(), String> {
     let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
     let subpath_u16 = to_u16_vec(&subpath);
-    let val_u16 = to_u16_vec(value_name);
+    let val_u16 = to_u16_vec(&clean_val_name);
 
     unsafe {
         let mut key_handle = HKEY::default();
@@ -360,8 +362,9 @@ pub fn delete_key(key_path: &str) -> Result<(), String> {
 #[cfg(windows)]
 pub fn delete_value(key_path: &str, value_name: &str) -> Result<(), String> {
     let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_val_name = sanitize_registry_input(value_name)?;
     let subpath_u16 = to_u16_vec(&subpath);
-    let val_u16 = to_u16_vec(value_name);
+    let val_u16 = to_u16_vec(&clean_val_name);
 
     unsafe {
         let mut key_handle = HKEY::default();
@@ -604,6 +607,63 @@ pub fn value_exists(key_path: &str, value_name: &str) -> Result<bool, String> {
         let _ = RegCloseKey(key_handle);
         Ok(query_res.is_ok())
     }
+}
+
+#[cfg(windows)]
+pub fn has_subkey_with_prefix(key_path: &str, prefix: &str) -> Result<bool, String> {
+    let (hkey, subpath) = parse_hive_and_subpath(key_path)?;
+    let clean_prefix = sanitize_registry_input(prefix)?.to_lowercase();
+    let subpath_u16 = to_u16_vec(&subpath);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_READ | KEY_ENUMERATE_SUB_KEYS,
+            &mut key_handle,
+        );
+
+        if status.is_err() {
+            return Ok(false);
+        }
+
+        let mut index = 0u32;
+        let mut name_buf = [0u16; 260];
+        let mut found = false;
+
+        loop {
+            let mut name_len = name_buf.len() as u32;
+            let res = RegEnumKeyExW(
+                key_handle,
+                index,
+                PWSTR(name_buf.as_mut_ptr()),
+                &mut name_len,
+                None,
+                PWSTR::null(),
+                None,
+                None,
+            );
+            if res.is_err() {
+                break;
+            }
+            let subkey_name = String::from_utf16_lossy(&name_buf[..name_len as usize]).to_lowercase();
+            if subkey_name.starts_with(&clean_prefix) {
+                found = true;
+                break;
+            }
+            index += 1;
+        }
+
+        let _ = RegCloseKey(key_handle);
+        Ok(found)
+    }
+}
+
+#[cfg(not(windows))]
+pub fn has_subkey_with_prefix(_key_path: &str, _prefix: &str) -> Result<bool, String> {
+    Err("WinAPI Registry operations are only supported on Windows".to_string())
 }
 
 #[cfg(not(windows))]

@@ -413,14 +413,26 @@ try {{
 $cancelWatcher = [powershell]::Create().AddScript({{ param($pidToKill, $cPath) while ($true) {{ if (Test-Path -LiteralPath $cPath) {{ & taskkill /F /T /PID $pidToKill 2>$null; break }} [System.Threading.Thread]::Sleep(50) }} }}).AddArgument($myPid).AddArgument($cancelPath).BeginInvoke()
 
 $exitCode = 0
+$hadError = $false
+$LASTEXITCODE = 0
+$Error.Clear()
 try {{
     # Execute payload and stream all 6 streams (*>&1: stdout, stderr, warnings, Write-Host) to log file
     & "$payloadPath" *>&1 | ForEach-Object {{
+        $isErrRecord = $_ -is [System.Management.Automation.ErrorRecord]
         $line = $_.ToString()
+        if ($isErrRecord) {{
+            $hadError = $true
+            if (-not $line.StartsWith("[ERROR]") -and -not $line.StartsWith("[STDERR]")) {{
+                $line = "[ERROR] $line"
+            }}
+        }}
         [System.IO.File]::AppendAllText($logPath, "$line`r`n", $utf8NoBom)
     }}
-    if ($LASTEXITCODE -ne $null) {{
-        $exitCode = $LASTEXITCODE
+    if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {{
+        $exitCode = [int]$LASTEXITCODE
+    }} elseif ($hadError) {{
+        $exitCode = 1
     }}
 }} catch {{
     $err = $_.ToString()
@@ -467,9 +479,14 @@ pub fn sanitize_terminal_line(raw_line: &str) -> String {
 }
 
 /// Reads bytes from a buffered reader until either '\n' or a standalone '\r' (carriage return).
-/// Handles Windows CRLF ("\r\n") as a single line terminator, while treating standalone '\r'
-/// as an in-place line boundary so interactive progress bars stream without hanging.
-pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+/// When `flush_incomplete_eof` is false, incomplete trailing bytes without a newline/CR delimiter
+/// are NOT consumed (returns `Ok(0)`), preventing split multibyte UTF-8 reads while tailing live logs.
+pub fn read_line_or_cr_opts<R: BufRead>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+    flush_incomplete_eof: bool,
+) -> std::io::Result<usize> {
+    let start_len = buf.len();
     let mut total_read = 0;
     loop {
         let available = match reader.fill_buf() {
@@ -479,6 +496,10 @@ pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io
         };
 
         if available.is_empty() {
+            if !flush_incomplete_eof {
+                buf.truncate(start_len);
+                return Ok(0);
+            }
             break;
         }
 
@@ -499,19 +520,29 @@ pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io
                 break;
             } else {
                 // b == b'\r'
-                if idx + 1 < available.len() && available[idx + 1] == b'\n' {
-                    // CRLF sequence
-                    let take = idx + 2;
+                if idx + 1 < available.len() {
+                    let take = if available[idx + 1] == b'\n' {
+                        idx + 2
+                    } else {
+                        idx + 1
+                    };
                     buf.extend_from_slice(&available[..take]);
                     reader.consume(take);
                     total_read += take;
                     break;
                 } else {
-                    // Standalone '\r'
+                    // '\r' sits at the end of the current buffer; peek next chunk for '\n'
                     let take = idx + 1;
                     buf.extend_from_slice(&available[..take]);
                     reader.consume(take);
                     total_read += take;
+                    if let Ok(next_avail) = reader.fill_buf() {
+                        if next_avail.first() == Some(&b'\n') {
+                            buf.push(b'\n');
+                            reader.consume(1);
+                            total_read += 1;
+                        }
+                    }
                     break;
                 }
             }
@@ -525,6 +556,13 @@ pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io
     Ok(total_read)
 }
 
+/// Reads bytes from a buffered reader until either '\n' or a standalone '\r' (carriage return).
+/// Handles Windows CRLF ("\r\n") as a single line terminator, while treating standalone '\r'
+/// as an in-place line boundary so interactive progress bars stream without hanging.
+pub fn read_line_or_cr<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+    read_line_or_cr_opts(reader, buf, true)
+}
+
 /// Tails newly written lines from the shared session log file using non-exclusive sharing mode (7).
 fn tail_log_file(
     log_path: &std::path::Path,
@@ -532,6 +570,7 @@ fn tail_log_file(
     app: &tauri::AppHandle,
     accumulated_stdout: &mut String,
     accumulated_stderr: &mut String,
+    flush_incomplete_eof: bool,
 ) {
     if !log_path.exists() {
         return;
@@ -563,7 +602,7 @@ fn tail_log_file(
     let mut line_buf = Vec::new();
     loop {
         line_buf.clear();
-        match read_line_or_cr(&mut reader, &mut line_buf) {
+        match read_line_or_cr_opts(&mut reader, &mut line_buf, flush_incomplete_eof) {
             Ok(0) => break,
             Ok(bytes_read) => {
                 *offset += bytes_read as u64;
@@ -593,6 +632,32 @@ fn tail_log_file(
             }
             Err(_) => break,
         }
+    }
+}
+
+/// Signals elevated cancel watcher and waits briefly (~1.5s) for `.meta` completion acknowledgement
+/// before `_session_guard` drops and removes staging files.
+fn wait_for_elevated_cancel_ack(
+    cancel_path: &std::path::Path,
+    meta_path: &std::path::Path,
+    max_wait: Duration,
+) {
+    let _ = std::fs::File::create(cancel_path);
+    if !meta_path.exists() {
+        return;
+    }
+
+    let wait_start = Instant::now();
+    while wait_start.elapsed() < max_wait {
+        if let Ok(meta_content) = std::fs::read_to_string(meta_path) {
+            let clean_meta = meta_content.trim_start_matches('\u{feff}');
+            if let Ok(meta) = serde_json::from_str::<ScriptMetaInfo>(clean_meta) {
+                if meta.status == "completed" {
+                    return;
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(40));
     }
 }
 
@@ -636,15 +701,16 @@ async fn execute_script_elevated_bridge(
             AppError::Io(format!("Failed to write payload script: {}", e))
         })?;
 
-        // 2. Write runner script with UTF-8 BOM
+        // 2. Write runner script with exact single UTF-8 BOM
         let runner_content = generate_uac_runner_script(
             &payload_path,
             &log_path,
             &meta_path,
             &cancel_path,
         );
+        let clean_runner = runner_content.trim_start_matches('\u{feff}');
         let mut runner_bytes = vec![0xEF, 0xBB, 0xBF];
-        runner_bytes.extend_from_slice(runner_content.as_bytes());
+        runner_bytes.extend_from_slice(clean_runner.as_bytes());
         std::fs::write(&runner_path, &runner_bytes).map_err(|e| {
             AppError::Io(format!("Failed to write UAC bridge runner script: {}", e))
         })?;
@@ -730,12 +796,15 @@ async fn execute_script_elevated_bridge(
             .register_with_sentinel(&exec_id, 0, &norm_type, Some(cancel_path.clone()));
 
         let start_time = Instant::now();
+        let startup_deadline = Duration::from_secs(15).min(timeout_duration);
         let poll_interval = Duration::from_millis(40);
 
         let mut read_offset: u64 = 0;
         let mut accumulated_stdout = String::new();
         let mut accumulated_stderr = String::new();
         let mut registered_elevated_pid = false;
+        let mut meta_seen = false;
+        let mut startup_failed = false;
         let mut final_exit_code: Option<i32> = None;
         let mut user_cancelled = false;
         let mut timed_out = false;
@@ -747,23 +816,19 @@ async fn execute_script_elevated_bridge(
                 break;
             }
 
-            // Check timeout
-            if start_time.elapsed() >= timeout_duration {
-                timed_out = true;
-                break;
-            }
-
-            // Stream any newly available lines from log file
+            // Stream any newly available complete lines from log file
             tail_log_file(
                 &log_path,
                 &mut read_offset,
                 &app,
                 &mut accumulated_stdout,
                 &mut accumulated_stderr,
+                false,
             );
 
             // Read metadata file if not yet registered PID or if completed
             if meta_path.exists() {
+                meta_seen = true;
                 if let Ok(meta_content) = std::fs::read_to_string(&meta_path) {
                     let clean_meta = meta_content.trim_start_matches('\u{feff}');
                     if let Ok(meta) = serde_json::from_str::<ScriptMetaInfo>(clean_meta) {
@@ -778,23 +843,53 @@ async fn execute_script_elevated_bridge(
                         }
                     }
                 }
+            } else if !meta_seen && start_time.elapsed() >= startup_deadline {
+                startup_failed = true;
+                break;
+            }
+
+            // Check overall timeout
+            if start_time.elapsed() >= timeout_duration {
+                timed_out = true;
+                break;
             }
 
             std::thread::sleep(poll_interval);
         }
 
-        // Final flush of remaining log bytes
+        // Final flush of remaining log bytes (flush incomplete trailing line at EOF)
         tail_log_file(
             &log_path,
             &mut read_offset,
             &app,
             &mut accumulated_stdout,
             &mut accumulated_stderr,
+            true,
         );
+
+        if startup_failed {
+            log::error!(
+                "[ScriptRunner] Elevated execution '{}' failed to initialize .meta within {}s",
+                exec_id,
+                startup_deadline.as_secs()
+            );
+            wait_for_elevated_cancel_ack(&cancel_path, &meta_path, Duration::from_millis(500));
+            let payload = ScriptOutputLinePayload {
+                line: "[ERROR] Elevated script runner failed to initialize within 15 seconds."
+                    .to_string(),
+                stream: "stderr".to_string(),
+            };
+            let _ = app.emit("script-output-line", &payload);
+
+            return Err(AppError::Execution(format!(
+                "Elevated script runner failed to start within {} seconds",
+                startup_deadline.as_secs()
+            )));
+        }
 
         if user_cancelled {
             log::warn!("[ScriptRunner] Elevated execution '{}' cancelled by user", exec_id);
-            let _ = std::fs::File::create(&cancel_path);
+            wait_for_elevated_cancel_ack(&cancel_path, &meta_path, Duration::from_millis(1500));
 
             let payload = ScriptOutputLinePayload {
                 line: "[CANCELLED] Elevated script execution was cancelled by user. Process terminated.".to_string(),
@@ -810,7 +905,7 @@ async fn execute_script_elevated_bridge(
 
         if timed_out {
             log::error!("[ScriptRunner] Elevated execution '{}' timed out", exec_id);
-            let _ = std::fs::File::create(&cancel_path);
+            wait_for_elevated_cancel_ack(&cancel_path, &meta_path, Duration::from_millis(1500));
 
             let payload = ScriptOutputLinePayload {
                 line: format!(

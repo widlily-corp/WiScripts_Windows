@@ -11,12 +11,13 @@ struct DiagnosticStep {
     command: String,
 }
 
-/// Validates target export/dump file path against path traversal (.., slashes, out-of-bounds).
+/// Validates target export/dump file path against path traversal (.., null bytes, out-of-bounds).
+/// Walks up to the nearest existing ancestor to enforce canonical containment even when intermediate dirs do not exist yet.
 pub fn validate_dump_path(target_path: &Path, allowed_base_dir: &Path) -> Result<PathBuf, AppError> {
     let path_str = target_path.to_string_lossy();
-    if path_str.contains("..") {
+    if path_str.contains('\0') || path_str.contains("..") {
         return Err(AppError::InvalidConfig(
-            "Diagnostic dump path contains forbidden path traversal (..) sequence".to_string(),
+            "Diagnostic dump path contains forbidden path traversal (..) or null byte".to_string(),
         ));
     }
 
@@ -34,27 +35,37 @@ pub fn validate_dump_path(target_path: &Path, allowed_base_dir: &Path) -> Result
         allowed_base_dir.join(target_path)
     };
 
-    let canonical_base = allowed_base_dir
-        .canonicalize()
-        .unwrap_or_else(|_| allowed_base_dir.to_path_buf());
+    let canonical_base = allowed_base_dir.canonicalize().map_err(|e| {
+        AppError::InvalidConfig(format!(
+            "Failed to canonicalize allowed diagnostic base directory '{}': {}",
+            allowed_base_dir.display(),
+            e
+        ))
+    })?;
 
-    if let Ok(canonical_target) = absolute_target.canonicalize() {
-        if !canonical_target.starts_with(&canonical_base) {
-            return Err(AppError::InvalidConfig(
-                "Diagnostic dump path resolves outside designated directory".to_string(),
-            ));
-        }
-    } else if let Some(parent) = absolute_target.parent() {
-        if let Ok(canonical_parent) = parent.canonicalize() {
-            if !canonical_parent.starts_with(&canonical_base) {
+    let mut existing_ancestor: Option<&Path> = Some(absolute_target.as_path());
+    while let Some(curr) = existing_ancestor {
+        if curr.exists() {
+            let canonical_ancestor = curr.canonicalize().map_err(|e| {
+                AppError::InvalidConfig(format!(
+                    "Failed to canonicalize diagnostic dump path ancestor '{}': {}",
+                    curr.display(),
+                    e
+                ))
+            })?;
+            if !canonical_ancestor.starts_with(&canonical_base) {
                 return Err(AppError::InvalidConfig(
-                    "Diagnostic dump path parent resolves outside designated directory".to_string(),
+                    "Diagnostic dump path resolves outside designated directory".to_string(),
                 ));
             }
+            return Ok(absolute_target);
         }
+        existing_ancestor = curr.parent();
     }
 
-    Ok(absolute_target)
+    Err(AppError::InvalidConfig(
+        "Diagnostic dump path has no existing ancestor within designated directory".to_string(),
+    ))
 }
 
 /// Executes Windows system diagnostics and repair tools (SFC, DISM, TCP/IP Reset).
@@ -322,5 +333,11 @@ mod tests {
 
         let relative_traversal = std::path::Path::new("..\\evil.zip");
         assert!(validate_dump_path(relative_traversal, &temp_dir).is_err());
+
+        let nested_outside = temp_dir
+            .parent()
+            .unwrap()
+            .join("nonexistent_outside_dir/sub/dump.zip");
+        assert!(validate_dump_path(&nested_outside, &temp_dir).is_err());
     }
 }

@@ -62,18 +62,21 @@ pub fn get_optimization_profiles() -> Vec<OptimizationProfile> {
     ]
 }
 
-/// Applies a curated 1-click optimization profile by delegating its rule IDs to the optimization engine.
-pub fn apply_optimization_profile(
+/// Applies a curated 1-click optimization profile by delegating its rule IDs to the optimization engine,
+/// with explicit control over whether a pre-execution restore point is created.
+pub fn apply_optimization_profile_with_options(
     app: Option<&tauri::AppHandle>,
     runner: &dyn CommandRunner,
     profile_id: &str,
     dry_run: bool,
+    create_restore_point: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let clean_id = profile_id.trim().to_lowercase();
     log::info!(
-        "[ProfilesEngine] Applying optimization profile: '{}' (dry_run={})",
+        "[ProfilesEngine] Applying optimization profile: '{}' (dry_run={}, create_restore_point={})",
         clean_id,
-        dry_run || runner.is_dry_run()
+        dry_run || runner.is_dry_run(),
+        create_restore_point
     );
 
     let profiles = get_optimization_profiles();
@@ -93,7 +96,25 @@ pub fn apply_optimization_profile(
         profile.rule_ids
     );
 
-    optimization::execute(app, runner, &profile.rule_ids, false)
+    optimization::execute(app, runner, &profile.rule_ids, create_restore_point)
+}
+
+/// Applies a curated 1-click optimization profile.
+/// Creates a pre-execution restore point when running live (`!dry_run && runner.is_native_enabled()`).
+pub fn apply_optimization_profile(
+    app: Option<&tauri::AppHandle>,
+    runner: &dyn CommandRunner,
+    profile_id: &str,
+    dry_run: bool,
+) -> Result<ExecutionSummary, AppError> {
+    let should_create_restore_point = !dry_run && runner.is_native_enabled();
+    apply_optimization_profile_with_options(
+        app,
+        runner,
+        profile_id,
+        dry_run,
+        should_create_restore_point,
+    )
 }
 
 #[cfg(test)]

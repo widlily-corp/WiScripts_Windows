@@ -67,7 +67,103 @@ impl Default for OdtConfig {
     }
 }
 
-/// Generates valid ODT XML content from configuration.
+/// Escapes special XML attribute characters (`&`, `"`, `'`, `<`, `>`) and strips control characters.
+pub fn escape_xml_attr(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if ch.is_control() {
+            continue;
+        }
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
+}
+
+fn is_valid_odt_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 128
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
+/// Validates all ODT configuration fields against strict allowlists and safe identifier rules.
+pub fn validate_odt_config(config: &OdtConfig) -> Result<(), AppError> {
+    match config.architecture.trim() {
+        "64" | "x64" | "32" | "x86" => {}
+        other => {
+            return Err(AppError::InvalidConfig(format!(
+                "Unsupported ODT architecture '{}'. Must be 64/x64 or 32/x86.",
+                other
+            )));
+        }
+    }
+
+    let channel = config.channel.trim();
+    const ALLOWED_CHANNELS: &[&str] = &[
+        "Current",
+        "CurrentPreview",
+        "MonthlyEnterprise",
+        "SemiAnnual",
+        "SemiAnnualPreview",
+        "BetaChannel",
+        "PerpetualVL2019",
+        "PerpetualVL2021",
+        "PerpetualVL2024",
+    ];
+    if !ALLOWED_CHANNELS
+        .iter()
+        .any(|c| c.eq_ignore_ascii_case(channel))
+    {
+        return Err(AppError::InvalidConfig(format!(
+            "Unsupported ODT update channel '{}'.",
+            config.channel
+        )));
+    }
+
+    let display_level = config.display_level.trim();
+    if !display_level.eq_ignore_ascii_case("None") && !display_level.eq_ignore_ascii_case("Full") {
+        return Err(AppError::InvalidConfig(format!(
+            "Unsupported ODT display level '{}'. Must be 'None' or 'Full'.",
+            config.display_level
+        )));
+    }
+
+    if !is_valid_odt_token(config.language.trim()) {
+        return Err(AppError::InvalidConfig(format!(
+            "Invalid ODT language identifier '{}'.",
+            config.language
+        )));
+    }
+
+    for prod in &config.products {
+        if !is_valid_odt_token(prod.trim()) {
+            return Err(AppError::InvalidConfig(format!(
+                "Invalid ODT product ID '{}'.",
+                prod
+            )));
+        }
+    }
+
+    for app in &config.excluded_apps {
+        if !is_valid_odt_token(app.trim()) {
+            return Err(AppError::InvalidConfig(format!(
+                "Invalid ODT excluded app ID '{}'.",
+                app
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Generates valid ODT XML content from configuration, XML-escaping all attribute values.
 pub fn generate_odt_xml(config: &OdtConfig) -> String {
     log::debug!(
         "[ODTEngine] Generating ODT XML for arch='{}', channel='{}', products={:?}",
@@ -78,7 +174,7 @@ pub fn generate_odt_xml(config: &OdtConfig) -> String {
     let mut xml = String::new();
     xml.push_str("<Configuration>\n");
 
-    let arch = match config.architecture.as_str() {
+    let arch = match config.architecture.trim() {
         "64" | "x64" => "64",
         "32" | "x86" => "32",
         other => other,
@@ -86,7 +182,8 @@ pub fn generate_odt_xml(config: &OdtConfig) -> String {
 
     xml.push_str(&format!(
         "  <Add OfficeClientEdition=\"{}\" Channel=\"{}\">\n",
-        arch, config.channel
+        escape_xml_attr(arch),
+        escape_xml_attr(config.channel.trim())
     ));
 
     let default_products = vec!["O365ProPlusRetail".to_string()];
@@ -96,12 +193,19 @@ pub fn generate_odt_xml(config: &OdtConfig) -> String {
         &config.products
     };
 
+    let lang_attr = escape_xml_attr(config.language.trim());
     for prod in products {
-        xml.push_str(&format!("    <Product ID=\"{}\">\n", prod));
-        xml.push_str(&format!("      <Language ID=\"{}\" />\n", config.language));
+        xml.push_str(&format!(
+            "    <Product ID=\"{}\">\n",
+            escape_xml_attr(prod.trim())
+        ));
+        xml.push_str(&format!("      <Language ID=\"{}\" />\n", lang_attr));
 
         for app in &config.excluded_apps {
-            xml.push_str(&format!("      <ExcludeApp ID=\"{}\" />\n", app));
+            xml.push_str(&format!(
+                "      <ExcludeApp ID=\"{}\" />\n",
+                escape_xml_attr(app.trim())
+            ));
         }
 
         xml.push_str("    </Product>\n");
@@ -116,7 +220,8 @@ pub fn generate_odt_xml(config: &OdtConfig) -> String {
     let accept_eula_str = if config.accept_eula { "TRUE" } else { "FALSE" };
     xml.push_str(&format!(
         "  <Display Level=\"{}\" AcceptEULA=\"{}\" />\n",
-        config.display_level, accept_eula_str
+        escape_xml_attr(config.display_level.trim()),
+        accept_eula_str
     ));
 
     xml.push_str("</Configuration>");
@@ -125,6 +230,7 @@ pub fn generate_odt_xml(config: &OdtConfig) -> String {
 
 /// Legacy / convenience helper returning Result<String, AppError>
 pub fn generate_xml(config: &OdtConfig) -> Result<String, AppError> {
+    validate_odt_config(config)?;
     Ok(generate_odt_xml(config))
 }
 
@@ -144,6 +250,7 @@ pub fn execute_odt_install(
     dry_run: bool,
 ) -> Result<ExecutionSummary, String> {
     let start_time = std::time::Instant::now();
+    validate_odt_config(config).map_err(|e| e.to_string())?;
     log::info!(
         "[ODTEngine] Starting ODT install (setup_path={:?}, dry_run={})",
         setup_path,
@@ -185,12 +292,18 @@ pub fn execute_odt_install(
                 $downloadUrl = $fallbackUrl; \
                 try {{ \
                     $page = Invoke-WebRequest -Uri 'https://www.microsoft.com/en-us/download/details.aspx?id=49117' -UseBasicParsing -TimeoutSec 7 -ErrorAction Stop; \
-                    $link = ($page.Links | Where-Object {{ $_.href -match 'officedeploymenttool.*\\.exe' }} | Select-Object -First 1).href; \
-                    if ($link -and $link.StartsWith('http')) {{ $downloadUrl = $link; }} \
+                    $link = ($page.Links | Where-Object {{ $_.href -match '^https://download\\.microsoft\\.com/.*officedeploymenttool.*\\.exe$' }} | Select-Object -First 1).href; \
+                    if ($link) {{ $downloadUrl = $link; }} \
                 }} catch {{ \
                     $downloadUrl = $fallbackUrl; \
                 }} \
-                Invoke-WebRequest -Uri $downloadUrl -OutFile $odtExe -UseBasicParsing; \
+                Invoke-WebRequest -Uri $downloadUrl -OutFile $odtExe -UseBasicParsing -ErrorAction Stop; \
+                $sig = Get-AuthenticodeSignature -LiteralPath $odtExe; \
+                if ($null -eq $sig -or $sig.Status -ne 'Valid' -or -not ($sig.SignerCertificate -and $sig.SignerCertificate.Subject -match 'Microsoft')) {{ \
+                    Remove-Item -LiteralPath $odtExe -Force -ErrorAction SilentlyContinue; \
+                    Write-Error \"Downloaded ODT installer failed Microsoft Authenticode verification (Status: $($sig.Status))\"; \
+                    exit 1; \
+                }}; \
                 $extractProc = Start-Process -FilePath $odtExe -ArgumentList @(\"/extract:$odtDir\", \"/quiet\") -Wait -PassThru; \
                 if ($extractProc.ExitCode -ne 0) {{ \
                     Write-Error \"Failed to extract Office Deployment Tool. Exit code: $($extractProc.ExitCode)\"; \
@@ -198,6 +311,11 @@ pub fn execute_odt_install(
                 }} \
             }} \
             if (Test-Path -LiteralPath $extractedSetup) {{ \
+                $setupSig = Get-AuthenticodeSignature -LiteralPath $extractedSetup; \
+                if ($null -eq $setupSig -or $setupSig.Status -ne 'Valid' -or -not ($setupSig.SignerCertificate -and $setupSig.SignerCertificate.Subject -match 'Microsoft')) {{ \
+                    Write-Error \"Extracted ODT setup.exe failed Microsoft Authenticode verification (Status: $($setupSig.Status))\"; \
+                    exit 1; \
+                }}; \
                 $setupPath = $extractedSetup; \
             }} \
         }}; \
@@ -595,5 +713,29 @@ mod tests {
         let history = runner.get_history();
         assert_eq!(history.len(), 1);
         assert!(history[0].command.contains("PreventRegionalBlock"));
+    }
+
+    #[test]
+    fn test_odt_xml_escaping_and_validation() {
+        assert_eq!(
+            escape_xml_attr("a\"b'c<d>e&f"),
+            "a&quot;b&apos;c&lt;d&gt;e&amp;f"
+        );
+        let malicious = OdtConfig {
+            architecture: "64".to_string(),
+            channel: "Current\"><EvilTag />".to_string(),
+            products: vec!["Prod\"&<1>".to_string()],
+            excluded_apps: vec!["App'<>".to_string()],
+            language: "en-us\" />".to_string(),
+            display_level: "None".to_string(),
+            remove_existing_office: false,
+            accept_eula: true,
+        };
+        let xml = generate_odt_xml(&malicious);
+        assert!(!xml.contains("<EvilTag"));
+        assert!(xml.contains("&quot;&gt;&lt;EvilTag /&gt;"));
+        assert!(validate_odt_config(&malicious).is_err());
+        assert!(generate_xml(&malicious).is_err());
+        assert!(validate_odt_config(&OdtConfig::default()).is_ok());
     }
 }

@@ -32,6 +32,37 @@ impl std::fmt::Display for ActivationMethod {
     }
 }
 
+pub const MAS_SCRIPT_URL: &str = "https://get.activated.win";
+const ALLOWED_MAS_HOSTS: &[&str] = &["get.activated.win"];
+
+/// Validates that a remote MAS endpoint URL uses strict HTTPS and matches an allowed host.
+pub fn validate_mas_endpoint(url: &str) -> Result<(), AppError> {
+    let trimmed = url.trim();
+    let rest = trimmed.strip_prefix("https://").ok_or_else(|| {
+        AppError::InvalidConfig(format!(
+            "MAS endpoint '{}' must use HTTPS",
+            url
+        ))
+    })?;
+    let host_part = rest.split('/').next().unwrap_or("");
+    if host_part.contains('@') || host_part.contains(':') || host_part.is_empty() {
+        return Err(AppError::InvalidConfig(format!(
+            "MAS endpoint '{}' contains invalid authority/userinfo/port",
+            url
+        )));
+    }
+    if !ALLOWED_MAS_HOSTS
+        .iter()
+        .any(|allowed| host_part.eq_ignore_ascii_case(allowed))
+    {
+        return Err(AppError::InvalidConfig(format!(
+            "MAS endpoint host '{}' is not in the allowed host list",
+            host_part
+        )));
+    }
+    Ok(())
+}
+
 pub fn get_activation_script_command(method: &ActivationMethod) -> String {
     let arg = match method {
         ActivationMethod::Hwid => "/HWID",
@@ -40,8 +71,21 @@ pub fn get_activation_script_command(method: &ActivationMethod) -> String {
         ActivationMethod::TsForge => "/TSforge",
     };
     format!(
-        "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'Stop'; $cmd = Invoke-RestMethod https://get.activated.win; & ([scriptblock]::Create($cmd)) {} -Confirm:$false",
-        arg
+        "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'Stop'; \
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; \
+        $uri = [Uri]'{url}'; \
+        if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'get.activated.win') {{ throw \"Blocked untrusted MAS host: $($uri.OriginalString)\" }}; \
+        try {{ \
+            $cmd = Invoke-RestMethod -Uri $uri.AbsoluteUri -TimeoutSec 20 -ErrorAction Stop; \
+            if ([string]::IsNullOrWhiteSpace($cmd)) {{ throw 'Empty activation script returned by remote endpoint' }}; \
+            & ([scriptblock]::Create($cmd)) {arg} -Confirm:$false; \
+            if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {{ exit $LASTEXITCODE }}; \
+        }} catch {{ \
+            Write-Error \"MAS activation failed: $($_.Exception.Message)\"; \
+            exit 1; \
+        }}",
+        url = MAS_SCRIPT_URL,
+        arg = arg
     )
 }
 
@@ -272,5 +316,13 @@ mod tests {
         assert!(res
             .unwrap_err()
             .contains("Activation execution failed: MAS script fetch failed"));
+    }
+
+    #[test]
+    fn test_validate_mas_endpoint() {
+        assert!(validate_mas_endpoint(MAS_SCRIPT_URL).is_ok());
+        assert!(validate_mas_endpoint("http://get.activated.win").is_err());
+        assert!(validate_mas_endpoint("https://evil.example.com").is_err());
+        assert!(validate_mas_endpoint("https://user@get.activated.win").is_err());
     }
 }

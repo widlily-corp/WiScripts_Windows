@@ -138,14 +138,38 @@ pub struct RestorePoint {
     pub creation_time: String,
 }
 
+/// Resolves the validated Windows system drive root from `%SystemDrive%` (defaults to `C:\`).
+pub fn get_system_drive_root() -> String {
+    let raw = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+    let trimmed = raw.trim().trim_end_matches('\\');
+    if trimmed.len() == 2
+        && trimmed.as_bytes()[0].is_ascii_alphabetic()
+        && trimmed.as_bytes()[1] == b':'
+    {
+        format!("{}\\", trimmed)
+    } else {
+        "C:\\".to_string()
+    }
+}
+
+/// Options controlling optional fallback mutations during restore point creation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RestorePointOptions {
+    pub auto_bypass_frequency_limit: bool,
+    pub auto_enable_restore: bool,
+}
+
 /// Helper to generate the PowerShell registry command to bypass the 24-hour restore point frequency limit.
 pub fn get_frequency_limit_bypass_command() -> String {
     r#"Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" -Name "SystemRestorePointCreationFrequency" -Value 0 -Type DWord -Force"#.to_string()
 }
 
-/// Helper to generate PowerShell command to enable System Restore on C:\ drive.
+/// Helper to generate PowerShell command to enable System Restore on the validated `%SystemDrive%` root.
 pub fn get_enable_restore_command() -> String {
-    r#"Enable-ComputerRestore -Drive "C:\""#.to_string()
+    format!(
+        "Enable-ComputerRestore -Drive \"{}\"",
+        get_system_drive_root()
+    )
 }
 
 /// Refine and parse PowerShell or WinAPI errors into clear, structured error diagnostics.
@@ -169,15 +193,19 @@ pub fn parse_restore_point_error(raw_stderr: &str, exit_code: i32) -> String {
     }
 }
 
-/// Creates a new Windows System Restore Point using native SRSetRestorePointW WinAPI with PowerShell fallback.
-pub fn create_restore_point(
+/// Creates a new Windows System Restore Point using native SRSetRestorePointW WinAPI with PowerShell fallback,
+/// returning `(ExecutedAction, Option<i64>)` with the created sequence number when available.
+pub fn create_restore_point_with_seq(
     runner: &dyn CommandRunner,
     description: &str,
-) -> Result<ExecutedAction, String> {
+    options: RestorePointOptions,
+) -> Result<(ExecutedAction, Option<i64>), String> {
     log::info!(
-        "[SystemRestore] Creating restore point with description: '{}' (dry_run={})",
+        "[SystemRestore] Creating restore point with description: '{}' (dry_run={}, auto_bypass={}, auto_enable={})",
         description,
-        runner.is_dry_run()
+        runner.is_dry_run(),
+        options.auto_bypass_frequency_limit,
+        options.auto_enable_restore
     );
 
     if runner.is_dry_run() {
@@ -187,13 +215,16 @@ pub fn create_restore_point(
             escaped_desc
         );
         let output = runner.run_powershell(&ps_command)?;
-        return Ok(ExecutedAction {
-            id: "create_restore_point".to_string(),
-            name: format!("Create System Restore Point ({})", description),
-            command: ps_command,
-            output,
-            skipped: false,
-        });
+        return Ok((
+            ExecutedAction {
+                id: "create_restore_point".to_string(),
+                name: format!("Create System Restore Point ({})", description),
+                command: ps_command,
+                output,
+                skipped: false,
+            },
+            None,
+        ));
     }
 
     #[cfg(target_os = "windows")]
@@ -205,17 +236,20 @@ pub fn create_restore_point(
                         "[SystemRestore] Native SRSetRestorePointW created restore point (seq #{})",
                         seq
                     );
-                    return Ok(ExecutedAction {
-                        id: "create_restore_point".to_string(),
-                        name: format!("Create System Restore Point ({})", description),
-                        command: format!("WinAPI::SRSetRestorePointW({})", description),
-                        output: crate::runner::CommandOutput {
-                            exit_code: 0,
-                            stdout: format!("Native System Restore Point created (Sequence #{})", seq),
-                            stderr: String::new(),
+                    return Ok((
+                        ExecutedAction {
+                            id: "create_restore_point".to_string(),
+                            name: format!("Create System Restore Point ({})", description),
+                            command: format!("WinAPI::SRSetRestorePointW({})", description),
+                            output: crate::runner::CommandOutput {
+                                exit_code: 0,
+                                stdout: format!("Native System Restore Point created (Sequence #{})", seq),
+                                stderr: String::new(),
+                            },
+                            skipped: false,
                         },
-                        skipped: false,
-                    });
+                        Some(seq),
+                    ));
                 }
                 Err(e) => {
                     log::warn!("[SystemRestore] Native SRSetRestorePointW failed: {}. Falling back to PowerShell Checkpoint-Computer...", e);
@@ -235,12 +269,13 @@ pub fn create_restore_point(
     if output.exit_code != 0 {
         let lower_stderr = output.stderr.to_lowercase();
 
-        // Check if frequency limit error (0x80041001): try bypass registry tweak and retry
-        if lower_stderr.contains("0x80041001")
-            || lower_stderr.contains("24 hours")
-            || lower_stderr.contains("frequency")
+        // Check if frequency limit error (0x80041001): only apply bypass if explicitly opted in
+        if options.auto_bypass_frequency_limit
+            && (lower_stderr.contains("0x80041001")
+                || lower_stderr.contains("24 hours")
+                || lower_stderr.contains("frequency"))
         {
-            log::warn!("[SystemRestore] Frequency limit reached. Attempting registry bypass (SystemRestorePointCreationFrequency = 0)...");
+            log::warn!("[SystemRestore] Frequency limit reached. Opt-in bypass enabled; applying SystemRestorePointCreationFrequency = 0...");
             let bypass_cmd = get_frequency_limit_bypass_command();
             if let Ok(bypass_res) = runner.run_powershell(&bypass_cmd) {
                 if bypass_res.exit_code == 0 {
@@ -248,22 +283,35 @@ pub fn create_restore_point(
                     if let Ok(retry_output) = runner.run_powershell(&ps_command) {
                         if retry_output.exit_code == 0 {
                             log::info!("[SystemRestore] Checkpoint-Computer succeeded after frequency limit bypass");
-                            return Ok(ExecutedAction {
-                                id: "create_restore_point".to_string(),
-                                name: format!("Create System Restore Point ({})", description),
-                                command: ps_command,
-                                output: retry_output,
-                                skipped: false,
-                            });
+                            let seq_opt = if runner.is_native_enabled() {
+                                get_restore_points(runner)
+                                    .ok()
+                                    .and_then(|pts| pts.last().map(|p| p.sequence_number as i64))
+                            } else {
+                                None
+                            };
+                            return Ok((
+                                ExecutedAction {
+                                    id: "create_restore_point".to_string(),
+                                    name: format!("Create System Restore Point ({})", description),
+                                    command: ps_command,
+                                    output: retry_output,
+                                    skipped: false,
+                                },
+                                seq_opt,
+                            ));
                         }
                     }
                 }
             }
         }
 
-        // Check if disabled error (0x80070422): try auto-enabling restore on C:\ and retry
-        if lower_stderr.contains("0x80070422") || lower_stderr.contains("disabled") {
-            log::warn!("[SystemRestore] System Restore is disabled. Attempting auto-enable via Enable-ComputerRestore -Drive \"C:\\\"...");
+        // Check if disabled error (0x80070422): only auto-enable if explicitly opted in
+        if options.auto_enable_restore
+            && (lower_stderr.contains("0x80070422") || lower_stderr.contains("disabled"))
+        {
+            let drive = get_system_drive_root();
+            log::warn!("[SystemRestore] System Restore is disabled. Opt-in auto-enable set; running Enable-ComputerRestore -Drive '{}'...", drive);
             let enable_cmd = get_enable_restore_command();
             if let Ok(enable_res) = runner.run_powershell(&enable_cmd) {
                 if enable_res.exit_code == 0 {
@@ -271,13 +319,23 @@ pub fn create_restore_point(
                     if let Ok(retry_output) = runner.run_powershell(&ps_command) {
                         if retry_output.exit_code == 0 {
                             log::info!("[SystemRestore] Checkpoint-Computer succeeded after auto-enabling System Restore");
-                            return Ok(ExecutedAction {
-                                id: "create_restore_point".to_string(),
-                                name: format!("Create System Restore Point ({})", description),
-                                command: ps_command,
-                                output: retry_output,
-                                skipped: false,
-                            });
+                            let seq_opt = if runner.is_native_enabled() {
+                                get_restore_points(runner)
+                                    .ok()
+                                    .and_then(|pts| pts.last().map(|p| p.sequence_number as i64))
+                            } else {
+                                None
+                            };
+                            return Ok((
+                                ExecutedAction {
+                                    id: "create_restore_point".to_string(),
+                                    name: format!("Create System Restore Point ({})", description),
+                                    command: ps_command,
+                                    output: retry_output,
+                                    skipped: false,
+                                },
+                                seq_opt,
+                            ));
                         }
                     }
                 }
@@ -290,14 +348,33 @@ pub fn create_restore_point(
     }
 
     log::info!("[SystemRestore] Restore point created successfully via PowerShell fallback");
+    let seq_opt = if runner.is_native_enabled() {
+        get_restore_points(runner)
+            .ok()
+            .and_then(|pts| pts.last().map(|p| p.sequence_number as i64))
+    } else {
+        None
+    };
 
-    Ok(ExecutedAction {
-        id: "create_restore_point".to_string(),
-        name: format!("Create System Restore Point ({})", description),
-        command: ps_command,
-        output,
-        skipped: false,
-    })
+    Ok((
+        ExecutedAction {
+            id: "create_restore_point".to_string(),
+            name: format!("Create System Restore Point ({})", description),
+            command: ps_command,
+            output,
+            skipped: false,
+        },
+        seq_opt,
+    ))
+}
+
+/// Creates a new Windows System Restore Point using native SRSetRestorePointW WinAPI with PowerShell fallback.
+pub fn create_restore_point(
+    runner: &dyn CommandRunner,
+    description: &str,
+) -> Result<ExecutedAction, String> {
+    create_restore_point_with_seq(runner, description, RestorePointOptions::default())
+        .map(|(action, _)| action)
 }
 
 /// Queries all existing System Restore Points on the Windows host.

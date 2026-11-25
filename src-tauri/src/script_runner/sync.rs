@@ -3,9 +3,29 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 pub const DEFAULT_MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/widlily-corp/WiScripts_Windows/main/scripts_lib/manifest.json";
+
+fn shared_http_client() -> Result<&'static reqwest::Client, AppError> {
+    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    let res = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .user_agent(concat!("WiScripts-Windows-App/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|e| format!("Failed to build HTTP client: {}", e))
+    });
+    match res {
+        Ok(client) => Ok(client),
+        Err(err) => Err(AppError::Execution(err.clone())),
+    }
+}
+
+fn parse_manifest_json(raw: &str) -> Result<ScriptsLibraryManifest, serde_json::Error> {
+    serde_json::from_str::<ScriptsLibraryManifest>(raw.trim_start_matches('\u{feff}'))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -275,11 +295,12 @@ pub fn seed_cache_from_local_project(cache_dir: &Path) -> Result<Option<ScriptsL
         if manifest_path.exists() {
             let content = fs::read_to_string(&manifest_path)
                 .map_err(|e| AppError::Io(format!("Failed to read local manifest: {}", e)))?;
-            let manifest: ScriptsLibraryManifest = serde_json::from_str(&content)
+            let clean_content = content.trim_start_matches('\u{feff}');
+            let manifest: ScriptsLibraryManifest = parse_manifest_json(clean_content)
                 .map_err(|e| AppError::InvalidConfig(format!("Failed to parse local manifest: {}", e)))?;
 
-            // Copy manifest to cache
-            fs::write(cache_dir.join("manifest.json"), &content)
+            // Copy manifest to cache (without BOM)
+            fs::write(cache_dir.join("manifest.json"), clean_content)
                 .map_err(|e| AppError::Io(format!("Failed to write cached manifest: {}", e)))?;
 
             // Copy scripts
@@ -325,14 +346,14 @@ pub fn seed_cache_from_local_project(cache_dir: &Path) -> Result<Option<ScriptsL
 /// Retrieves the cached scripts library manifest. If cache is empty or corrupt, tries local project seed.
 #[tauri::command]
 pub async fn get_cached_scripts_library() -> Result<ScriptsLibraryManifest, AppError> {
-    let cache_dir = get_scripts_cache_dir()?;
-    let cached_manifest_path = cache_dir.join("manifest.json");
+    let cached_or_seeded = tauri::async_runtime::spawn_blocking(|| -> Result<Option<ScriptsLibraryManifest>, AppError> {
+        let cache_dir = get_scripts_cache_dir()?;
+        let cached_manifest_path = cache_dir.join("manifest.json");
 
-    if cached_manifest_path.exists() {
-        match fs::read_to_string(&cached_manifest_path) {
-            Ok(content) => {
-                match serde_json::from_str::<ScriptsLibraryManifest>(&content) {
-                    Ok(manifest) => return Ok(manifest),
+        if cached_manifest_path.exists() {
+            match fs::read_to_string(&cached_manifest_path) {
+                Ok(content) => match parse_manifest_json(&content) {
+                    Ok(manifest) => return Ok(Some(manifest)),
                     Err(e) => {
                         log::warn!(
                             "[SyncEngine] Cached manifest.json is corrupted: {}. Pruning invalid cache and falling back to seed.",
@@ -344,20 +365,24 @@ pub async fn get_cached_scripts_library() -> Result<ScriptsLibraryManifest, AppE
                             let _ = fs::remove_file(&cached_etag);
                         }
                     }
+                },
+                Err(e) => {
+                    log::warn!(
+                        "[SyncEngine] Failed to read cached manifest: {}. Pruning cache entry.",
+                        e
+                    );
+                    let _ = fs::remove_file(&cached_manifest_path);
                 }
             }
-            Err(e) => {
-                log::warn!(
-                    "[SyncEngine] Failed to read cached manifest: {}. Pruning cache entry.",
-                    e
-                );
-                let _ = fs::remove_file(&cached_manifest_path);
-            }
         }
-    }
 
-    // Try seeding from local project folder
-    if let Some(manifest) = seed_cache_from_local_project(&cache_dir)? {
+        // Try seeding from local project folder
+        seed_cache_from_local_project(&cache_dir)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in get_cached_scripts_library: {}", e)))??;
+
+    if let Some(manifest) = cached_or_seeded {
         return Ok(manifest);
     }
 
@@ -368,226 +393,320 @@ pub async fn get_cached_scripts_library() -> Result<ScriptsLibraryManifest, AppE
 /// Synchronizes the scripts library with GitHub repository, validating ETag and SHA-256 hashes.
 #[tauri::command]
 pub async fn sync_scripts_library(force: bool) -> Result<ScriptsLibraryManifest, AppError> {
-    let cache_dir = get_scripts_cache_dir()?;
-    let cached_manifest_path = cache_dir.join("manifest.json");
-    let cached_etag_path = cache_dir.join("manifest.etag");
-    let scripts_cache_dir = cache_dir.join("scripts");
+    let (cache_dir, cached_manifest_path, cached_etag_path, scripts_cache_dir, existing_etag) =
+        tauri::async_runtime::spawn_blocking(move || -> Result<_, AppError> {
+            let cache_dir = get_scripts_cache_dir()?;
+            let cached_manifest_path = cache_dir.join("manifest.json");
+            let cached_etag_path = cache_dir.join("manifest.etag");
+            let scripts_cache_dir = cache_dir.join("scripts");
 
-    fs::create_dir_all(&scripts_cache_dir)
-        .map_err(|e| AppError::Io(format!("Failed to create scripts cache subfolder: {}", e)))?;
+            fs::create_dir_all(&scripts_cache_dir).map_err(|e| {
+                AppError::Io(format!("Failed to create scripts cache subfolder: {}", e))
+            })?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
-        .user_agent("WiScripts-Windows-App/1.0")
-        .build()
-        .map_err(|e| AppError::Execution(format!("Failed to build HTTP client: {}", e)))?;
+            let etag = if !force && cached_etag_path.exists() && cached_manifest_path.exists() {
+                fs::read_to_string(&cached_etag_path)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            } else {
+                None
+            };
 
+            Ok((
+                cache_dir,
+                cached_manifest_path,
+                cached_etag_path,
+                scripts_cache_dir,
+                etag,
+            ))
+        })
+        .await
+        .map_err(|e| AppError::System(format!("Join error preparing sync_scripts_library: {}", e)))??;
+
+    let client = shared_http_client()?;
     let mut request = client.get(DEFAULT_MANIFEST_URL);
-
-    // Apply ETag header if available and force is false
-    if !force && cached_etag_path.exists() && cached_manifest_path.exists() {
-        if let Ok(etag) = fs::read_to_string(&cached_etag_path) {
-            let trimmed_etag = etag.trim();
-            if !trimmed_etag.is_empty() {
-                request = request.header("If-None-Match", trimmed_etag);
-            }
-        }
+    if let Some(ref etag) = existing_etag {
+        request = request.header("If-None-Match", etag);
     }
 
-    let maybe_manifest = match request.send().await {
+    enum ManifestFetchOutcome {
+        NotModified,
+        Downloaded {
+            manifest: ScriptsLibraryManifest,
+            clean_body: String,
+            etag: Option<String>,
+        },
+        NetworkUnavailable,
+    }
+
+    let fetch_outcome = match request.send().await {
         Ok(response) => {
             if response.status() == reqwest::StatusCode::NOT_MODIFIED {
                 log::info!("[SyncEngine] Remote manifest unchanged (HTTP 304 Not Modified). Reusing cache.");
-                if cached_manifest_path.exists() {
-                    match fs::read_to_string(&cached_manifest_path) {
-                        Ok(content) => match serde_json::from_str::<ScriptsLibraryManifest>(&content) {
-                            Ok(parsed) => Some(parsed),
-                            Err(e) => {
-                                log::warn!(
-                                    "[SyncEngine] Corrupted cached manifest on HTTP 304: {}. Deleting cache and re-syncing.",
-                                    e
-                                );
-                                let _ = fs::remove_file(&cached_manifest_path);
-                                let _ = fs::remove_file(&cached_etag_path);
-                                None
-                            }
-                        },
-                        Err(_) => {
-                            let _ = fs::remove_file(&cached_manifest_path);
-                            let _ = fs::remove_file(&cached_etag_path);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
+                ManifestFetchOutcome::NotModified
             } else if response.status().is_success() {
-                if let Some(etag_header) = response.headers().get("etag") {
-                    if let Ok(etag_str) = etag_header.to_str() {
-                        let _ = fs::write(&cached_etag_path, etag_str.trim());
-                    }
-                }
+                let etag_val = response
+                    .headers()
+                    .get("etag")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.trim().to_string());
                 let body_text = response
                     .text()
                     .await
                     .map_err(|e| AppError::Execution(format!("Failed to read manifest response body: {}", e)))?;
-                let parsed: ScriptsLibraryManifest = serde_json::from_str(&body_text)
+                let clean_body = body_text.trim_start_matches('\u{feff}').to_string();
+                let parsed = parse_manifest_json(&clean_body)
                     .map_err(|e| AppError::InvalidConfig(format!("Failed to parse downloaded manifest: {}", e)))?;
-
-                // Save manifest to cache
-                let _ = fs::write(&cached_manifest_path, &body_text);
-                Some(parsed)
+                ManifestFetchOutcome::Downloaded {
+                    manifest: parsed,
+                    clean_body,
+                    etag: etag_val,
+                }
             } else {
                 log::warn!(
                     "[SyncEngine] HTTP GET manifest returned non-success status: {}",
                     response.status()
                 );
-                None
+                ManifestFetchOutcome::NetworkUnavailable
             }
         }
         Err(err) => {
-            log::warn!("[SyncEngine] Network request to sync manifest failed: {}. Falling back to cache.", err);
-            None
+            log::warn!(
+                "[SyncEngine] Network request to sync manifest failed: {}. Falling back to cache.",
+                err
+            );
+            ManifestFetchOutcome::NetworkUnavailable
         }
     };
 
-    // If network sync succeeded, use parsed manifest. Otherwise fallback to cache or local project seed.
-    let manifest = match maybe_manifest {
-        Some(m) => m,
-        None => {
-            let mut loaded_manifest: Option<ScriptsLibraryManifest> = None;
-            if cached_manifest_path.exists() {
-                if let Ok(content) = fs::read_to_string(&cached_manifest_path) {
-                    if let Ok(parsed) = serde_json::from_str::<ScriptsLibraryManifest>(&content) {
-                        loaded_manifest = Some(parsed);
-                    } else {
-                        log::warn!("[SyncEngine] Pruning invalid cached manifest during fallback.");
-                        let _ = fs::remove_file(&cached_manifest_path);
-                        let _ = fs::remove_file(&cached_etag_path);
+    let (manifest, missing_scripts) = tauri::async_runtime::spawn_blocking({
+        let cache_dir = cache_dir.clone();
+        let cached_manifest_path = cached_manifest_path.clone();
+        let cached_etag_path = cached_etag_path.clone();
+        let scripts_cache_dir = scripts_cache_dir.clone();
+
+        move || -> Result<(ScriptsLibraryManifest, Vec<(String, PathBuf, String, String)>), AppError> {
+            let manifest = match fetch_outcome {
+                ManifestFetchOutcome::Downloaded {
+                    manifest,
+                    clean_body,
+                    etag,
+                } => {
+                    if let Some(etag_str) = etag {
+                        let _ = fs::write(&cached_etag_path, etag_str);
                     }
+                    let _ = fs::write(&cached_manifest_path, &clean_body);
+                    manifest
                 }
-            }
-
-            if let Some(m) = loaded_manifest {
-                m
-            } else if let Some(local_manifest) = seed_cache_from_local_project(&cache_dir)? {
-                local_manifest
-            } else {
-                return Err(AppError::Execution(
-                    "Cannot sync script library: network is unreachable and no valid offline cache is available."
-                        .to_string(),
-                ));
-            }
-        }
-    };
-
-    // Sync individual scripts: verify hashes and download/copy missing or modified ones
-    let local_project_dir = get_local_project_scripts_dir();
-
-    for script in &manifest.scripts {
-        let rel_path = match sanitize_script_relative_path(&script.path) {
-            Ok(p) => p,
-            Err(e) => {
-                log::error!(
-                    "[SyncEngine] Refusing to sync script '{}': invalid/malicious path '{}': {}",
-                    script.id, script.path, e
-                );
-                continue;
-            }
-        };
-
-        let cached_script_path = scripts_cache_dir.join(&rel_path);
-        let mut needs_download = true;
-
-        if cached_script_path.exists() {
-            if let Ok(bytes) = fs::read(&cached_script_path) {
-                if verify_script_hash(&bytes, &script.sha256) {
-                    needs_download = false;
-                } else {
-                    log::warn!(
-                        "[SyncEngine] Script '{}' hash mismatch in cache. Re-fetching.",
-                        script.id
-                    );
-                    let _ = fs::remove_file(&cached_script_path);
-                }
-            }
-        }
-
-        if needs_download {
-            let mut script_bytes: Option<Vec<u8>> = None;
-
-            // 1. Try local project directory first (fast & offline)
-            if let Some(ref local_dir) = local_project_dir {
-                let local_path = local_dir.join(&rel_path);
-                if local_path.exists() {
-                    if let Ok(bytes) = fs::read(&local_path) {
-                        if verify_script_hash(&bytes, &script.sha256) {
-                            script_bytes = Some(bytes);
-                        }
-                    }
-                }
-            }
-
-            // 2. Download from GitHub raw url if not found locally
-            if script_bytes.is_none() {
-                let forward_slash_path = rel_path
-                    .components()
-                    .map(|c| c.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/");
-                let script_url = format!(
-                    "{}/{}",
-                    manifest.raw_base_url.trim_end_matches('/'),
-                    forward_slash_path
-                );
-                match client.get(&script_url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        if let Ok(bytes) = resp.bytes().await {
-                            if verify_script_hash(&bytes, &script.sha256) {
-                                script_bytes = Some(bytes.to_vec());
-                            } else {
-                                let hash = compute_sha256(&bytes);
-                                log::error!(
-                                    "[SyncEngine] Downloaded script '{}' failed SHA-256 verification (got {}, expected {})",
-                                    script.id,
-                                    hash,
-                                    script.sha256
-                                );
+                ManifestFetchOutcome::NotModified => {
+                    let mut loaded: Option<ScriptsLibraryManifest> = None;
+                    if cached_manifest_path.exists() {
+                        match fs::read_to_string(&cached_manifest_path) {
+                            Ok(content) => match parse_manifest_json(&content) {
+                                Ok(parsed) => loaded = Some(parsed),
+                                Err(e) => {
+                                    log::warn!(
+                                        "[SyncEngine] Corrupted cached manifest on HTTP 304: {}. Deleting cache.",
+                                        e
+                                    );
+                                    let _ = fs::remove_file(&cached_manifest_path);
+                                    let _ = fs::remove_file(&cached_etag_path);
+                                }
+                            },
+                            Err(_) => {
+                                let _ = fs::remove_file(&cached_manifest_path);
+                                let _ = fs::remove_file(&cached_etag_path);
                             }
                         }
                     }
-                    Ok(resp) => {
-                        log::warn!(
-                            "[SyncEngine] Failed to download script '{}': HTTP {}",
-                            script.id,
-                            resp.status()
-                        );
+                    if let Some(m) = loaded {
+                        m
+                    } else if let Some(local_manifest) = seed_cache_from_local_project(&cache_dir)? {
+                        local_manifest
+                    } else {
+                        return Err(AppError::Execution(
+                            "Cached manifest is unavailable after HTTP 304.".to_string(),
+                        ));
                     }
-                    Err(err) => {
-                        log::warn!(
-                            "[SyncEngine] Network error downloading script '{}': {}",
-                            script.id,
-                            err
+                }
+                ManifestFetchOutcome::NetworkUnavailable => {
+                    let mut loaded_manifest: Option<ScriptsLibraryManifest> = None;
+                    if cached_manifest_path.exists() {
+                        if let Ok(content) = fs::read_to_string(&cached_manifest_path) {
+                            if let Ok(parsed) = parse_manifest_json(&content) {
+                                loaded_manifest = Some(parsed);
+                            } else {
+                                log::warn!("[SyncEngine] Pruning invalid cached manifest during fallback.");
+                                let _ = fs::remove_file(&cached_manifest_path);
+                                let _ = fs::remove_file(&cached_etag_path);
+                            }
+                        }
+                    }
+                    if let Some(m) = loaded_manifest {
+                        m
+                    } else if let Some(local_manifest) = seed_cache_from_local_project(&cache_dir)? {
+                        local_manifest
+                    } else {
+                        return Err(AppError::Execution(
+                            "Cannot sync script library: network is unreachable and no valid offline cache is available."
+                                .to_string(),
+                        ));
+                    }
+                }
+            };
+
+            let local_project_dir = get_local_project_scripts_dir();
+            let mut to_download: Vec<(String, PathBuf, String, String)> = Vec::new();
+
+            for script in &manifest.scripts {
+                let rel_path = match sanitize_script_relative_path(&script.path) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::error!(
+                            "[SyncEngine] Refusing to sync script '{}': invalid/malicious path '{}': {}",
+                            script.id, script.path, e
                         );
+                        continue;
+                    }
+                };
+
+                let cached_script_path = scripts_cache_dir.join(&rel_path);
+                let mut needs_download = true;
+
+                if cached_script_path.exists() {
+                    if let Ok(bytes) = fs::read(&cached_script_path) {
+                        if verify_script_hash(&bytes, &script.sha256) {
+                            needs_download = false;
+                        } else {
+                            log::warn!(
+                                "[SyncEngine] Script '{}' hash mismatch in cache. Re-fetching.",
+                                script.id
+                            );
+                            let _ = fs::remove_file(&cached_script_path);
+                        }
+                    }
+                }
+
+                if needs_download {
+                    let mut copied_local = false;
+                    if let Some(ref local_dir) = local_project_dir {
+                        let local_path = local_dir.join(&rel_path);
+                        if local_path.exists() {
+                            if let Ok(bytes) = fs::read(&local_path) {
+                                if verify_script_hash(&bytes, &script.sha256) {
+                                    if let Some(parent) = cached_script_path.parent() {
+                                        let _ = fs::create_dir_all(parent);
+                                    }
+                                    if fs::write(&cached_script_path, &bytes).is_ok() {
+                                        copied_local = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if !copied_local {
+                        let forward_slash_path = rel_path
+                            .components()
+                            .map(|c| c.as_os_str().to_string_lossy())
+                            .collect::<Vec<_>>()
+                            .join("/");
+                        let script_url = format!(
+                            "{}/{}",
+                            manifest.raw_base_url.trim_end_matches('/'),
+                            forward_slash_path
+                        );
+                        to_download.push((
+                            script.id.clone(),
+                            cached_script_path,
+                            script_url,
+                            script.sha256.clone(),
+                        ));
                     }
                 }
             }
 
-            // 3. Write verified script to cache
-            if let Some(bytes) = script_bytes {
-                if let Some(parent) = cached_script_path.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                if let Err(e) = fs::write(&cached_script_path, &bytes) {
-                    log::error!(
-                        "[SyncEngine] Failed to write cached script '{}': {}",
-                        script.id,
-                        e
-                    );
-                } else {
-                    log::info!("[SyncEngine] Cached verified script: {}", script.id);
+            Ok((manifest, to_download))
+        }
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in sync_scripts_library: {}", e)))??;
+
+    // Concurrent bounded script downloads
+    if !missing_scripts.is_empty() {
+        let mut verified_downloads: Vec<(String, PathBuf, Vec<u8>)> = Vec::new();
+        for chunk in missing_scripts.chunks(8) {
+            let mut handles = Vec::with_capacity(chunk.len());
+            for (script_id, dest_path, script_url, expected_sha256) in chunk.iter().cloned() {
+                let client_ref = client.clone();
+                handles.push(tauri::async_runtime::spawn(async move {
+                    match client_ref.get(&script_url).send().await {
+                        Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                            Ok(bytes) => {
+                                if verify_script_hash(&bytes, &expected_sha256) {
+                                    Some((script_id, dest_path, bytes.to_vec()))
+                                } else {
+                                    let hash = compute_sha256(&bytes);
+                                    log::error!(
+                                        "[SyncEngine] Downloaded script '{}' failed SHA-256 verification (got {}, expected {})",
+                                        script_id, hash, expected_sha256
+                                    );
+                                    None
+                                }
+                            }
+                            Err(err) => {
+                                log::warn!(
+                                    "[SyncEngine] Failed to read bytes for script '{}': {}",
+                                    script_id, err
+                                );
+                                None
+                            }
+                        },
+                        Ok(resp) => {
+                            log::warn!(
+                                "[SyncEngine] Failed to download script '{}': HTTP {}",
+                                script_id,
+                                resp.status()
+                            );
+                            None
+                        }
+                        Err(err) => {
+                            log::warn!(
+                                "[SyncEngine] Network error downloading script '{}': {}",
+                                script_id, err
+                            );
+                            None
+                        }
+                    }
+                }));
+            }
+
+            for handle in handles {
+                if let Ok(Some(item)) = handle.await {
+                    verified_downloads.push(item);
                 }
             }
+        }
+
+        if !verified_downloads.is_empty() {
+            tauri::async_runtime::spawn_blocking(move || {
+                for (script_id, cached_script_path, bytes) in verified_downloads {
+                    if let Some(parent) = cached_script_path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    if let Err(e) = fs::write(&cached_script_path, &bytes) {
+                        log::error!(
+                            "[SyncEngine] Failed to write cached script '{}': {}",
+                            script_id, e
+                        );
+                    } else {
+                        log::info!("[SyncEngine] Cached verified script: {}", script_id);
+                    }
+                }
+            })
+            .await
+            .map_err(|e| AppError::System(format!("Join error writing synced scripts: {}", e)))?;
         }
     }
 
@@ -604,68 +723,91 @@ pub async fn read_library_script(script_id: String) -> Result<String, AppError> 
         .find(|s| s.id == script_id)
         .ok_or_else(|| {
             AppError::InvalidConfig(format!("Script with id '{}' not found in library manifest", script_id))
-        })?;
+        })?
+        .clone();
 
     let rel_path = sanitize_script_relative_path(&entry.path)?;
-    let cache_dir = get_scripts_cache_dir()?;
-    let cached_path = cache_dir.join("scripts").join(&rel_path);
 
-    if cached_path.exists() {
-        if let Ok(bytes) = fs::read(&cached_path) {
+    let cached_or_local = tauri::async_runtime::spawn_blocking({
+        let rel_path = rel_path.clone();
+        let entry = entry.clone();
+        let script_id = script_id.clone();
+        move || -> Result<(Option<String>, PathBuf), AppError> {
+            let cache_dir = get_scripts_cache_dir()?;
+            let cached_path = cache_dir.join("scripts").join(&rel_path);
+
+            if cached_path.exists() {
+                if let Ok(bytes) = fs::read(&cached_path) {
+                    if verify_script_hash(&bytes, &entry.sha256) {
+                        let text = String::from_utf8(bytes)
+                            .map(|s| s.trim_start_matches('\u{feff}').to_string())
+                            .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)))?;
+                        return Ok((Some(text), cached_path));
+                    } else {
+                        log::warn!(
+                            "[SyncEngine] Cached script '{}' hash mismatch. Pruning stale cache and re-syncing.",
+                            script_id
+                        );
+                        let _ = fs::remove_file(&cached_path);
+                    }
+                }
+            }
+
+            if let Some(local_dir) = get_local_project_scripts_dir() {
+                let local_script_path = local_dir.join(&rel_path);
+                if local_script_path.exists() {
+                    if let Ok(bytes) = fs::read(&local_script_path) {
+                        if verify_script_hash(&bytes, &entry.sha256) {
+                            if let Some(parent) = cached_path.parent() {
+                                let _ = fs::create_dir_all(parent);
+                            }
+                            let _ = fs::write(&cached_path, &bytes);
+                            let text = String::from_utf8(bytes)
+                                .map(|s| s.trim_start_matches('\u{feff}').to_string())
+                                .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)))?;
+                            return Ok((Some(text), cached_path));
+                        }
+                    }
+                }
+            }
+
+            Ok((None, cached_path))
+        }
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in read_library_script: {}", e)))??;
+
+    if let (Some(content), _) = cached_or_local {
+        return Ok(content);
+    }
+
+    let cached_path = cached_or_local.1;
+    // Force sync and retry
+    let _ = sync_scripts_library(true).await?;
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<String, AppError> {
+        if cached_path.exists() {
+            let bytes = fs::read(&cached_path)
+                .map_err(|e| AppError::Io(format!("Failed to read cached script file after sync: {}", e)))?;
             if verify_script_hash(&bytes, &entry.sha256) {
                 return String::from_utf8(bytes)
                     .map(|s| s.trim_start_matches('\u{feff}').to_string())
                     .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
-            } else {
-                log::warn!(
-                    "[SyncEngine] Cached script '{}' hash mismatch. Pruning stale cache and re-syncing.",
-                    script_id
-                );
-                let _ = fs::remove_file(&cached_path);
             }
+            let hash = compute_sha256(&bytes);
+            return Err(AppError::Execution(format!(
+                "SHA-256 integrity verification failed for script '{}' (expected {}, got {})",
+                script_id, entry.sha256, hash
+            )));
         }
-    }
 
-    // If not in cache or corrupt, check local project folder
-    if let Some(local_dir) = get_local_project_scripts_dir() {
-        let local_script_path = local_dir.join(&rel_path);
-        if local_script_path.exists() {
-            if let Ok(bytes) = fs::read(&local_script_path) {
-                if verify_script_hash(&bytes, &entry.sha256) {
-                    // Cache it
-                    if let Some(parent) = cached_path.parent() {
-                        let _ = fs::create_dir_all(parent);
-                    }
-                    let _ = fs::write(&cached_path, &bytes);
-                    return String::from_utf8(bytes)
-                        .map(|s| s.trim_start_matches('\u{feff}').to_string())
-                        .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
-                }
-            }
-        }
-    }
-
-    // Force sync and retry
-    let _ = sync_scripts_library(true).await?;
-    if cached_path.exists() {
-        let bytes = fs::read(&cached_path)
-            .map_err(|e| AppError::Io(format!("Failed to read cached script file after sync: {}", e)))?;
-        if verify_script_hash(&bytes, &entry.sha256) {
-            return String::from_utf8(bytes)
-                .map(|s| s.trim_start_matches('\u{feff}').to_string())
-                .map_err(|e| AppError::Execution(format!("Script file contains invalid UTF-8: {}", e)));
-        }
-        let hash = compute_sha256(&bytes);
-        return Err(AppError::Execution(format!(
-            "SHA-256 integrity verification failed for script '{}' (expected {}, got {})",
-            script_id, entry.sha256, hash
-        )));
-    }
-
-    Err(AppError::Io(format!(
-        "Script '{}' is unavailable offline and could not be fetched.",
-        script_id
-    )))
+        Err(AppError::Io(format!(
+            "Script '{}' is unavailable offline and could not be fetched.",
+            script_id
+        )))
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error reading synced script: {}", e)))?
 }
 
 #[cfg(test)]

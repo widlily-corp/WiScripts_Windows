@@ -145,11 +145,70 @@ pub fn create_snapshot(
     Ok(snapshot)
 }
 
+/// Validates that `snapshot_id` matches `^[A-Za-z0-9_-]+$` and cannot escape the snapshots directory.
+pub fn validate_snapshot_id(snapshot_id: &str) -> Result<&str, String> {
+    let clean_id = snapshot_id.trim();
+    if clean_id.is_empty() || clean_id.len() > 128 {
+        return Err(format!(
+            "Invalid snapshot ID '{}': must be 1..=128 characters",
+            snapshot_id
+        ));
+    }
+    if !clean_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(format!(
+            "Invalid snapshot ID '{}': only alphanumeric, '_' and '-' are permitted",
+            snapshot_id
+        ));
+    }
+    Ok(clean_id)
+}
+
+/// Resolves a validated snapshot file path inside `snapshots_dir`, verifying canonical containment.
+fn resolve_snapshot_path_in_dir(snapshots_dir: &std::path::Path, snapshot_id: &str) -> Result<PathBuf, String> {
+    let clean_id = validate_snapshot_id(snapshot_id)?;
+    let file_path = snapshots_dir.join(format!("{}.json", clean_id));
+
+    if snapshots_dir.exists() {
+        let canon_dir = snapshots_dir
+            .canonicalize()
+            .map_err(|e| format!("Failed to canonicalize snapshots dir: {}", e))?;
+        if file_path.exists() {
+            let canon_file = file_path
+                .canonicalize()
+                .map_err(|e| format!("Failed to canonicalize snapshot file: {}", e))?;
+            if !canon_file.starts_with(&canon_dir) {
+                return Err(format!(
+                    "Snapshot path '{}' escapes snapshots directory",
+                    clean_id
+                ));
+            }
+            return Ok(canon_file);
+        } else if let Some(parent) = file_path.parent() {
+            if parent.exists() {
+                let canon_parent = parent
+                    .canonicalize()
+                    .map_err(|e| format!("Failed to canonicalize snapshot parent: {}", e))?;
+                if !canon_parent.starts_with(&canon_dir) {
+                    return Err(format!(
+                        "Snapshot parent for '{}' escapes snapshots directory",
+                        clean_id
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(file_path)
+}
+
 fn save_snapshot_to_disk(snapshot: &SystemSnapshot) -> Result<(), String> {
     let dir = get_snapshots_dir();
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create snapshots dir: {}", e))?;
 
-    let file_path = dir.join(format!("{}.json", snapshot.id));
+    let file_path = resolve_snapshot_path_in_dir(&dir, &snapshot.id)?;
     let json_data = serde_json::to_string_pretty(snapshot)
         .map_err(|e| format!("Failed to serialize snapshot: {}", e))?;
 
@@ -185,7 +244,7 @@ pub fn list_snapshots() -> Result<Vec<SystemSnapshot>, String> {
 
 pub fn delete_snapshot(snapshot_id: &str) -> Result<bool, String> {
     let dir = get_snapshots_dir();
-    let file_path = dir.join(format!("{}.json", snapshot_id));
+    let file_path = resolve_snapshot_path_in_dir(&dir, snapshot_id)?;
 
     if file_path.exists() {
         fs::remove_file(&file_path)
@@ -198,7 +257,7 @@ pub fn delete_snapshot(snapshot_id: &str) -> Result<bool, String> {
 
 pub fn rollback_snapshot(snapshot_id: &str) -> Result<RollbackResult, String> {
     let dir = get_snapshots_dir();
-    let file_path = dir.join(format!("{}.json", snapshot_id));
+    let file_path = resolve_snapshot_path_in_dir(&dir, snapshot_id)?;
 
     if !file_path.exists() {
         return Err(format!("Snapshot ID '{}' not found", snapshot_id));
@@ -369,26 +428,28 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
         Win32::System::Services::*,
     };
 
-    let mut deltas = Vec::new();
+    let mut deltas = Vec::with_capacity(TARGET_SERVICES.len());
 
-    for &service_name in TARGET_SERVICES {
-        let name_u16: Vec<u16> = service_name
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-
-        unsafe {
-            let scm_handle = match OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) {
-                Ok(h) => h,
-                Err(_) => {
+    unsafe {
+        let scm_handle = match OpenSCManagerW(PCWSTR::null(), PCWSTR::null(), SC_MANAGER_CONNECT) {
+            Ok(h) => h,
+            Err(_) => {
+                for &service_name in TARGET_SERVICES {
                     deltas.push(ServiceBackup {
                         service_name: service_name.to_string(),
                         previous_startup_type: "Manual".to_string(),
                         previous_status: "Stopped".to_string(),
                     });
-                    continue;
                 }
-            };
+                return deltas;
+            }
+        };
+
+        for &service_name in TARGET_SERVICES {
+            let name_u16: Vec<u16> = service_name
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
 
             let svc_handle = match OpenServiceW(
                 scm_handle,
@@ -397,7 +458,6 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
             ) {
                 Ok(h) => h,
                 Err(_) => {
-                    let _ = CloseServiceHandle(scm_handle);
                     deltas.push(ServiceBackup {
                         service_name: service_name.to_string(),
                         previous_startup_type: "Disabled".to_string(),
@@ -457,7 +517,6 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
             };
 
             let _ = CloseServiceHandle(svc_handle);
-            let _ = CloseServiceHandle(scm_handle);
 
             deltas.push(ServiceBackup {
                 service_name: service_name.to_string(),
@@ -465,6 +524,8 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
                 previous_status: status_str,
             });
         }
+
+        let _ = CloseServiceHandle(scm_handle);
     }
 
     deltas
@@ -480,6 +541,130 @@ fn capture_service_deltas() -> Vec<ServiceBackup> {
             previous_status: "Stopped".to_string(),
         })
         .collect()
+}
+
+#[cfg(windows)]
+fn set_multi_string(key_path: &str, value_name: &str, data: &str) -> Result<(), String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, KEY_ALL_ACCESS, REG_MULTI_SZ,
+        REG_OPTION_NON_VOLATILE,
+    };
+
+    let (hkey, subpath) = crate::winapi::registry::parse_hive_and_subpath(key_path)?;
+    let clean_val_name = crate::winapi::registry::sanitize_registry_input(value_name)?;
+    let subpath_u16: Vec<u16> = subpath.encode_utf16().chain(std::iter::once(0)).collect();
+    let val_u16: Vec<u16> = clean_val_name.encode_utf16().chain(std::iter::once(0)).collect();
+
+    let mut multi_u16: Vec<u16> = Vec::new();
+    for line in data.split('\n').filter(|s| !s.is_empty()) {
+        if line.contains('\0') || line.contains('\r') {
+            return Err("REG_MULTI_SZ entry contains forbidden control characters".to_string());
+        }
+        multi_u16.extend(line.encode_utf16());
+        multi_u16.push(0);
+    }
+    if multi_u16.is_empty() {
+        multi_u16.push(0);
+    }
+    multi_u16.push(0);
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let status = RegCreateKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS,
+            None,
+            &mut key_handle,
+            None,
+        );
+        if status.is_err() {
+            return Err(format!("RegCreateKeyExW failed for '{}': {:?}", key_path, status));
+        }
+
+        let bytes = std::slice::from_raw_parts(
+            multi_u16.as_ptr() as *const u8,
+            multi_u16.len() * std::mem::size_of::<u16>(),
+        );
+        let set_res = RegSetValueExW(
+            key_handle,
+            PCWSTR(val_u16.as_ptr()),
+            0,
+            REG_MULTI_SZ,
+            Some(bytes),
+        );
+        let _ = RegCloseKey(key_handle);
+
+        if set_res.is_err() {
+            return Err(format!(
+                "RegSetValueExW failed for '{}'\\'{}' (MULTI_SZ): {:?}",
+                key_path, value_name, set_res
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn set_multi_string(_key_path: &str, _value_name: &str, _data: &str) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn delete_registry_value_if_exists(key_path: &str, value_name: &str) -> Result<(), String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND};
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegDeleteValueW, RegOpenKeyExW, HKEY, KEY_SET_VALUE,
+    };
+
+    let (hkey, subpath) = crate::winapi::registry::parse_hive_and_subpath(key_path)?;
+    let clean_val_name = crate::winapi::registry::sanitize_registry_input(value_name)?;
+    let subpath_u16: Vec<u16> = subpath.encode_utf16().chain(std::iter::once(0)).collect();
+    let val_u16: Vec<u16> = clean_val_name.encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        let mut key_handle = HKEY::default();
+        let open_res = RegOpenKeyExW(
+            hkey,
+            PCWSTR(subpath_u16.as_ptr()),
+            0,
+            KEY_SET_VALUE,
+            &mut key_handle,
+        );
+
+        if open_res.is_err() {
+            if open_res == ERROR_FILE_NOT_FOUND || open_res == ERROR_PATH_NOT_FOUND {
+                return Ok(());
+            }
+            return Err(format!(
+                "RegOpenKeyExW failed for '{}': {:?}",
+                key_path, open_res
+            ));
+        }
+
+        let del_res = RegDeleteValueW(key_handle, PCWSTR(val_u16.as_ptr()));
+        let _ = RegCloseKey(key_handle);
+
+        if del_res.is_err() && del_res != ERROR_FILE_NOT_FOUND {
+            return Err(format!(
+                "RegDeleteValueW failed for '{}'\\'{}': {:?}",
+                key_path, value_name, del_res
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn delete_registry_value_if_exists(_key_path: &str, _value_name: &str) -> Result<(), String> {
+    Ok(())
 }
 
 fn restore_registry_entry(backup: &RegistryValueBackup) -> Result<(), String> {
@@ -499,16 +684,10 @@ fn restore_registry_entry(backup: &RegistryValueBackup) -> Result<(), String> {
                     .map_err(|e| format!("Invalid binary hex string '{}': {}", data, e))?;
                 crate::winapi::registry::set_binary(&backup.key_path, &backup.value_name, &bytes)
             }
-            "REG_MULTI_SZ" => {
-                crate::winapi::registry::set_string(&backup.key_path, &backup.value_name, data)
-            }
+            "REG_MULTI_SZ" => set_multi_string(&backup.key_path, &backup.value_name, data),
             _ => crate::winapi::registry::set_string(&backup.key_path, &backup.value_name, data),
         },
-        None => {
-            // Delete value if it exists (previous_data was None)
-            let _ = crate::winapi::registry::delete_value(&backup.key_path, &backup.value_name);
-            Ok(())
-        }
+        None => delete_registry_value_if_exists(&backup.key_path, &backup.value_name),
     }
 }
 
@@ -705,5 +884,29 @@ mod tests {
         let list_after = list_snapshots().unwrap();
         assert!(!list_after.iter().any(|s| s.id == snap1.id));
         assert!(!list_after.iter().any(|s| s.id == snap2.id));
+    }
+
+    #[test]
+    fn test_snapshot_id_path_traversal_rejected() {
+        for bad_id in &[
+            "",
+            "   ",
+            "../evil",
+            "..\\evil",
+            "snap/../../etc",
+            "snap\\sub",
+            "snap.json",
+            "snap:stream",
+            "snap\0id",
+        ] {
+            assert!(
+                validate_snapshot_id(bad_id).is_err(),
+                "Expected bad snapshot_id '{}' to be rejected",
+                bad_id
+            );
+            assert!(delete_snapshot(bad_id).is_err());
+            assert!(rollback_snapshot(bad_id).is_err());
+        }
+        assert!(validate_snapshot_id("snap_1700000000-abc123").is_ok());
     }
 }

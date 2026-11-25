@@ -46,42 +46,61 @@ pub fn get_scheduled_tasks(runner: &dyn CommandRunner) -> Result<Vec<ScheduledTa
     #[cfg(target_os = "windows")]
     {
         let script = r#"
-$tasks = Get-ScheduledTask -ErrorAction SilentlyContinue | Select-Object -First 80 | ForEach-Object {
-    $info = Get-ScheduledTaskInfo -TaskName $_.TaskName -TaskPath $_.TaskPath -ErrorAction SilentlyContinue
-    $execAction = ($_.Actions | ForEach-Object {
-        if ($_.Execute) {
-            if ($_.Arguments) { "$($_.Execute) $($_.Arguments)" } else { $_.Execute }
-        } elseif ($_.ClassId) {
-            "COM Handler: $($_.ClassId)"
-        }
-    } -ErrorAction SilentlyContinue) -join "; "
-    if ([string]::IsNullOrWhiteSpace($execAction)) {
-        $execAction = "System Task Action"
-    }
-    $stateStr = $_.State.ToString()
-    $trigStr = if ($_.Triggers) {
-        (($_.Triggers | ForEach-Object { $_.GetType().Name }) -join ", ") -replace "Trigger", ""
-    } else {
-        "Manual / Event"
-    }
+$sched = New-Object -ComObject Schedule.Service
+$sched.Connect()
+$stateNames = @{ 0 = "Unknown"; 1 = "Disabled"; 2 = "Queued"; 3 = "Ready"; 4 = "Running" }
+$results = [System.Collections.Generic.List[object]]::new()
 
-    [PSCustomObject]@{
-        taskName = $_.TaskName
-        taskPath = $_.TaskPath
-        state = $stateStr
-        enabled = ($stateStr -ne "Disabled")
-        triggerType = if ($trigStr) { $trigStr } else { "Event" }
-        author = if ($_.Author) { $_.Author } else { "Microsoft Corporation" }
-        lastRunTime = if ($info -and $info.LastRunTime -and $info.LastRunTime.Year -gt 2000) { $info.LastRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
-        nextRunTime = if ($info -and $info.NextRunTime -and $info.NextRunTime.Year -gt 2000) { $info.NextRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
-        actionSummary = $execAction
+function Collect-Tasks($folder) {
+    foreach ($t in $folder.GetTasks(1)) {
+        $def = $t.Definition
+        $execAction = ($def.Actions | ForEach-Object {
+            if ($_.Path) {
+                if ($_.Arguments) { "$($_.Path) $($_.Arguments)" } else { $_.Path }
+            } elseif ($_.ClassId) {
+                "COM Handler: $($_.ClassId)"
+            }
+        }) -join "; "
+        if ([string]::IsNullOrWhiteSpace($execAction)) {
+            $execAction = "System Task Action"
+        }
+
+        $stateStr = if ($stateNames.ContainsKey([int]$t.State)) { $stateNames[[int]$t.State] } else { "Unknown" }
+        $trigStr = if ($def.Triggers -and $def.Triggers.Count -gt 0) {
+            ($def.Triggers | ForEach-Object { $_.Type.ToString() }) -join ", "
+        } else {
+            "Manual / Event"
+        }
+
+        $taskFolder = $folder.Path
+        if (-not $taskFolder.EndsWith("\")) { $taskFolder += "\" }
+
+        $author = if ($def.RegistrationInfo.Author) { $def.RegistrationInfo.Author } else { "Microsoft Corporation" }
+        $lastRun = if ($t.LastRunTime -and $t.LastRunTime.Year -gt 2000) { $t.LastRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
+        $nextRun = if ($t.NextRunTime -and $t.NextRunTime.Year -gt 2000) { $t.NextRunTime.ToString("yyyy-MM-dd HH:mm:ss") } else { $null }
+
+        $results.Add([PSCustomObject]@{
+            taskName = $t.Name
+            taskPath = $taskFolder
+            state = $stateStr
+            enabled = ($t.Enabled -and $stateStr -ne "Disabled")
+            triggerType = if ($trigStr) { $trigStr } else { "Event" }
+            author = $author
+            lastRunTime = $lastRun
+            nextRunTime = $nextRun
+            actionSummary = $execAction
+        })
+    }
+    foreach ($sub in $folder.GetFolders(0)) {
+        Collect-Tasks $sub
     }
 }
 
-if ($null -eq $tasks -or @($tasks).Count -eq 0) {
+Collect-Tasks $sched.GetFolder("\")
+if ($results.Count -eq 0) {
     "[]"
 } else {
-    $tasks | ConvertTo-Json -Compress
+    $results | ConvertTo-Json -Compress
 }
 "#;
         let output = runner.run_powershell(script).map_err(AppError::Execution)?;
@@ -187,7 +206,7 @@ Write-Output "SUCCESS: Toggled $name enabled={enable}"
             || combined_output.contains("0x80070005")
             || combined_output.contains("UnauthorizedAccessException");
 
-        if output.exit_code != 0 || is_permission_denied || !output.stderr.trim().is_empty() {
+        if output.exit_code != 0 || is_permission_denied {
             let err_msg = if is_permission_denied {
                 format!(
                     "Failed to toggle scheduled task '{}': Access is denied. Administrator elevation is required.",
@@ -287,7 +306,7 @@ Write-Output "SUCCESS: Started task $name"
             || combined_output.contains("0x80070005")
             || combined_output.contains("UnauthorizedAccessException");
 
-        if output.exit_code != 0 || is_permission_denied || !output.stderr.trim().is_empty() {
+        if output.exit_code != 0 || is_permission_denied {
             let err_msg = if is_permission_denied {
                 format!(
                     "Failed to run scheduled task '{}': Access is denied. Administrator elevation is required.",

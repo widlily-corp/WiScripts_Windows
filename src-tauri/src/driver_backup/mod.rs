@@ -1,7 +1,60 @@
 use crate::error::AppError;
+use crate::odt::escape_powershell_literal;
 use crate::optimization::TaskProgressPayload;
 use crate::runner::{CommandRunner, ExecutedAction, ExecutionSummary};
+use std::path::{Component, Path};
 use tauri::Emitter;
+
+/// Validates and normalizes the target directory for driver backups, rejecting injection and traversal attempts.
+pub fn validate_driver_backup_dir(output_dir: &str) -> Result<String, AppError> {
+    let clean_dir = output_dir.trim();
+    if clean_dir.is_empty() {
+        return Err(AppError::InvalidConfig(
+            "Output directory path cannot be empty".to_string(),
+        ));
+    }
+
+    if clean_dir.chars().any(|c| {
+        c.is_control()
+            || matches!(
+                c,
+                ';' | '|' | '&' | '$' | '`' | '"' | '\'' | '<' | '>' | '^'
+            )
+    }) {
+        return Err(AppError::InvalidConfig(
+            "Output directory path contains forbidden control or shell metacharacters".to_string(),
+        ));
+    }
+
+    let path = Path::new(clean_dir);
+    if clean_dir.contains("..")
+        || path
+            .components()
+            .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(AppError::InvalidConfig(
+            "Output directory path cannot contain parent traversal ('..')".to_string(),
+        ));
+    }
+
+    // Verify existing root/ancestor path can be resolved cleanly when present on disk.
+    let mut ancestor = Some(path);
+    while let Some(curr) = ancestor {
+        if curr.exists() {
+            curr.canonicalize().map_err(|e| {
+                AppError::InvalidConfig(format!(
+                    "Failed to canonicalize output directory ancestor '{}': {}",
+                    curr.display(),
+                    e
+                ))
+            })?;
+            break;
+        }
+        ancestor = curr.parent();
+    }
+
+    Ok(clean_dir.to_string())
+}
 
 /// Backs up active third-party Windows device drivers to a target destination folder using Export-WindowsDriver.
 pub fn backup_drivers(
@@ -11,13 +64,13 @@ pub fn backup_drivers(
     dry_run: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = std::time::Instant::now();
-    let clean_dir = output_dir.trim();
-
-    if clean_dir.is_empty() {
-        let err_msg = "Output directory path cannot be empty".to_string();
-        log::error!("[DriverBackupEngine] {}", err_msg);
-        return Err(AppError::InvalidConfig(err_msg));
-    }
+    let clean_dir = match validate_driver_backup_dir(output_dir) {
+        Ok(dir) => dir,
+        Err(err) => {
+            log::error!("[DriverBackupEngine] {}", err);
+            return Err(err);
+        }
+    };
 
     log::info!(
         "[DriverBackupEngine] Exporting Windows drivers to destination: '{}' (dry_run={})",
@@ -35,9 +88,10 @@ pub fn backup_drivers(
         let _ = app_handle.emit("task-progress", &payload);
     }
 
+    let escaped_dir = escape_powershell_literal(&clean_dir);
     let command = format!(
-        "if (-not (Test-Path \"{}\")) {{ New-Item -ItemType Directory -Path \"{}\" -Force }}; Export-WindowsDriver -Online -Destination \"{}\"",
-        clean_dir, clean_dir, clean_dir
+        "if (-not (Test-Path -LiteralPath {dir})) {{ New-Item -ItemType Directory -Path {dir} -Force | Out-Null }}; Export-WindowsDriver -Online -Destination {dir}",
+        dir = escaped_dir
     );
 
     let output = runner
@@ -118,5 +172,15 @@ mod tests {
         } else {
             panic!("Expected AppError::InvalidConfig");
         }
+    }
+
+    #[test]
+    fn test_backup_drivers_rejects_injection_and_traversal() {
+        let runner = DryRunRunner::new();
+        assert!(backup_drivers(None, &runner, "C:\\Backup\"; calc.exe #", true).is_err());
+        assert!(backup_drivers(None, &runner, "C:\\Backup; calc.exe", true).is_err());
+        assert!(backup_drivers(None, &runner, "C:\\Backup\ncalc.exe", true).is_err());
+        assert!(backup_drivers(None, &runner, "C:\\Backup\\..\\Windows", true).is_err());
+        assert!(backup_drivers(None, &runner, "C:\\$(calc.exe)", true).is_err());
     }
 }

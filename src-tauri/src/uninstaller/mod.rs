@@ -50,6 +50,53 @@ pub fn escape_cmd_arg(arg: &str) -> String {
     escaped
 }
 
+/// Searches `haystack` for an ASCII case-insensitive match of `needle_lower`
+/// only at valid UTF-8 character boundaries (never slicing with `to_lowercase()` byte indices).
+fn find_ascii_ci_at_boundary(haystack: &str, needle_lower: &str, require_exe_boundary: bool) -> Option<usize> {
+    let h_bytes = haystack.as_bytes();
+    let n_bytes = needle_lower.as_bytes();
+    if n_bytes.is_empty() || h_bytes.len() < n_bytes.len() {
+        return None;
+    }
+    for i in 0..=(h_bytes.len() - n_bytes.len()) {
+        if !haystack.is_char_boundary(i) || !haystack.is_char_boundary(i + n_bytes.len()) {
+            continue;
+        }
+        if h_bytes[i..i + n_bytes.len()].eq_ignore_ascii_case(n_bytes) {
+            if require_exe_boundary {
+                let end = i + n_bytes.len();
+                let next_ok = end == h_bytes.len()
+                    || haystack[end..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_whitespace());
+                if !next_ok {
+                    continue;
+                }
+            }
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn is_msiexec_command(trimmed: &str) -> bool {
+    if trimmed.starts_with('{') && trimmed.contains('}') {
+        return true;
+    }
+    let first_exe = if let Some(stripped) = trimmed.strip_prefix('"') {
+        stripped.split('"').next().unwrap_or("")
+    } else {
+        trimmed.split_whitespace().next().unwrap_or("")
+    };
+    let lower_name = first_exe
+        .rsplit(&['\\', '/'][..])
+        .next()
+        .unwrap_or(first_exe)
+        .to_ascii_lowercase();
+    lower_name == "msiexec" || lower_name == "msiexec.exe"
+}
+
 /// Parses an uninstaller command line string into an executable program path and argument list.
 pub fn parse_uninstall_string(raw_cmd: &str) -> (String, Vec<String>) {
     let trimmed = raw_cmd.trim();
@@ -57,19 +104,22 @@ pub fn parse_uninstall_string(raw_cmd: &str) -> (String, Vec<String>) {
         return (String::new(), Vec::new());
     }
 
-    // 1. MSI Installer Guid or msiexec check
-    if trimmed.to_lowercase().contains("msiexec")
-        || (trimmed.starts_with('{') && trimmed.contains('}'))
-    {
+    // 1. MSI Installer Guid or msiexec command
+    if is_msiexec_command(trimmed) {
         if let Some(start) = trimmed.find('{') {
-            if let Some(end) = trimmed[start..].find('}') {
-                let guid = &trimmed[start..start + end + 1];
+            if let Some(rel_end) = trimmed[start..].find('}') {
+                let end_pos = start + rel_end + 1;
+                let guid = &trimmed[start..end_pos];
                 let mut args = vec!["/x".to_string(), guid.to_string()];
-                if trimmed.to_lowercase().contains("/qn")
-                    || trimmed.to_lowercase().contains("/quiet")
-                {
-                    args.push("/qn".to_string());
+
+                let remainder = trimmed[end_pos..].trim();
+                for token in split_arguments(remainder) {
+                    if token.eq_ignore_ascii_case("/x") || token.eq_ignore_ascii_case("/i") {
+                        continue;
+                    }
+                    args.push(token);
                 }
+
                 return ("msiexec.exe".to_string(), args);
             }
         }
@@ -85,8 +135,8 @@ pub fn parse_uninstall_string(raw_cmd: &str) -> (String, Vec<String>) {
         }
     }
 
-    // 3. Unquoted Executable Path ending with .exe
-    if let Some(exe_idx) = trimmed.to_lowercase().find(".exe") {
+    // 3. Unquoted Executable Path ending with .exe followed by whitespace or EOL
+    if let Some(exe_idx) = find_ascii_ci_at_boundary(trimmed, ".exe", true) {
         let exe_end = exe_idx + 4;
         let exe_path = &trimmed[..exe_end];
         let remainder = trimmed[exe_end..].trim();
@@ -274,8 +324,10 @@ pub fn get_installed_apps() -> Result<Vec<InstalledApp>, AppError> {
 
                 // Filter updates if ParentKeyName is present
                 let parent_key: Option<String> = app_key.get_value("ParentKeyName").ok();
-                if parent_key.is_some() && !parent_key.as_ref().unwrap().trim().is_empty() {
-                    continue;
+                if let Some(ref pk) = parent_key {
+                    if !pk.trim().is_empty() {
+                        continue;
+                    }
                 }
 
                 let display_version: Option<String> = app_key.get_value("DisplayVersion").ok();
@@ -507,23 +559,59 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
         .args(&args)
         .spawn();
 
+    const UNINSTALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
     match spawn_res {
-        Ok(_child) => Ok(ExecutionSummary {
-            success: true,
-            executed_actions: vec![ExecutedAction {
-                id: format!("uninstall_{}", app.id),
-                name: format!("Uninstall {}", app.name),
-                command: full_command,
-                output: CommandOutput {
-                    exit_code: 0,
-                    stdout: format!("Successfully spawned uninstaller process for {}", app.name),
-                    stderr: String::new(),
-                },
-                skipped: false,
-            }],
-            total_duration_ms: start_time.elapsed().as_millis() as u64,
-            is_dry_run: false,
-        }),
+        Ok(mut child) => {
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let exit_code = status.code().unwrap_or(-1);
+                        let success = exit_code == 0 || exit_code == 3010;
+                        return Ok(ExecutionSummary {
+                            success,
+                            executed_actions: vec![ExecutedAction {
+                                id: format!("uninstall_{}", app.id),
+                                name: format!("Uninstall {}", app.name),
+                                command: full_command,
+                                output: CommandOutput {
+                                    exit_code,
+                                    stdout: if success {
+                                        format!("Uninstaller for {} exited with code {}", app.name, exit_code)
+                                    } else {
+                                        String::new()
+                                    },
+                                    stderr: if success {
+                                        String::new()
+                                    } else {
+                                        format!("Uninstaller for {} exited with code {}", app.name, exit_code)
+                                    },
+                                },
+                                skipped: false,
+                            }],
+                            total_duration_ms: start_time.elapsed().as_millis() as u64,
+                            is_dry_run: false,
+                        });
+                    }
+                    Ok(None) => {
+                        if start_time.elapsed() >= UNINSTALL_TIMEOUT {
+                            return Err(AppError::Execution(format!(
+                                "Uninstaller process for '{}' timed out after {} seconds",
+                                app.name,
+                                UNINSTALL_TIMEOUT.as_secs()
+                            )));
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(e) => {
+                        return Err(AppError::Execution(format!(
+                            "Failed waiting on uninstaller process for '{}': {}",
+                            app.name, e
+                        )));
+                    }
+                }
+            }
+        }
         Err(err) => {
             let is_elevation_err = err.raw_os_error() == Some(740)
                 || err.kind() == std::io::ErrorKind::PermissionDenied;
@@ -534,11 +622,13 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                     use std::ffi::OsStr;
                     use std::os::windows::ffi::OsStrExt;
                     use windows::core::PCWSTR;
-                    use windows::Win32::UI::Shell::ShellExecuteW;
+                    use windows::Win32::Foundation::{CloseHandle, GetLastError, WAIT_OBJECT_0, WAIT_TIMEOUT};
+                    use windows::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject};
+                    use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
                     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
                     log::warn!(
-                        "[Uninstaller] Standard spawn failed with elevation error (740/PermissionDenied). Falling back to ShellExecuteW runas verb for '{}'",
+                        "[Uninstaller] Standard spawn failed with elevation error (740/PermissionDenied). Falling back to ShellExecuteExW runas verb for '{}'",
                         app.name
                     );
 
@@ -560,48 +650,91 @@ pub fn uninstall_app(app: &InstalledApp, dry_run: bool) -> Result<ExecutionSumma
                         .chain(std::iter::once(0))
                         .collect();
 
-                    let res = unsafe {
-                        ShellExecuteW(
-                            None,
-                            PCWSTR(verb_u16.as_ptr()),
-                            PCWSTR(file_u16.as_ptr()),
-                            PCWSTR(args_u16.as_ptr()),
-                            PCWSTR::null(),
-                            SW_SHOWNORMAL,
-                        )
+                    let mut sei = SHELLEXECUTEINFOW {
+                        cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+                        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+                        lpVerb: PCWSTR(verb_u16.as_ptr()),
+                        lpFile: PCWSTR(file_u16.as_ptr()),
+                        lpParameters: PCWSTR(args_u16.as_ptr()),
+                        nShow: SW_SHOWNORMAL.0,
+                        ..Default::default()
                     };
 
-                    if (res.0 as usize) > 32 {
-                        Ok(ExecutionSummary {
-                            success: true,
-                            executed_actions: vec![ExecutedAction {
-                                id: format!("uninstall_{}", app.id),
-                                name: format!("Uninstall {}", app.name),
-                                command: full_command,
-                                output: CommandOutput {
-                                    exit_code: 0,
-                                    stdout: format!(
-                                        "Launched elevated uninstaller via ShellExecuteW runas for {}",
-                                        app.name
-                                    ),
-                                    stderr: String::new(),
-                                },
-                                skipped: false,
-                            }],
-                            total_duration_ms: start_time.elapsed().as_millis() as u64,
-                            is_dry_run: false,
-                        })
-                    } else if (res.0 as usize) == 2 {
-                        Err(AppError::Execution(format!(
-                            "Uninstaller executable not found (FileNotFound): '{}'. The application files may have been deleted manually.",
-                            program
-                        )))
-                    } else {
-                        Err(AppError::Execution(format!(
-                            "Elevated launch via ShellExecuteW failed with OS error code {}",
-                            res.0 as usize
-                        )))
+                    let ok = unsafe { ShellExecuteExW(&mut sei) };
+                    if ok.is_err() {
+                        let win_err = unsafe { GetLastError().0 };
+                        if win_err == 2 || win_err == 3 {
+                            return Err(AppError::Execution(format!(
+                                "Uninstaller executable not found (FileNotFound): '{}'. The application files may have been deleted manually.",
+                                program
+                            )));
+                        } else if win_err == 1223 {
+                            return Err(AppError::Execution(
+                                "UAC elevation was declined by user during uninstallation.".to_string(),
+                            ));
+                        }
+                        return Err(AppError::Execution(format!(
+                            "Elevated launch via ShellExecuteExW failed with OS error code {}",
+                            win_err
+                        )));
                     }
+
+                    let mut exit_code: i32 = 0;
+                    if !sei.hProcess.is_invalid() {
+                        let wait_ms = UNINSTALL_TIMEOUT.as_millis() as u32;
+                        let wait_res = unsafe { WaitForSingleObject(sei.hProcess, wait_ms) };
+                        if wait_res == WAIT_TIMEOUT {
+                            unsafe {
+                                let _ = CloseHandle(sei.hProcess);
+                            }
+                            return Err(AppError::Execution(format!(
+                                "Elevated uninstaller for '{}' timed out after {} seconds",
+                                app.name,
+                                UNINSTALL_TIMEOUT.as_secs()
+                            )));
+                        }
+                        if wait_res == WAIT_OBJECT_0 {
+                            let mut raw_code: u32 = 0;
+                            if unsafe { GetExitCodeProcess(sei.hProcess, &mut raw_code) }.is_ok() {
+                                exit_code = raw_code as i32;
+                            }
+                        }
+                        unsafe {
+                            let _ = CloseHandle(sei.hProcess);
+                        }
+                    }
+
+                    let success = exit_code == 0 || exit_code == 3010;
+                    Ok(ExecutionSummary {
+                        success,
+                        executed_actions: vec![ExecutedAction {
+                            id: format!("uninstall_{}", app.id),
+                            name: format!("Uninstall {}", app.name),
+                            command: full_command,
+                            output: CommandOutput {
+                                exit_code,
+                                stdout: if success {
+                                    format!(
+                                        "Elevated uninstaller for {} exited with code {}",
+                                        app.name, exit_code
+                                    )
+                                } else {
+                                    String::new()
+                                },
+                                stderr: if success {
+                                    String::new()
+                                } else {
+                                    format!(
+                                        "Elevated uninstaller for {} exited with code {}",
+                                        app.name, exit_code
+                                    )
+                                },
+                            },
+                            skipped: false,
+                        }],
+                        total_duration_ms: start_time.elapsed().as_millis() as u64,
+                        is_dry_run: false,
+                    })
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
@@ -774,6 +907,47 @@ mod tests {
     fn test_remove_installed_app_entry_rejects_unauthorized_key() {
         let res = remove_installed_app_entry(r#"HKLM\SYSTEM\CurrentControlSet\Services\SomeService"#);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_uninstall_string_hardening() {
+        // Turkish capital İ changes UTF-8 byte length on to_lowercase() — must not panic
+        let (prog, args) = parse_uninstall_string("C:\\Users\\İtest\\uninstall.exe /S");
+        assert_eq!(prog, "C:\\Users\\İtest\\uninstall.exe");
+        assert_eq!(args, vec!["/S"]);
+
+        // Directory with .exe substring before actual executable
+        let (prog2, args2) =
+            parse_uninstall_string("C:\\Program Files\\my.exe_tools\\uninstall.exe /quiet");
+        assert_eq!(prog2, "C:\\Program Files\\my.exe_tools\\uninstall.exe");
+        assert_eq!(args2, vec!["/quiet"]);
+
+        // Quoted non-msiexec executable containing 'msiexec' in folder name + GUID arg
+        let (prog3, args3) = parse_uninstall_string(
+            "\"C:\\Tools\\msiexec_helper\\custom_uninstaller.exe\" {A1B2C3D4-1234-5678-90AB-CDEF12345678} /silent",
+        );
+        assert_eq!(prog3, "C:\\Tools\\msiexec_helper\\custom_uninstaller.exe");
+        assert_eq!(
+            args3,
+            vec!["{A1B2C3D4-1234-5678-90AB-CDEF12345678}", "/silent"]
+        );
+
+        // MSI extra args preserved
+        let (prog4, args4) = parse_uninstall_string(
+            "MsiExec.exe /X{12345678-1234-1234-1234-1234567890AB} /norestart /L*V \"C:\\log.txt\" REMOVE=ALL",
+        );
+        assert_eq!(prog4, "msiexec.exe");
+        assert_eq!(
+            args4,
+            vec![
+                "/x",
+                "{12345678-1234-1234-1234-1234567890AB}",
+                "/norestart",
+                "/L*V",
+                "C:\\log.txt",
+                "REMOVE=ALL"
+            ]
+        );
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use crate::storage::{
     self, check_path_protection_status, delete_filesystem_items as fs_delete_items,
     get_all_disk_drives, resolve_and_normalize_path, scan_directory_tree_with_options,
@@ -7,13 +8,11 @@ use std::path::Path;
 use std::process::Command;
 
 #[tauri::command]
-pub async fn get_disk_drives() -> Result<Vec<DiskDriveInfo>, String> {
+pub async fn get_disk_drives() -> Result<Vec<DiskDriveInfo>, AppError> {
     log::info!("[IPC] get_disk_drives requested");
-    tauri::async_runtime::spawn_blocking(move || {
-        Ok(get_all_disk_drives())
-    })
-    .await
-    .map_err(|e| format!("Join error in get_disk_drives: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || Ok(get_all_disk_drives()))
+        .await
+        .map_err(|e| AppError::System(format!("Join error in get_disk_drives: {}", e)))?
 }
 
 #[tauri::command]
@@ -22,18 +21,22 @@ pub async fn scan_disk_space(
     path: String,
     scan_id: Option<String>,
     fast_mode: Option<bool>,
-) -> Result<DiskScanResult, String> {
-    log::info!("[IPC] scan_disk_space requested for path '{}', scan_id: {:?}, fast_mode: {:?}", path, scan_id, fast_mode);
+) -> Result<DiskScanResult, AppError> {
+    log::info!(
+        "[IPC] scan_disk_space requested for path '{}', scan_id: {:?}, fast_mode: {:?}",
+        path,
+        scan_id,
+        fast_mode
+    );
     tauri::async_runtime::spawn_blocking(move || {
         scan_directory_tree_with_options(Some(&app), path, scan_id, fast_mode.unwrap_or(true))
-            .map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("Join error in scan_disk_space: {}", e))?
+    .map_err(|e| AppError::System(format!("Join error in scan_disk_space: {}", e)))?
 }
 
 #[tauri::command]
-pub fn cancel_disk_scan(scan_id: Option<String>) -> Result<(), String> {
+pub fn cancel_disk_scan(scan_id: Option<String>) -> Result<(), AppError> {
     log::info!("[IPC] cancel_disk_scan requested for scan_id: {:?}", scan_id);
     let _ = storage::cancel_scan(scan_id.as_deref());
     Ok(())
@@ -43,55 +46,64 @@ pub fn cancel_disk_scan(scan_id: Option<String>) -> Result<(), String> {
 pub async fn delete_filesystem_items(
     paths: Vec<String>,
     permanent: bool,
-) -> Result<DeletionResult, String> {
+) -> Result<DeletionResult, AppError> {
     log::info!(
         "[IPC] delete_filesystem_items requested for {} items (permanent: {})",
         paths.len(),
         permanent
     );
-    tauri::async_runtime::spawn_blocking(move || {
-        fs_delete_items(paths, permanent).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| format!("Join error in delete_filesystem_items: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || fs_delete_items(paths, permanent))
+        .await
+        .map_err(|e| AppError::System(format!("Join error in delete_filesystem_items: {}", e)))?
 }
 
 #[tauri::command]
-pub fn check_path_protection(path: String) -> Result<PathProtectionStatus, String> {
+pub fn check_path_protection(path: String) -> Result<PathProtectionStatus, AppError> {
     log::debug!("[IPC] check_path_protection requested for '{}'", path);
     Ok(check_path_protection_status(Path::new(&path)))
 }
 
 #[tauri::command]
-pub fn open_in_file_explorer(path: String) -> Result<(), String> {
+pub async fn open_in_file_explorer(path: String) -> Result<(), AppError> {
     log::info!("[IPC] open_in_file_explorer requested for path '{}'", path);
-    let normalized = resolve_and_normalize_path(Path::new(&path));
-    let path_str = normalized.to_string_lossy().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let normalized = resolve_and_normalize_path(Path::new(&path));
+        let path_str = normalized.to_string_lossy().to_string();
 
-    #[cfg(target_os = "windows")]
-    {
-        if normalized.is_file() {
-            Command::new("explorer")
-                .arg(format!("/select,{}", path_str))
-                .spawn()
-                .map_err(|e| format!("Failed to open explorer for file '{}': {}", path_str, e))?;
-        } else {
-            Command::new("explorer")
+        #[cfg(target_os = "windows")]
+        {
+            if normalized.is_file() {
+                Command::new("explorer")
+                    .arg(format!("/select,{}", path_str))
+                    .spawn()
+                    .map_err(|e| {
+                        AppError::Io(format!("Failed to open explorer for file '{}': {}", path_str, e))
+                    })?;
+            } else {
+                Command::new("explorer")
+                    .arg(&path_str)
+                    .spawn()
+                    .map_err(|e| {
+                        AppError::Io(format!(
+                            "Failed to open explorer for directory '{}': {}",
+                            path_str, e
+                        ))
+                    })?;
+            }
+            Ok(())
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Command::new("xdg-open")
                 .arg(&path_str)
                 .spawn()
-                .map_err(|e| format!("Failed to open explorer for directory '{}': {}", path_str, e))?;
+                .map_err(|e| AppError::Io(format!("Failed to open file manager: {}", e)))?;
+            Ok(())
         }
-        Ok(())
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Command::new("xdg-open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| format!("Failed to open file manager: {}", e))?;
-        Ok(())
-    }
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in open_in_file_explorer: {}", e)))?
 }
 
 #[cfg(test)]

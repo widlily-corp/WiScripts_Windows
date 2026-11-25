@@ -1,8 +1,163 @@
 use crate::error::AppError;
+use crate::odt::escape_powershell_literal;
 use crate::optimization::TaskProgressPayload;
-use crate::runner::{CommandRunner, ExecutedAction, ExecutionSummary};
+use crate::runner::{decode_bytes, CommandOutput, CommandRunner, ExecutedAction, ExecutionSummary};
 use serde::{Deserialize, Serialize};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use tauri::Emitter;
+
+/// Validates a winget search query against control characters and shell metacharacters.
+pub fn validate_winget_query(query: &str) -> Result<&str, AppError> {
+    let clean = query.trim();
+    if clean.len() > 200 {
+        return Err(AppError::InvalidConfig(
+            "Search query exceeds maximum length of 200 characters".to_string(),
+        ));
+    }
+    if clean.chars().any(|c| {
+        c.is_control()
+            || matches!(
+                c,
+                '"' | '\'' | '`' | '$' | ';' | '|' | '&' | '<' | '>' | '(' | ')' | '{' | '}'
+            )
+    }) {
+        return Err(AppError::InvalidConfig(
+            "Search query contains forbidden control or shell characters".to_string(),
+        ));
+    }
+    Ok(clean)
+}
+
+/// Validates a winget package ID (e.g. `Publisher.Package-Name`).
+pub fn validate_winget_package_id(package_id: &str) -> Result<&str, AppError> {
+    let clean = package_id.trim();
+    if clean.is_empty() {
+        return Err(AppError::InvalidConfig(
+            "Package ID cannot be empty".to_string(),
+        ));
+    }
+    if clean.len() > 256 {
+        return Err(AppError::InvalidConfig(
+            "Package ID exceeds maximum length".to_string(),
+        ));
+    }
+    if !clean
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
+    {
+        return Err(AppError::InvalidConfig(format!(
+            "Package ID '{}' contains invalid characters",
+            clean
+        )));
+    }
+    Ok(clean)
+}
+
+/// Validates a UWP PackageFullName (e.g. `Microsoft.YourPhone_1.23082.128.0_x64__8wekyb3d8bbwe`).
+pub fn validate_uwp_package_full_name(package_full_name: &str) -> Result<&str, AppError> {
+    let clean = package_full_name.trim();
+    if clean.is_empty() {
+        return Err(AppError::InvalidConfig(
+            "Package full name cannot be empty".to_string(),
+        ));
+    }
+    if clean.len() > 256 {
+        return Err(AppError::InvalidConfig(
+            "Package full name exceeds maximum length".to_string(),
+        ));
+    }
+    if !clean
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '~'))
+    {
+        return Err(AppError::InvalidConfig(format!(
+            "UWP package full name '{}' contains invalid characters",
+            clean
+        )));
+    }
+    Ok(clean)
+}
+
+/// Spawns `winget.exe` directly without an intermediate PowerShell shell.
+fn run_winget_direct(args: &[&str], timeout_secs: u64) -> Result<CommandOutput, String> {
+    let mut cmd = Command::new("winget.exe");
+    cmd.args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn winget.exe: {}", e))?;
+
+    let mut stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to capture winget stdout".to_string())?;
+    let mut stderr_pipe = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Failed to capture winget stderr".to_string())?;
+
+    let stdout_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::copy(&mut stdout_pipe, &mut buf);
+        buf
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::copy(&mut stderr_pipe, &mut buf);
+        buf
+    });
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+
+    loop {
+        let child_pid = child.id();
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let exit_code = status.code().unwrap_or(-1);
+                let stdout = decode_bytes(&stdout_handle.join().unwrap_or_default());
+                let stderr = decode_bytes(&stderr_handle.join().unwrap_or_default());
+                return Ok(CommandOutput {
+                    exit_code,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    crate::script_runner::kill_process_tree(child_pid);
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
+                    return Err(format!(
+                        "winget.exe execution timed out after {} seconds",
+                        timeout_secs
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => {
+                crate::script_runner::kill_process_tree(child_pid);
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!("Error waiting for winget.exe: {}", e));
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -27,7 +182,7 @@ pub fn winget_search(
     runner: &dyn CommandRunner,
     query: &str,
 ) -> Result<Vec<WingetPackage>, AppError> {
-    let clean_query = query.trim();
+    let clean_query = validate_winget_query(query)?;
     if clean_query.is_empty() {
         return Ok(Vec::new());
     }
@@ -37,14 +192,21 @@ pub fn winget_search(
         clean_query
     );
 
-    let script = format!(
-        "winget search --query \"{}\" --accept-source-agreements",
-        clean_query
-    );
-
-    let output = runner
-        .run_powershell(&script)
-        .map_err(AppError::Execution)?;
+    let output = if runner.is_native_enabled() {
+        run_winget_direct(
+            &["search", "--query", clean_query, "--accept-source-agreements"],
+            60,
+        )
+        .map_err(AppError::Execution)?
+    } else {
+        let script = format!(
+            "winget search --query \"{}\" --accept-source-agreements",
+            clean_query
+        );
+        runner
+            .run_powershell(&script)
+            .map_err(AppError::Execution)?
+    };
 
     if runner.is_dry_run() || output.stdout.contains("[DRY-RUN]") {
         log::info!("[PackagesEngine] [DRY-RUN] Returning simulated Winget package search results");
@@ -132,13 +294,7 @@ pub fn winget_install(
     dry_run: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = std::time::Instant::now();
-    let clean_id = package_id.trim();
-
-    if clean_id.is_empty() {
-        return Err(AppError::InvalidConfig(
-            "Package ID cannot be empty".to_string(),
-        ));
-    }
+    let clean_id = validate_winget_package_id(package_id)?;
 
     log::info!(
         "[PackagesEngine] Installing package: '{}' (dry_run={})",
@@ -161,9 +317,25 @@ pub fn winget_install(
         clean_id
     );
 
-    let output = runner
-        .run_powershell(&command)
-        .map_err(AppError::Execution)?;
+    let output = if runner.is_native_enabled() && !dry_run {
+        run_winget_direct(
+            &[
+                "install",
+                "--id",
+                clean_id,
+                "--exact",
+                "--silent",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            ],
+            600,
+        )
+        .map_err(AppError::Execution)?
+    } else {
+        runner
+            .run_powershell(&command)
+            .map_err(AppError::Execution)?
+    };
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -215,13 +387,7 @@ pub fn winget_update(
     dry_run: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = std::time::Instant::now();
-    let clean_id = package_id.trim();
-
-    if clean_id.is_empty() {
-        return Err(AppError::InvalidConfig(
-            "Package ID cannot be empty".to_string(),
-        ));
-    }
+    let clean_id = validate_winget_package_id(package_id)?;
 
     log::info!(
         "[PackagesEngine] Updating package: '{}' (dry_run={})",
@@ -244,9 +410,25 @@ pub fn winget_update(
         clean_id
     );
 
-    let output = runner
-        .run_powershell(&command)
-        .map_err(AppError::Execution)?;
+    let output = if runner.is_native_enabled() && !dry_run {
+        run_winget_direct(
+            &[
+                "upgrade",
+                "--id",
+                clean_id,
+                "--exact",
+                "--silent",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            ],
+            600,
+        )
+        .map_err(AppError::Execution)?
+    } else {
+        runner
+            .run_powershell(&command)
+            .map_err(AppError::Execution)?
+    };
     let is_success = output.exit_code == 0;
 
     if is_success {
@@ -385,13 +567,7 @@ pub fn remove_uwp_app(
     dry_run: bool,
 ) -> Result<ExecutionSummary, AppError> {
     let start_time = std::time::Instant::now();
-    let clean_full_name = package_full_name.trim();
-
-    if clean_full_name.is_empty() {
-        return Err(AppError::InvalidConfig(
-            "Package full name cannot be empty".to_string(),
-        ));
-    }
+    let clean_full_name = validate_uwp_package_full_name(package_full_name)?;
 
     log::info!(
         "[PackagesEngine] Removing UWP app: '{}' (dry_run={})",
@@ -409,9 +585,10 @@ pub fn remove_uwp_app(
         let _ = app_handle.emit("task-progress", &payload);
     }
 
+    let escaped_name = escape_powershell_literal(clean_full_name);
     let command = format!(
-        "Get-AppxPackage -AllUsers | Where-Object {{ $_.PackageFullName -eq '{}' }} | Remove-AppxPackage -AllUsers -ErrorAction Stop",
-        clean_full_name
+        "Get-AppxPackage -AllUsers | Where-Object {{ $_.PackageFullName -eq {} }} | Remove-AppxPackage -AllUsers -ErrorAction Stop",
+        escaped_name
     );
 
     let output = runner
@@ -551,5 +728,18 @@ mod tests {
         let runner = DryRunRunner::new();
         let res = remove_uwp_app(None, &runner, "", true);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_winget_and_uwp_injection_validation() {
+        let runner = DryRunRunner::new();
+        assert!(winget_search(&runner, "git\"; calc.exe").is_err());
+        assert!(winget_search(&runner, "$(whoami)").is_err());
+        assert!(winget_install(None, &runner, "Git.Git; calc.exe", true).is_err());
+        assert!(winget_install(None, &runner, "Git.Git\" --force", true).is_err());
+        assert!(winget_update(None, &runner, "7zip.7zip | whoami", true).is_err());
+        assert!(remove_uwp_app(None, &runner, "App'; calc.exe #", true).is_err());
+        assert!(validate_winget_package_id("Microsoft.VisualStudioCode").is_ok());
+        assert!(validate_uwp_package_full_name("Microsoft.YourPhone_1.23_x64__8wekyb3d8bbwe").is_ok());
     }
 }

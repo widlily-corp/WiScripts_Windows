@@ -155,46 +155,66 @@ pub fn get_app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+fn collect_system_info_blocking() -> SystemInfo {
+    use std::sync::{Mutex, OnceLock};
+    static SYS_INFO_MON: OnceLock<Mutex<sysinfo::System>> = OnceLock::new();
+
+    let lock = SYS_INFO_MON.get_or_init(|| {
+        Mutex::new(sysinfo::System::new_with_specifics(
+            sysinfo::RefreshKind::new()
+                .with_cpu(sysinfo::CpuRefreshKind::everything())
+                .with_memory(sysinfo::MemoryRefreshKind::everything()),
+        ))
+    });
+
+    let (cpu_usage_percent, memory_used_mb, memory_total_mb) = match lock.lock() {
+        Ok(mut sys) => {
+            sys.refresh_cpu();
+            sys.refresh_memory();
+            (
+                sys.global_cpu_info().cpu_usage().round() as u32,
+                sys.used_memory() / (1024 * 1024),
+                sys.total_memory() / (1024 * 1024),
+            )
+        }
+        Err(_) => (0, 0, 0),
+    };
+
+    let os_name = sysinfo::System::name().unwrap_or_else(|| "Windows".to_string());
+    let os_version = sysinfo::System::os_version().unwrap_or_else(|| "Unknown".to_string());
+    let os_build = sysinfo::System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
+
+    let is_elevated = check_is_elevated();
+    let telemetry_status = probe_telemetry_status();
+
+    SystemInfo {
+        os_name,
+        os_version,
+        os_build,
+        is_elevated,
+        cpu_usage_percent,
+        memory_used_mb,
+        memory_total_mb,
+        telemetry_status,
+    }
+}
+
 #[tauri::command]
 pub async fn get_system_info() -> Result<SystemInfo, AppError> {
     log::info!("[IPC] get_system_info request received");
     tauri::async_runtime::spawn_blocking(move || {
-        let mut sys = sysinfo::System::new_all();
-        sys.refresh_all();
-        std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-        sys.refresh_cpu();
-
-        let os_name = sysinfo::System::name().unwrap_or_else(|| "Windows".to_string());
-        let os_version = sysinfo::System::os_version().unwrap_or_else(|| "Unknown".to_string());
-        let os_build = sysinfo::System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
-
-        let is_elevated = check_is_elevated();
-        let cpu_usage_percent = sys.global_cpu_info().cpu_usage().round() as u32;
-        let memory_used_mb = sys.used_memory() / (1024 * 1024);
-        let memory_total_mb = sys.total_memory() / (1024 * 1024);
-        let telemetry_status = probe_telemetry_status();
-
+        let info = collect_system_info_blocking();
         log::info!(
             "[IPC] get_system_info completed: OS='{} {}', CPU={}%, RAM={}/{}MB, Telemetry='{}', Elevated={}",
-            os_name,
-            os_version,
-            cpu_usage_percent,
-            memory_used_mb,
-            memory_total_mb,
-            telemetry_status,
-            is_elevated
+            info.os_name,
+            info.os_version,
+            info.cpu_usage_percent,
+            info.memory_used_mb,
+            info.memory_total_mb,
+            info.telemetry_status,
+            info.is_elevated
         );
-
-        Ok(SystemInfo {
-            os_name,
-            os_version,
-            os_build,
-            is_elevated,
-            cpu_usage_percent,
-            memory_used_mb,
-            memory_total_mb,
-            telemetry_status,
-        })
+        Ok(info)
     })
     .await
     .map_err(|e| AppError::System(format!("Join error in get_system_info: {}", e)))?
@@ -412,43 +432,43 @@ pub async fn execute_activation(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn scan_autorun_entries() -> Result<Vec<AutorunEntry>, String> {
+pub async fn scan_autorun_entries() -> Result<Vec<AutorunEntry>, AppError> {
     log::info!("[IPC] scan_autorun_entries request received");
     tauri::async_runtime::spawn_blocking(move || {
-        autoruns::scan_autorun_entries()
+        autoruns::scan_autorun_entries().map_err(AppError::Execution)
     })
     .await
-    .map_err(|e| format!("Join error in scan_autorun_entries: {}", e))?
+    .map_err(|e| AppError::System(format!("Join error in scan_autorun_entries: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn verify_file_authenticode(file_path: String) -> Result<String, String> {
+pub async fn verify_file_authenticode(file_path: String) -> Result<String, AppError> {
     log::info!("[IPC] verify_file_authenticode request received for path '{}'", file_path);
     tauri::async_runtime::spawn_blocking(move || {
-        autoruns::verify_file_authenticode(file_path)
+        autoruns::verify_file_authenticode(file_path).map_err(AppError::Execution)
     })
     .await
-    .map_err(|e| format!("Join error in verify_file_authenticode: {}", e))?
+    .map_err(|e| AppError::System(format!("Join error in verify_file_authenticode: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, String> {
+pub async fn toggle_autorun_entry(entry_id: String, enable: bool) -> Result<bool, AppError> {
     log::info!("[IPC] toggle_autorun_entry request received for entry_id '{}', enable={}", entry_id, enable);
     tauri::async_runtime::spawn_blocking(move || {
-        autoruns::toggle_autorun_entry(entry_id, enable)
+        autoruns::toggle_autorun_entry(entry_id, enable).map_err(AppError::Execution)
     })
     .await
-    .map_err(|e| format!("Join error in toggle_autorun_entry: {}", e))?
+    .map_err(|e| AppError::System(format!("Join error in toggle_autorun_entry: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, String> {
+pub async fn quarantine_autorun_entry(entry_id: String) -> Result<QuarantineResult, AppError> {
     log::info!("[IPC] quarantine_autorun_entry request received for entry_id '{}'", entry_id);
     tauri::async_runtime::spawn_blocking(move || {
-        autoruns::quarantine_autorun_entry(entry_id)
+        autoruns::quarantine_autorun_entry(entry_id).map_err(AppError::Execution)
     })
     .await
-    .map_err(|e| format!("Join error in quarantine_autorun_entry: {}", e))?
+    .map_err(|e| AppError::System(format!("Join error in quarantine_autorun_entry: {}", e)))?
 }
 
 // ---------------------------------------------------------------------------
@@ -628,19 +648,34 @@ pub async fn apply_optimization_profile(
     app: tauri::AppHandle,
     profile_id: String,
     dry_run: bool,
+    create_restore_point: Option<bool>,
 ) -> Result<ExecutionSummary, AppError> {
+    let should_create_rp = create_restore_point.unwrap_or(!dry_run);
     log::info!(
-        "[IPC] apply_optimization_profile request received: profile_id={}, dry_run={}",
+        "[IPC] apply_optimization_profile request received: profile_id={}, dry_run={}, create_restore_point={}",
         profile_id,
-        dry_run
+        dry_run,
+        should_create_rp
     );
     tauri::async_runtime::spawn_blocking(move || {
         let res = if dry_run {
             let runner = DryRunRunner::new();
-            profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, true)
+            profiles::apply_optimization_profile_with_options(
+                Some(&app),
+                &runner,
+                &profile_id,
+                true,
+                should_create_rp,
+            )
         } else {
             let runner = RealRunner::new();
-            profiles::apply_optimization_profile(Some(&app), &runner, &profile_id, false)
+            profiles::apply_optimization_profile_with_options(
+                Some(&app),
+                &runner,
+                &profile_id,
+                false,
+                should_create_rp,
+            )
         };
 
         match &res {
@@ -1241,70 +1276,77 @@ pub async fn delete_files(paths: Vec<String>) -> Result<fs_storage::DeleteResult
 pub async fn export_diagnostic_dump() -> Result<String, AppError> {
     log::info!("[IPC] export_diagnostic_dump request received");
 
-    let desktop_dir = dirs::desktop_dir().unwrap_or_else(|| {
-        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-    });
+    let abs_path = tauri::async_runtime::spawn_blocking(move || -> Result<String, AppError> {
+        let desktop_dir = dirs::desktop_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
 
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
 
-    let filename = format!("WiScripts_Diagnostic_Dump_{}.zip", timestamp);
-    let raw_zip_path = desktop_dir.join(&filename);
-    let zip_path = diagnostics::validate_dump_path(&raw_zip_path, &desktop_dir)?;
+        let filename = format!("WiScripts_Diagnostic_Dump_{}.zip", timestamp);
+        let raw_zip_path = desktop_dir.join(&filename);
+        let zip_path = diagnostics::validate_dump_path(&raw_zip_path, &desktop_dir)?;
 
-    let sys_info = get_system_info().await?;
-    let sys_info_json = serde_json::to_string_pretty(&sys_info)
-        .map_err(|e| AppError::System(format!("Failed to serialize system info: {}", e)))?;
+        let sys_info = collect_system_info_blocking();
+        let sys_info_json = serde_json::to_string_pretty(&sys_info)
+            .map_err(|e| AppError::System(format!("Failed to serialize system info: {}", e)))?;
 
-    let log_path = crate::logger::get_log_path();
-    let log_bytes = std::fs::read(&log_path).unwrap_or_default();
+        let log_path = crate::logger::get_log_path();
+        let raw_log_bytes = std::fs::read(&log_path).unwrap_or_default();
+        let sanitized_log = sanitize_log_text(&String::from_utf8_lossy(&raw_log_bytes));
 
-    let zip_file = std::fs::File::create(&zip_path).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to create diagnostic dump file at {:?}: {}",
-            zip_path, e
-        ))
-    })?;
+        let zip_file = std::fs::File::create(&zip_path).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to create diagnostic dump file at {:?}: {}",
+                zip_path, e
+            ))
+        })?;
 
-    let mut zip = zip::ZipWriter::new(zip_file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+        let mut zip = zip::ZipWriter::new(zip_file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
 
-    zip.start_file("debug.log", options)
-        .map_err(|e| AppError::Io(format!("Failed to add debug.log to ZIP archive: {}", e)))?;
-    zip.write_all(&log_bytes).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to write debug.log bytes to ZIP archive: {}",
-            e
-        ))
-    })?;
+        zip.start_file("debug.log", options)
+            .map_err(|e| AppError::Io(format!("Failed to add debug.log to ZIP archive: {}", e)))?;
+        zip.write_all(sanitized_log.as_bytes()).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to write debug.log bytes to ZIP archive: {}",
+                e
+            ))
+        })?;
 
-    zip.start_file("system_info.json", options).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to add system_info.json to ZIP archive: {}",
-            e
-        ))
-    })?;
-    zip.write_all(sys_info_json.as_bytes()).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to write system_info.json bytes to ZIP archive: {}",
-            e
-        ))
-    })?;
+        zip.start_file("system_info.json", options).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to add system_info.json to ZIP archive: {}",
+                e
+            ))
+        })?;
+        zip.write_all(sys_info_json.as_bytes()).map_err(|e| {
+            AppError::Io(format!(
+                "Failed to write system_info.json bytes to ZIP archive: {}",
+                e
+            ))
+        })?;
 
-    zip.finish().map_err(|e| {
-        AppError::Io(format!(
-            "Failed to finalize diagnostic dump ZIP archive: {}",
-            e
-        ))
-    })?;
+        zip.finish().map_err(|e| {
+            AppError::Io(format!(
+                "Failed to finalize diagnostic dump ZIP archive: {}",
+                e
+            ))
+        })?;
 
-    let abs_path = zip_path
-        .to_str()
-        .ok_or_else(|| AppError::Io("Invalid ZIP path string encoding".to_string()))?
-        .to_string();
+        let abs_path = zip_path
+            .to_str()
+            .ok_or_else(|| AppError::Io("Invalid ZIP path string encoding".to_string()))?
+            .to_string();
+
+        Ok(abs_path)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in export_diagnostic_dump: {}", e)))??;
 
     log::info!(
         "[IPC] export_diagnostic_dump successfully created archive at {}",
@@ -1350,18 +1392,22 @@ pub fn urlencode(s: &str) -> String {
 }
 
 pub fn sanitize_log_text(text: &str) -> String {
-    let mut sanitized = text.to_string();
-    if let Ok(re_user) = regex::Regex::new(r"(?i)[a-z]:\\users\\[^\s\\]+") {
-        sanitized = re_user
-            .replace_all(&sanitized, r"C:\Users\[REDACTED]")
-            .to_string();
-    }
-    if let Ok(re_token) = regex::Regex::new(r"(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{82})") {
-        sanitized = re_token
-            .replace_all(&sanitized, "[REDACTED_TOKEN]")
-            .to_string();
-    }
-    sanitized
+    use std::sync::OnceLock;
+    static RE_USER: OnceLock<regex::Regex> = OnceLock::new();
+    static RE_TOKEN: OnceLock<regex::Regex> = OnceLock::new();
+
+    let re_user = RE_USER.get_or_init(|| {
+        regex::Regex::new(r"(?i)[a-z]:\\users\\[^\s\\]+").expect("valid user path regex")
+    });
+    let re_token = RE_TOKEN.get_or_init(|| {
+        regex::Regex::new(r"(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{82})")
+            .expect("valid token regex")
+    });
+
+    let step1 = re_user.replace_all(text, r"C:\Users\[REDACTED]");
+    re_token
+        .replace_all(&step1, "[REDACTED_TOKEN]")
+        .into_owned()
 }
 
 pub fn build_github_issue_body(
@@ -1434,6 +1480,54 @@ pub fn build_github_issue_body(
     body
 }
 
+fn github_http_client() -> Result<&'static reqwest::Client, AppError> {
+    use std::sync::OnceLock;
+    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    let res = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .user_agent("WiScripts-App")
+            .build()
+            .map_err(|e| format!("Failed to build GitHub HTTP client: {}", e))
+    });
+    match res {
+        Ok(c) => Ok(c),
+        Err(e) => Err(AppError::System(e.clone())),
+    }
+}
+
+fn build_bounded_issue_url(issue_title: &str, body_markdown: &str) -> String {
+    const MAX_BROWSER_URL_LEN: usize = 7000;
+    const BASE_URL: &str = "https://github.com/widlily-corp/WiScripts_Windows/issues/new?title=";
+    let enc_title = urlencode(issue_title);
+    let prefix = format!("{}{}&body=", BASE_URL, enc_title);
+
+    let enc_body = urlencode(body_markdown);
+    if prefix.len() + enc_body.len() <= MAX_BROWSER_URL_LEN {
+        return format!("{}{}", prefix, enc_body);
+    }
+
+    let suffix_note = "\n\n...(truncated for URL length limit)";
+    let max_body_encoded = MAX_BROWSER_URL_LEN
+        .saturating_sub(prefix.len())
+        .saturating_sub(urlencode(suffix_note).len());
+
+    let mut truncated = String::new();
+    let mut encoded_len = 0usize;
+    for ch in body_markdown.chars() {
+        let mut buf = [0u8; 4];
+        let ch_str = ch.encode_utf8(&mut buf);
+        let ch_enc_len = urlencode(ch_str).len();
+        if encoded_len + ch_enc_len > max_body_encoded {
+            break;
+        }
+        truncated.push(ch);
+        encoded_len += ch_enc_len;
+    }
+    truncated.push_str(suffix_note);
+    format!("{}{}", prefix, urlencode(&truncated))
+}
+
 #[tauri::command]
 pub async fn create_github_issue(
     payload: GitHubIssuePayload,
@@ -1454,18 +1548,23 @@ pub async fn create_github_issue(
     };
 
     let log_lines = if payload.include_logs {
-        let log_path = crate::logger::get_log_path();
-        if let Ok(raw_logs) = std::fs::read_to_string(&log_path) {
-            let lines: Vec<&str> = raw_logs.lines().collect();
-            let last_50 = if lines.len() > 50 {
-                &lines[lines.len() - 50..]
+        tauri::async_runtime::spawn_blocking(move || {
+            let log_path = crate::logger::get_log_path();
+            if let Ok(raw_logs) = std::fs::read_to_string(&log_path) {
+                let lines: Vec<&str> = raw_logs.lines().collect();
+                let last_50 = if lines.len() > 50 {
+                    &lines[lines.len() - 50..]
+                } else {
+                    &lines[..]
+                };
+                Some(last_50.join("\n"))
             } else {
-                &lines[..]
-            };
-            Some(last_50.join("\n"))
-        } else {
-            None
-        }
+                None
+            }
+        })
+        .await
+        .ok()
+        .flatten()
     } else {
         None
     };
@@ -1478,15 +1577,15 @@ pub async fn create_github_issue(
     );
 
     let issue_title = format!("[{}] {}", payload.category.to_uppercase(), payload.title);
+    let mut api_error: Option<String> = None;
 
     if let Some(ref token) = payload.github_token {
         let trimmed_token = token.trim();
         if !trimmed_token.is_empty() {
             log::info!("[IPC] Attempting GitHub API issue submission with provided token");
-            let client = reqwest::Client::new();
+            let client = github_http_client()?;
             let res = client
                 .post("https://api.github.com/repos/widlily-corp/WiScripts_Windows/issues")
-                .header("User-Agent", "WiScripts-App")
                 .header("Accept", "application/vnd.github+json")
                 .header("Authorization", format!("Bearer {}", trimmed_token))
                 .json(&serde_json::json!({
@@ -1499,63 +1598,71 @@ pub async fn create_github_issue(
 
             match res {
                 Ok(resp) if resp.status().is_success() => {
-                    if let Ok(json) = resp.json::<serde_json::Value>().await {
-                        let html_url = json
-                            .get("html_url")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        log::info!(
-                            "[IPC] GitHub issue successfully created via API: {:?}",
-                            html_url
-                        );
-                        return Ok(GitHubIssueResult {
-                            success: true,
-                            issue_url: html_url,
-                            method: "api".to_string(),
-                            error: None,
-                        });
+                    match resp.json::<serde_json::Value>().await {
+                        Ok(json) => {
+                            let html_url = json
+                                .get("html_url")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            log::info!(
+                                "[IPC] GitHub issue successfully created via API: {:?}",
+                                html_url
+                            );
+                            return Ok(GitHubIssueResult {
+                                success: true,
+                                issue_url: html_url,
+                                method: "api".to_string(),
+                                error: None,
+                            });
+                        }
+                        Err(e) => {
+                            let msg = format!("GitHub API response parse error: {}", e);
+                            log::warn!("[IPC] {}. Falling back to browser URL.", msg);
+                            api_error = Some(msg);
+                        }
                     }
                 }
                 Ok(resp) => {
-                    log::warn!(
-                        "[IPC] GitHub API request failed with status: {}. Falling back to browser URL.",
-                        resp.status()
-                    );
+                    let status = resp.status();
+                    let err_body = resp.text().await.unwrap_or_default();
+                    let msg = format!("GitHub API error (HTTP {}): {}", status, err_body.trim());
+                    log::warn!("[IPC] {}. Falling back to browser URL.", msg);
+                    api_error = Some(msg);
                 }
                 Err(err) => {
-                    log::warn!(
-                        "[IPC] GitHub API request error: {}. Falling back to browser URL.",
-                        err
-                    );
+                    let msg = format!("GitHub API request error: {}", err);
+                    log::warn!("[IPC] {}. Falling back to browser URL.", msg);
+                    api_error = Some(msg);
                 }
             }
         }
     }
 
-    let enc_title = urlencode(&issue_title);
-    let enc_body = urlencode(&body_markdown);
-    let browser_url = format!(
-        "https://github.com/widlily-corp/WiScripts_Windows/issues/new?title={}&body={}",
-        enc_title, enc_body
-    );
+    let browser_url = build_bounded_issue_url(&issue_title, &body_markdown);
 
     log::info!(
-        "[IPC] Opening pre-filled issue URL in browser: {}",
-        browser_url
+        "[IPC] Opening pre-filled issue URL in browser (len={})",
+        browser_url.len()
     );
     match tauri_plugin_opener::open_url(&browser_url, None::<&str>) {
         Ok(_) => Ok(GitHubIssueResult {
             success: true,
             issue_url: Some(browser_url),
             method: "browser".to_string(),
-            error: None,
+            error: api_error,
         }),
-        Err(e) => Ok(GitHubIssueResult {
-            success: false,
-            issue_url: Some(browser_url),
-            method: "browser".to_string(),
-            error: Some(format!("Failed to open browser URL: {}", e)),
-        }),
+        Err(e) => {
+            let combined_err = match api_error {
+                Some(prev) => format!("{}; Failed to open browser URL: {}", prev, e),
+                None => format!("Failed to open browser URL: {}", e),
+            };
+            Ok(GitHubIssueResult {
+                success: false,
+                issue_url: Some(browser_url),
+                method: "browser".to_string(),
+                error: Some(combined_err),
+            })
+        }
     }
 }
 
@@ -1685,7 +1792,7 @@ pub async fn delete_state_snapshot(snapshot_id: String) -> Result<bool, AppError
 #[serde(rename_all = "camelCase")]
 pub struct PreflightSnapshotResult {
     pub snapshot_id: String,
-    pub sequence_number: u64,
+    pub sequence_number: Option<i64>,
     pub timestamp: String,
     pub state_engine_success: bool,
     pub restore_point_success: bool,
@@ -1693,19 +1800,22 @@ pub struct PreflightSnapshotResult {
     pub rules_captured: usize,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn create_preflight_snapshot(
     description: Option<String>,
     rule_ids: Option<Vec<String>>,
+    create_vss_restore_point: Option<bool>,
 ) -> Result<PreflightSnapshotResult, AppError> {
     let desc = description.unwrap_or_else(|| "Pre-flight safety snapshot before batch optimization".to_string());
     let rules = rule_ids.unwrap_or_default();
     let rules_count = rules.len();
+    let should_create_vss = create_vss_restore_point.unwrap_or(true);
 
     log::info!(
-        "[IPC] create_preflight_snapshot request received: desc='{}', rules_count={}",
+        "[IPC] create_preflight_snapshot request received: desc='{}', rules_count={}, create_vss_restore_point={}",
         desc,
-        rules_count
+        rules_count,
+        should_create_vss
     );
 
     let state_snapshot = tauri::async_runtime::spawn_blocking({
@@ -1716,31 +1826,43 @@ pub async fn create_preflight_snapshot(
     .map_err(|e| AppError::Execution(format!("Join error in state snapshot: {}", e)))?
     .map_err(AppError::Execution)?;
 
-    let (rp_success, rp_warning, seq_num) = tauri::async_runtime::spawn_blocking({
-        let desc_clone = format!("WiScripts: {}", desc);
-        move || {
-            let runner = crate::runner::RealRunner::new();
-            match crate::system_restore::create_restore_point(&runner, &desc_clone) {
-                Ok(action) => {
-                    log::info!("[PreflightSnapshot] VSS restore point created: {}", action.name);
-                    (true, None, 100u64)
-                }
-                Err(e) => {
-                    log::warn!("[PreflightSnapshot] VSS restore point creation warning: {}", e);
-                    let warning_msg = if e.contains("frequency") || e.contains("24 hours") || e.contains("0x80041001") {
-                        "VSS 24h frequency limit reached. StateEngine JSON snapshot was saved successfully.".to_string()
-                    } else if e.contains("disabled") || e.contains("0x80070422") {
-                        "System Restore is disabled on the system drive. StateEngine JSON snapshot was saved successfully.".to_string()
-                    } else {
-                        format!("System Restore Point creation failed ({}). StateEngine JSON snapshot was saved successfully.", e)
-                    };
-                    (false, Some(warning_msg), 0u64)
+    let (rp_success, rp_warning, seq_num) = if should_create_vss {
+        tauri::async_runtime::spawn_blocking({
+            let desc_clone = format!("WiScripts: {}", desc);
+            move || {
+                let runner = crate::runner::RealRunner::new();
+                match crate::system_restore::create_restore_point_with_seq(
+                    &runner,
+                    &desc_clone,
+                    crate::system_restore::RestorePointOptions::default(),
+                ) {
+                    Ok((action, real_seq)) => {
+                        log::info!(
+                            "[PreflightSnapshot] VSS restore point created: {} (seq={:?})",
+                            action.name,
+                            real_seq
+                        );
+                        (true, None, real_seq)
+                    }
+                    Err(e) => {
+                        log::warn!("[PreflightSnapshot] VSS restore point creation warning: {}", e);
+                        let warning_msg = if e.contains("frequency") || e.contains("24 hours") || e.contains("0x80041001") {
+                            "VSS 24h frequency limit reached. StateEngine JSON snapshot was saved successfully.".to_string()
+                        } else if e.contains("disabled") || e.contains("0x80070422") {
+                            "System Restore is disabled on the system drive. StateEngine JSON snapshot was saved successfully.".to_string()
+                        } else {
+                            format!("System Restore Point creation failed ({}). StateEngine JSON snapshot was saved successfully.", e)
+                        };
+                        (false, Some(warning_msg), None)
+                    }
                 }
             }
-        }
-    })
-    .await
-    .map_err(|e| AppError::Execution(format!("Join error in restore point creation: {}", e)))?;
+        })
+        .await
+        .map_err(|e| AppError::Execution(format!("Join error in restore point creation: {}", e)))?
+    } else {
+        (false, None, None)
+    };
 
     let timestamp = {
         let dur = std::time::SystemTime::now()
@@ -1767,49 +1889,59 @@ pub async fn create_preflight_snapshot(
 #[tauri::command]
 pub async fn apply_process_governor_rule(
     rule: crate::governor::ResourceGovernorRule,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     log::info!(
         "[IPC] apply_process_governor_rule request received for process '{}'",
         rule.process_name
     );
-    tauri::async_runtime::spawn_blocking(move || crate::governor::apply_process_governor_rule(rule))
-        .await
-        .map_err(|e| format!("Join error in apply_process_governor_rule: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::governor::apply_process_governor_rule(rule).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in apply_process_governor_rule: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn trim_process_working_set(pid: u32) -> Result<u64, String> {
+pub async fn trim_process_working_set(pid: u32) -> Result<u64, AppError> {
     log::info!("[IPC] trim_process_working_set request received for PID {}", pid);
-    tauri::async_runtime::spawn_blocking(move || crate::governor::trim_process_working_set(pid))
-        .await
-        .map_err(|e| format!("Join error in trim_process_working_set: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::governor::trim_process_working_set(pid).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in trim_process_working_set: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn get_governor_status() -> Result<crate::governor::GovernorStatus, String> {
+pub async fn get_governor_status() -> Result<crate::governor::GovernorStatus, AppError> {
     log::debug!("[IPC] get_governor_status request received");
-    tauri::async_runtime::spawn_blocking(crate::governor::get_governor_status)
-        .await
-        .map_err(|e| format!("Join error in get_governor_status: {}", e))?
+    tauri::async_runtime::spawn_blocking(|| {
+        crate::governor::get_governor_status().map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in get_governor_status: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn list_active_rules() -> Result<Vec<crate::governor::ResourceGovernorRule>, String> {
+pub async fn list_active_rules() -> Result<Vec<crate::governor::ResourceGovernorRule>, AppError> {
     log::debug!("[IPC] list_active_rules request received");
-    tauri::async_runtime::spawn_blocking(crate::governor::list_active_rules)
-        .await
-        .map_err(|e| format!("Join error in list_active_rules: {}", e))?
+    tauri::async_runtime::spawn_blocking(|| {
+        crate::governor::list_active_rules().map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in list_active_rules: {}", e)))?
 }
 
 #[tauri::command]
-pub async fn delete_governor_rule(process_name: String) -> Result<bool, String> {
+pub async fn delete_governor_rule(process_name: String) -> Result<bool, AppError> {
     log::info!(
         "[IPC] delete_governor_rule request received for process '{}'",
         process_name
     );
-    tauri::async_runtime::spawn_blocking(move || crate::governor::delete_governor_rule(process_name))
-        .await
-        .map_err(|e| format!("Join error in delete_governor_rule: {}", e))?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::governor::delete_governor_rule(process_name).map_err(AppError::Execution)
+    })
+    .await
+    .map_err(|e| AppError::System(format!("Join error in delete_governor_rule: {}", e)))?
 }
 
 #[cfg(test)]
@@ -2144,7 +2276,7 @@ mod tests {
     fn test_preflight_snapshot_result_serialization() {
         let result = PreflightSnapshotResult {
             snapshot_id: "snap_12345_abc".to_string(),
-            sequence_number: 101,
+            sequence_number: Some(101),
             timestamp: "1723960000".to_string(),
             state_engine_success: true,
             restore_point_success: true,

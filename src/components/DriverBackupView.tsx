@@ -23,7 +23,7 @@ const PRESET_PATHS = [
 export function DriverBackupView() {
   const { t } = useTranslation();
   const [isExporting, setIsExporting] = useState(false);
-  const [lastExportResult, setLastExportResult] = useState<string | null>(null);
+  const [lastExportResult, setLastExportResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
@@ -42,19 +42,30 @@ export function DriverBackupView() {
     try {
       const summary = await backupDrivers(driverBackupPath.trim());
       if (summary?.success) {
-        setLastExportResult(
-          t('driverBackup.successMessage', { path: driverBackupPath.trim(), duration: summary.totalDurationMs })
-        );
+        setLastExportResult({
+          ok: true,
+          message: t('driverBackup.successMessage', { path: driverBackupPath.trim(), duration: summary.totalDurationMs }),
+        });
       } else if (summary) {
-        setLastExportResult(t('driverBackup.errorMessage'));
+        const failedAction = summary.executedActions?.find((a) => a.output.exitCode !== 0);
+        const detail = failedAction?.output.stderr?.trim() || failedAction?.output.stdout?.trim();
+        setLastExportResult({
+          ok: false,
+          message: detail || t('driverBackup.errorMessage'),
+        });
       }
+    } catch (err) {
+      setLastExportResult({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsExporting(false);
     }
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -180,11 +191,25 @@ export function DriverBackupView() {
           </p>
 
           {lastExportResult && (
-            <div className="p-3 rounded-[6px] bg-status-successSubtle border border-status-success/30 text-status-success text-xs font-mono">
+            <div
+              className={`p-3 rounded-[6px] border text-xs font-mono ${
+                lastExportResult.ok
+                  ? 'bg-status-successSubtle border-status-success/30 text-status-success'
+                  : 'bg-status-dangerSubtle border-status-danger/30 text-status-danger'
+              }`}
+            >
               <div className="flex items-center gap-1.5 font-semibold">
-                <CheckCircle2 className="h-4 w-4" /> {t('driverBackup.exportComplete')}
+                {lastExportResult.ok ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" /> {t('driverBackup.exportComplete')}
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className="h-4 w-4" /> {t('driverBackup.exportFailed', 'Driver Backup Failed')}
+                  </>
+                )}
               </div>
-              <p className="mt-1 text-[11px] text-text-primary">{lastExportResult}</p>
+              <p className="mt-1 text-[11px] text-text-primary">{lastExportResult.message}</p>
             </div>
           )}
         </div>

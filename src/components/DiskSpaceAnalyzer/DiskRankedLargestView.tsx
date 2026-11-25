@@ -87,15 +87,22 @@ export const DiskRankedLargestView: React.FC<DiskRankedLargestViewProps> = ({
 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span
-                      onClick={() => isDir && onNavigate(item.path)}
-                      className={'font-semibold text-text truncate ' + (isDir ? 'cursor-pointer hover:text-brand hover:underline' : '')}
-                      title={item.path}
-                    >
-                      {item.name}
-                    </span>
+                    {isDir ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(item.path)}
+                        className="font-semibold text-text-primary truncate text-left cursor-pointer hover:text-brand hover:underline"
+                        title={item.path}
+                      >
+                        {item.name}
+                      </button>
+                    ) : (
+                      <span className="font-semibold text-text-primary truncate" title={item.path}>
+                        {item.name}
+                      </span>
+                    )}
                     {isProtected && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-status-danger/15 text-status-danger border border-status-danger/30 flex-shrink-0">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-status-danger/15 text-status-danger border border-status-danger/30 flex-shrink-0">
                         {t('diskAnalyzer.systemProtected', 'Protected')}
                       </span>
                     )}
@@ -123,7 +130,7 @@ export const DiskRankedLargestView: React.FC<DiskRankedLargestViewProps> = ({
 
                 {/* Size */}
                 <div className="text-right w-24">
-                  <div className="font-bold font-mono text-text">
+                  <div className="font-bold font-mono text-text-primary">
                     {formatBytes(sizeBytes)}
                   </div>
                   <div className="text-[10px] font-mono text-text-muted truncate">

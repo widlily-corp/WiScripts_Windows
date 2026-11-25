@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { ScheduledTaskItem } from '../types';
+import { PaginationBar, usePagination } from './common/VirtualList';
 import {
   Clock,
   RefreshCw,
@@ -14,6 +15,7 @@ import {
   Filter,
   Layers,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 
 export function SchedulerView() {
@@ -33,30 +35,32 @@ export function SchedulerView() {
     fetchScheduledTasks();
   }, [fetchScheduledTasks]);
 
-  const filteredTasks = scheduledTasks.filter((task) => {
-    const matchesSearch =
-      task.taskName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.taskPath.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.actionSummary.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredTasks = useMemo(() => {
+    return scheduledTasks.filter((task) => {
+      const matchesSearch =
+        task.taskName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.taskPath.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.actionSummary.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesState =
-      stateFilter === 'all' ||
-      task.state.toLowerCase() === stateFilter.toLowerCase();
+      const matchesState =
+        stateFilter === 'all' ||
+        task.state.toLowerCase() === stateFilter.toLowerCase();
 
-    const isTelemetryTask =
-      task.taskName.toLowerCase().includes(
-        'telemetry'
-      ) ||
-      task.taskName.toLowerCase().includes('consolidator') ||
-      task.taskName.toLowerCase().includes('ceip') ||
-      task.taskName.toLowerCase().includes('sqm') ||
-      task.taskName.toLowerCase().includes('compat');
+      const isTelemetryTask =
+        task.taskName.toLowerCase().includes('telemetry') ||
+        task.taskName.toLowerCase().includes('consolidator') ||
+        task.taskName.toLowerCase().includes('ceip') ||
+        task.taskName.toLowerCase().includes('sqm') ||
+        task.taskName.toLowerCase().includes('compat');
 
-    const matchesTelemetry = !telemetryOnlyFilter || isTelemetryTask;
+      const matchesTelemetry = !telemetryOnlyFilter || isTelemetryTask;
 
-    return matchesSearch && matchesState && matchesTelemetry;
-  });
+      return matchesSearch && matchesState && matchesTelemetry;
+    });
+  }, [scheduledTasks, searchQuery, stateFilter, telemetryOnlyFilter]);
+
+  const { page, totalPages, pageSize, totalItems, pagedItems, setPage } = usePagination(filteredTasks, 50);
 
   const totalCount = scheduledTasks.length;
   const readyCount = scheduledTasks.filter((t) => t.state === 'Ready').length;
@@ -89,7 +93,7 @@ export function SchedulerView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       <AdminElevationBanner featureName={t('schedulerView.title')} />
 
       {/* Header */}
@@ -122,7 +126,7 @@ export function SchedulerView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] font-mono uppercase text-text-muted">{t('schedulerView.totalTasks')}</div>
@@ -197,80 +201,101 @@ export function SchedulerView() {
 
       {/* Task Table */}
       <div className="rounded-[6px] border border-border bg-surface overflow-hidden">
-        {filteredTasks.length === 0 ? (
+        {isSchedulerLoading && scheduledTasks.length === 0 ? (
+          <div className="p-12 text-center text-text-muted space-y-2">
+            <Loader2 className="h-8 w-8 text-brand mx-auto animate-spin" />
+            <div className="text-sm font-medium">{t('common.loading', 'Loading...')}</div>
+          </div>
+        ) : filteredTasks.length === 0 ? (
           <div className="p-12 text-center text-text-muted space-y-2">
             <AlertTriangle className="h-8 w-8 text-text-muted mx-auto" />
             <div className="text-sm font-medium">{t('schedulerView.noScheduledTasks')}</div>
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
-              <tr>
-                <th className="py-3 px-4 font-semibold">{t('schedulerView.enable')}</th>
-                <th className="py-3 px-4 font-semibold">{t('schedulerView.taskNameAndPath')}</th>
-                <th className="py-3 px-4 font-semibold">{t('schedulerView.author')}</th>
-                <th className="py-3 px-4 font-semibold">{t('schedulerView.state')}</th>
-                <th className="py-3 px-4 font-semibold">{t('schedulerView.actionCommand')}</th>
-                <th className="py-3 px-4 font-semibold text-right">{t('schedulerView.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {filteredTasks.map((task) => (
-                <tr key={`${task.taskPath}_${task.taskName}`} className="hover:bg-surface-hover/50 transition-colors">
-                  {/* Enable Switch */}
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <button
-                      onClick={() =>
-                        toggleScheduledTask(task.taskName, task.taskPath, !task.enabled)
-                      }
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        task.enabled ? 'bg-brand' : 'bg-surface-subtle border-border-subtle'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          task.enabled ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
+                  <tr>
+                    <th className="py-3 px-4 font-semibold">{t('schedulerView.enable')}</th>
+                    <th className="py-3 px-4 font-semibold">{t('schedulerView.taskNameAndPath')}</th>
+                    <th className="py-3 px-4 font-semibold">{t('schedulerView.author')}</th>
+                    <th className="py-3 px-4 font-semibold">{t('schedulerView.state')}</th>
+                    <th className="py-3 px-4 font-semibold">{t('schedulerView.actionCommand')}</th>
+                    <th className="py-3 px-4 font-semibold text-right">{t('schedulerView.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {pagedItems.map((task) => (
+                    <tr key={`${task.taskPath}_${task.taskName}`} className="hover:bg-surface-hover/50 transition-colors">
+                      {/* Enable Switch */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={task.enabled}
+                          aria-label={`${t('schedulerView.enable')} ${task.taskName}`}
+                          onClick={() =>
+                            toggleScheduledTask(task.taskName, task.taskPath, !task.enabled)
+                          }
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            task.enabled ? 'bg-brand' : 'bg-surface-subtle border-border-subtle'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              task.enabled ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </td>
 
-                  {/* Task Name & Path */}
-                  <td className="py-3 px-4">
-                    <div className="font-semibold text-text-primary">{task.taskName}</div>
-                    <div className="text-[10px] font-mono text-text-muted truncate max-w-xs">
-                      {task.taskPath}
-                    </div>
-                  </td>
+                      {/* Task Name & Path */}
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-text-primary">{task.taskName}</div>
+                        <div className="text-[10px] font-mono text-text-muted truncate max-w-xs">
+                          {task.taskPath}
+                        </div>
+                      </td>
 
-                  {/* Author */}
-                  <td className="py-3 px-4 text-text-secondary whitespace-nowrap">
-                    {task.author}
-                  </td>
+                      {/* Author */}
+                      <td className="py-3 px-4 text-text-secondary whitespace-nowrap">
+                        {task.author}
+                      </td>
 
-                  {/* State */}
-                  <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(task)}</td>
+                      {/* State */}
+                      <td className="py-3 px-4 whitespace-nowrap">{getStatusBadge(task)}</td>
 
-                  {/* Action Summary */}
-                  <td className="py-3 px-4 max-w-xs truncate font-mono text-[11px] text-text-secondary">
-                    {task.actionSummary}
-                  </td>
+                      {/* Action Summary */}
+                      <td className="py-3 px-4 max-w-xs truncate font-mono text-[11px] text-text-secondary">
+                        {task.actionSummary}
+                      </td>
 
-                  {/* Run Action */}
-                  <td className="py-3 px-4 text-right whitespace-nowrap">
-                    <button
-                      onClick={() => runScheduledTask(task.taskName, task.taskPath)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 transition-colors font-mono text-[11px] font-semibold"
-                      title={t('schedulerView.runTaskNowTooltip')}
-                    >
-                      <Play className="h-3 w-3 fill-current" />
-                      <span>{t('schedulerView.run')}</span>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      {/* Run Action */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => runScheduledTask(task.taskName, task.taskPath)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 transition-colors font-mono text-[11px] font-semibold"
+                          title={t('schedulerView.runTaskNowTooltip')}
+                        >
+                          <Play className="h-3 w-3 fill-current" />
+                          <span>{t('schedulerView.run')}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
+          </>
         )}
       </div>
     </div>

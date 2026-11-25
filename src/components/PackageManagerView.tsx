@@ -32,6 +32,8 @@ export function PackageManagerView() {
   const [uwpFilter, setUwpFilter] = useState('');
   const [hideFrameworks, setHideFrameworks] = useState(true);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [uwpFetchAttempted, setUwpFetchAttempted] = useState(false);
+  const [uwpError, setUwpError] = useState<string | null>(null);
 
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
@@ -40,6 +42,8 @@ export function PackageManagerView() {
   const isWingetSearching = useAppStore((s) => s.isWingetSearching);
   const uwpApps = useAppStore((s) => s.uwpApps);
   const isUwpLoading = useAppStore((s) => s.isUwpLoading);
+  const storeUwpLoaded = useAppStore((s) => (s as { uwpLoaded?: boolean }).uwpLoaded);
+  const storeUwpFetchError = useAppStore((s) => (s as { uwpFetchError?: string | null }).uwpFetchError ?? null);
 
   const wingetSearch = useAppStore((s) => s.wingetSearch);
   const wingetInstall = useAppStore((s) => s.wingetInstall);
@@ -47,12 +51,22 @@ export function PackageManagerView() {
   const fetchUwpApps = useAppStore((s) => s.fetchUwpApps);
   const removeUwpApp = useAppStore((s) => s.removeUwpApp);
 
-  // Auto-fetch UWP apps when switching to UWP tab for the first time
-  useEffect(() => {
-    if (activeSubTab === 'uwp' && uwpApps.length === 0 && !isUwpLoading) {
-      fetchUwpApps();
+  const loadUwpApps = async () => {
+    setUwpFetchAttempted(true);
+    setUwpError(null);
+    try {
+      await fetchUwpApps();
+    } catch (err) {
+      setUwpError(err instanceof Error ? err.message : String(err));
     }
-  }, [activeSubTab, uwpApps.length, isUwpLoading, fetchUwpApps]);
+  };
+
+  // Auto-fetch UWP apps once when switching to UWP tab
+  useEffect(() => {
+    if (activeSubTab === 'uwp' && !uwpFetchAttempted && !storeUwpLoaded && !isUwpLoading) {
+      loadUwpApps();
+    }
+  }, [activeSubTab, uwpFetchAttempted, storeUwpLoaded, isUwpLoading]);
 
   const handleWingetSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +123,7 @@ export function PackageManagerView() {
   });
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -150,7 +164,7 @@ export function PackageManagerView() {
       </div>
 
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="Package Installation & UWP Debloater" />
+      <AdminElevationBanner featureName={t('packageManager.title')} />
 
       {/* Sub-tab 1: Winget Package Manager */}
       {activeSubTab === 'winget' && (
@@ -242,8 +256,9 @@ export function PackageManagerView() {
                         <td className="py-2.5 px-3 text-right space-x-2">
                           <button
                             onClick={() => handleInstall(pkg.id)}
-                            disabled={isExecuting}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] bg-brand text-[11px] font-medium text-white hover:bg-brand-hover disabled:opacity-40 transition-opacity"
+                            disabled={isButtonDisabled}
+                            title={!isElevated && !dryRunMode ? t('packageManager.adminRequired', 'Administrator privileges or Dry-Run mode required') : undefined}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] bg-brand text-[11px] font-medium text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                           >
                             {actionInProgress === `install_${pkg.id}` ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -254,8 +269,9 @@ export function PackageManagerView() {
                           </button>
                           <button
                             onClick={() => handleUpdate(pkg.id)}
-                            disabled={isExecuting}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border border-border bg-surface-subtle text-[11px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-40 transition-colors"
+                            disabled={isButtonDisabled}
+                            title={!isElevated && !dryRunMode ? t('packageManager.adminRequired', 'Administrator privileges or Dry-Run mode required') : undefined}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border border-border bg-surface-subtle text-[11px] font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
                             {actionInProgress === `update_${pkg.id}` ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -303,7 +319,7 @@ export function PackageManagerView() {
               </label>
 
               <button
-                onClick={fetchUwpApps}
+                onClick={loadUwpApps}
                 disabled={isUwpLoading}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-[6px] border border-border bg-surface-subtle text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary disabled:opacity-40 transition-colors"
               >
@@ -326,7 +342,17 @@ export function PackageManagerView() {
               )}
             </div>
 
-            {isUwpLoading ? (
+            {(uwpError || storeUwpFetchError) ? (
+              <div className="py-10 text-center space-y-2 border border-status-danger/30 bg-status-dangerSubtle rounded-[6px] px-4">
+                <p className="text-xs text-status-danger font-medium">{uwpError || storeUwpFetchError}</p>
+                <button
+                  onClick={loadUwpApps}
+                  className="px-3 py-1.5 rounded-[4px] border border-border bg-surface text-xs text-text-primary hover:bg-surface-hover"
+                >
+                  {t('packageManager.refreshList')}
+                </button>
+              </div>
+            ) : isUwpLoading ? (
               <div className="py-12 flex flex-col items-center justify-center gap-2 text-text-muted text-xs">
                 <Loader2 className="h-6 w-6 animate-spin text-brand" />
                 <span>{t('packageManager.scanningUwp')}</span>
@@ -359,8 +385,9 @@ export function PackageManagerView() {
                         <td className="py-2.5 px-3 text-right">
                           <button
                             onClick={() => handleRemoveUwp(app.packageFullName)}
-                            disabled={isExecuting}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border border-status-danger/30 bg-status-dangerSubtle text-[11px] font-medium text-status-danger hover:bg-status-danger/20 disabled:opacity-40 transition-colors"
+                            disabled={isButtonDisabled}
+                            title={!isElevated && !dryRunMode ? t('packageManager.adminRequired', 'Administrator privileges or Dry-Run mode required') : undefined}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[4px] border border-status-danger/30 bg-status-dangerSubtle text-[11px] font-medium text-status-danger hover:bg-status-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
                             {actionInProgress === `uwp_${app.packageFullName}` ? (
                               <Loader2 className="h-3 w-3 animate-spin" />

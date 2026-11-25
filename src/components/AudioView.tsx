@@ -28,6 +28,7 @@ export function AudioView() {
   const audioDevicesPayload = useAppStore((s) => s.audioDevicesPayload || s.audioDevices);
   const appAudioSessions = useAppStore((s) => s.appAudioSessions);
   const isAudioLoading = useAppStore((s) => s.isAudioLoading || s.audioLoading);
+  const audioError = useAppStore((s) => s.audioError);
   const fetchAudioDevices = useAppStore((s) => s.fetchAudioDevices);
   const fetchAppAudioSessions = useAppStore((s) => s.fetchAppAudioSessions);
   const setGlobalAudioDevice = useAppStore((s) => s.setGlobalAudioDevice);
@@ -37,10 +38,11 @@ export function AudioView() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [autoPoll, setAutoPoll] = useState(true);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
 
   useEffect(() => {
     fetchAudioDevices();
-    fetchAppAudioSessions();
+    fetchAppAudioSessions().finally(() => setSessionsLoaded(true));
   }, [fetchAudioDevices, fetchAppAudioSessions]);
 
   useEffect(() => {
@@ -52,9 +54,13 @@ export function AudioView() {
   }, [autoPoll, fetchAppAudioSessions]);
 
   const handleRefresh = async () => {
-    await Promise.all([fetchAudioDevices(), fetchAppAudioSessions()]);
+    await Promise.all([
+      fetchAudioDevices(),
+      fetchAppAudioSessions().finally(() => setSessionsLoaded(true)),
+    ]);
   };
 
+  const hasDeviceData = audioDevicesPayload !== null;
   const renderDevices = audioDevicesPayload?.renderDevices || [];
   const captureDevices = audioDevicesPayload?.captureDevices || [];
   const defaultRenderId = audioDevicesPayload?.defaultRenderId;
@@ -85,8 +91,15 @@ export function AudioView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)] bg-background">
+    <div className="p-6 space-y-6 bg-background">
       <AdminElevationBanner featureName={t('audioView.title')} />
+
+      {audioError && (
+        <div className="rounded-[6px] border border-status-danger/40 bg-status-dangerSubtle p-3 text-xs text-status-danger flex items-center gap-2 font-mono">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{audioError}</span>
+        </div>
+      )}
 
       {/* Header Bar */}
       <div className="rounded-[6px] border border-border bg-surface p-5 flex items-center justify-between">
@@ -98,7 +111,7 @@ export function AudioView() {
             </h2>
             {dryRunMode && (
               <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-[4px] font-bold">
-                Dry-Run Mode
+                {t('audioView.dryRunMode', 'Dry-Run Mode')}
               </span>
             )}
           </div>
@@ -115,11 +128,11 @@ export function AudioView() {
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                 : 'bg-surface-subtle text-text-muted border-border-subtle hover:text-text-secondary'
             }`}
-            aria-label="Toggle session auto-polling"
-            title="Auto-refresh active audio app sessions every 3 seconds"
+            aria-label={t('audioView.toggleAutoPoll', 'Toggle session auto-polling')}
+            title={t('audioView.autoPollTooltip', 'Auto-refresh active audio app sessions every 3 seconds')}
           >
             <Activity className="h-3.5 w-3.5" />
-            <span>{autoPoll ? 'Auto-Poll: ON' : 'Auto-Poll: OFF'}</span>
+            <span>{autoPoll ? t('audioView.autoPollOn', 'Auto-Poll: ON') : t('audioView.autoPollOff', 'Auto-Poll: OFF')}</span>
           </button>
 
           <button
@@ -140,7 +153,7 @@ export function AudioView() {
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.totalDevices')} (Render)</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
-              {renderDevices.length}
+              {hasDeviceData ? renderDevices.length : '—'}
             </div>
           </div>
           <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border-subtle">
@@ -152,7 +165,7 @@ export function AudioView() {
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.totalDevices')} (Capture)</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
-              {captureDevices.length}
+              {hasDeviceData ? captureDevices.length : '—'}
             </div>
           </div>
           <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border-subtle">
@@ -163,8 +176,8 @@ export function AudioView() {
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div className="space-y-1 overflow-hidden pr-2">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.defaultOutput')}</span>
-            <div className="text-xs font-semibold text-text-primary truncate" title={activeRenderDevice?.name || 'N/A'}>
-              {activeRenderDevice?.name || 'No Device Found'}
+            <div className="text-xs font-semibold text-text-primary truncate" title={activeRenderDevice?.name || ''}>
+              {hasDeviceData ? (activeRenderDevice?.name || t('audioView.noDeviceFound', 'No Device Found')) : '—'}
             </div>
           </div>
           <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border-subtle shrink-0">
@@ -176,7 +189,7 @@ export function AudioView() {
           <div className="space-y-1">
             <span className="text-xs text-text-secondary font-medium">{t('audioView.activeSessions')}</span>
             <div className="text-xl font-bold font-mono tabular-nums text-text-primary">
-              {appAudioSessions.length}
+              {sessionsLoaded ? appAudioSessions.length : '—'}
             </div>
           </div>
           <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border-subtle">
@@ -360,7 +373,11 @@ export function AudioView() {
         </div>
 
         {/* Sessions List */}
-        {filteredSessions.length === 0 ? (
+        {!sessionsLoaded && isAudioLoading ? (
+          <div className="rounded-[6px] border border-dashed border-border p-8 text-center text-xs text-text-muted">
+            {t('common.loading', 'Loading...')}
+          </div>
+        ) : filteredSessions.length === 0 ? (
           <div className="rounded-[6px] border border-dashed border-border p-8 text-center space-y-3">
             <div className="mx-auto w-10 h-10 rounded-full bg-surface-subtle flex items-center justify-center text-text-muted">
               <AlertCircle className="h-5 w-5" />
@@ -374,7 +391,7 @@ export function AudioView() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {filteredSessions.map((session) => {
+            {filteredSessions.map((session, idx) => {
               const currentVolPct = Math.round((session.volume ?? 1) * 100);
               const isMuted = session.isMuted;
               const currentOutputId = session.outputDeviceId || session.deviceId || defaultRenderId || '';
@@ -382,7 +399,7 @@ export function AudioView() {
 
               return (
                 <div
-                  key={session.pid}
+                  key={`${session.pid}-${idx}`}
                   className="rounded-[6px] border border-border bg-surface-hover p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors hover:border-border"
                 >
                   {/* App Header & Process Meta */}

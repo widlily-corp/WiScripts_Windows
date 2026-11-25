@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { RestorePoint } from '../types';
+import { useAccessibleModal } from './common/useAccessibleModal';
 import {
   RotateCcw,
   Plus,
@@ -30,6 +31,11 @@ export function RestorePointsView() {
 
   const [newDescription, setNewDescription] = useState('');
   const [selectedPointForRollback, setSelectedPointForRollback] = useState<RestorePoint | null>(null);
+  const rollbackModalTitleId = useId();
+  const rollbackModalRef = useAccessibleModal({
+    isOpen: Boolean(selectedPointForRollback),
+    onClose: () => setSelectedPointForRollback(null),
+  });
 
   useEffect(() => {
     fetchRestorePoints();
@@ -78,7 +84,7 @@ export function RestorePointsView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -248,11 +254,22 @@ export function RestorePointsView() {
 
       {/* Rollback Confirmation Modal */}
       {selectedPointForRollback && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-[6px] border border-border bg-surface p-5 space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={rollbackModalTitleId}
+        >
+          <div
+            ref={rollbackModalRef}
+            tabIndex={-1}
+            className="w-full max-w-md rounded-[6px] border border-border bg-surface p-5 space-y-4 shadow-xl focus:outline-none"
+          >
             <div className="flex items-center gap-2.5 text-status-warning border-b border-border pb-3">
               <AlertTriangle className="h-5 w-5 shrink-0" />
-              <h3 className="text-sm font-semibold">{t('restorePoints.modalRollbackTitle')}</h3>
+              <h3 id={rollbackModalTitleId} className="text-sm font-semibold">
+                {t('restorePoints.modalRollbackTitle', { seq: selectedPointForRollback.sequenceNumber })}
+              </h3>
             </div>
 
             <div className="space-y-2 text-xs text-text-secondary">

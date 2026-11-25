@@ -77,7 +77,9 @@ export function OptimizationView() {
   const handleExecuteSelected = () => {
     if (isButtonDisabled) return;
 
-    const highestRisk = selectedRules.some((r) => r.riskLevel === 'high')
+    const highestRisk = selectedRules.some((r) => r.riskLevel === 'critical')
+      ? 'critical'
+      : selectedRules.some((r) => r.riskLevel === 'high')
       ? 'high'
       : selectedRules.some((r) => r.riskLevel === 'medium')
       ? 'medium'
@@ -154,6 +156,12 @@ export function OptimizationView() {
 
   const getRiskBadge = (risk: string) => {
     switch (risk) {
+      case 'critical':
+        return (
+          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-status-danger bg-status-dangerSubtle border border-status-danger/40">
+            <ShieldAlert className="h-3 w-3" /> {t('optimization.criticalRisk', 'Critical')}
+          </span>
+        );
       case 'high':
         return (
           <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-status-danger bg-status-danger/10 border border-status-danger/30">
@@ -291,7 +299,7 @@ export function OptimizationView() {
               }`}
             >
               <span>{t(`optimization.categories.${cat.id}`)}</span>
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-surface-subtle border border-border-subtle text-text-muted">
+              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-subtle border border-border-subtle text-text-muted">
                 {count}
               </span>
             </button>

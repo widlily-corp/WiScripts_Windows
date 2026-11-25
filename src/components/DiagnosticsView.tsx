@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
-import { ExecutionLog } from '../types';
+import { PaginationBar, usePagination } from './common/VirtualList';
 import {
   Terminal,
   Cpu,
@@ -34,11 +34,19 @@ export function DiagnosticsView() {
   const runDiagnostics = useAppStore((s) => s.runDiagnostics);
   const isExecuting = useAppStore((s) => s.isExecuting);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
+  const addToast = useAppStore((s) => s.addToast);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLevel, setSelectedLevel] = useState<'all' | 'info' | 'warn' | 'error' | 'cmd'>('all');
   const [copiedLogs, setCopiedLogs] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const handleRunDiagnostic = async (action: string) => {
     if (isExecuting || (!isElevated && !dryRunMode)) return;
@@ -61,6 +69,8 @@ export function DiagnosticsView() {
     });
   }, [logs, selectedLevel, searchQuery]);
 
+  const { page, totalPages, pageSize, totalItems, pagedItems, setPage } = usePagination(filteredLogs, 100);
+
   const handleExportLogs = () => {
     if (logs.length === 0) return;
     const logText = logs
@@ -75,20 +85,34 @@ export function DiagnosticsView() {
     URL.revokeObjectURL(url);
   };
 
-  const handleCopyLogs = () => {
+  const handleCopyLogs = async () => {
     if (logs.length === 0) return;
     const logText = logs
       .map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`)
       .join('\n');
-    navigator.clipboard.writeText(logText);
-    setCopiedLogs(true);
-    setTimeout(() => setCopiedLogs(false), 2000);
+    try {
+      await navigator.clipboard.writeText(logText);
+      setCopiedLogs(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedLogs(false), 2000);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('common.clipboardError', 'Clipboard Copy Failed'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   const isButtonDisabled = isExecuting || (!isElevated && !dryRunMode);
+  const hasSystemMetrics = Boolean(systemInfo && systemInfo.memoryTotalMb > 0);
+  const cpuPct = hasSystemMetrics ? systemInfo!.cpuUsagePercent : null;
+  const memUsedGb = hasSystemMetrics ? Math.round(systemInfo!.memoryUsedMb / 1024) : null;
+  const memTotalGb = hasSystemMetrics ? Math.round(systemInfo!.memoryTotalMb / 1024) : null;
+  const memPct = hasSystemMetrics ? (systemInfo!.memoryUsedMb / Math.max(systemInfo!.memoryTotalMb, 1)) * 100 : 0;
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -248,12 +272,12 @@ export function DiagnosticsView() {
             <Cpu className="h-4 w-4 text-brand" />
           </div>
           <div className="text-xl font-semibold text-text-primary font-mono tabular-nums">
-            {systemInfo?.cpuUsagePercent ?? 0}%
+            {cpuPct !== null ? `${cpuPct}%` : '—'}
           </div>
           <div className="w-full bg-surface-active h-1.5 rounded-full overflow-hidden">
             <div
               className="bg-brand h-full transition-all duration-300"
-              style={{ width: `${systemInfo?.cpuUsagePercent ?? 0}%` }}
+              style={{ width: `${cpuPct ?? 0}%` }}
             />
           </div>
         </div>
@@ -265,13 +289,13 @@ export function DiagnosticsView() {
             <HardDrive className="h-4 w-4 text-brand" />
           </div>
           <div className="text-xl font-semibold text-text-primary font-mono tabular-nums">
-            {Math.round((systemInfo?.memoryUsedMb ?? 0) / 1024)} GB / {Math.round((systemInfo?.memoryTotalMb ?? 0) / 1024)} GB
+            {memUsedGb !== null && memTotalGb !== null ? `${memUsedGb} GB / ${memTotalGb} GB` : '—'}
           </div>
           <div className="w-full bg-surface-active h-1.5 rounded-full overflow-hidden">
             <div
               className="bg-brand h-full transition-all duration-300"
               style={{
-                width: `${((systemInfo?.memoryUsedMb ?? 0) / Math.max(systemInfo?.memoryTotalMb ?? 1, 1)) * 100}%`,
+                width: `${memPct}%`,
               }}
             />
           </div>
@@ -302,10 +326,10 @@ export function DiagnosticsView() {
             <Activity className="h-4 w-4 text-status-info" />
           </div>
           <div className="text-base font-semibold text-text-primary">
-            {systemInfo?.telemetryStatus || t('diagnostics.telemetryActive')}
+            {systemInfo?.telemetryStatus || '—'}
           </div>
           <div className="text-[11px] text-text-muted truncate">
-            {t('diagnostics.osBuild', { build: systemInfo?.osBuild || '22631.3880' })}
+            {t('diagnostics.osBuild', { build: systemInfo?.osBuild || '—' })}
           </div>
         </div>
       </div>
@@ -356,41 +380,50 @@ export function DiagnosticsView() {
         </div>
 
         {/* Console Stream Output Box */}
-        <div className="rounded-[6px] border border-border-subtle bg-surface-subtle p-4 font-mono text-xs max-h-[400px] overflow-y-auto space-y-1.5">
-          {filteredLogs.length === 0 ? (
-            <div className="text-text-muted italic py-6 text-center text-xs">
-              {logs.length === 0 ? t('diagnostics.noLogsYet') : t('diagnostics.noLogsMatch')}
-            </div>
-          ) : (
-            filteredLogs.map((log) => (
-              <div key={log.id} className="text-text-code leading-relaxed border-b border-border-subtle/40 pb-1 last:border-0">
-                <div className="flex items-start gap-2">
-                  <span className="text-text-muted text-[11px] tabular-nums shrink-0">
-                    [{log.timestamp.slice(11, 19)}]
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.2 rounded shrink-0 uppercase ${
-                      log.level === 'error'
-                        ? 'bg-status-dangerSubtle text-status-danger border border-status-danger/30'
-                        : log.level === 'warn'
-                        ? 'bg-status-warningSubtle text-status-warning border border-status-warning/30'
-                        : log.level === 'cmd'
-                        ? 'bg-brand-subtle text-brand border border-brand/30'
-                        : 'bg-status-successSubtle text-status-success border border-status-success/30'
-                    }`}
-                  >
-                    {log.level}
-                  </span>
-                  <span className="flex-1 text-text-primary">{log.message}</span>
-                </div>
-                {log.commandExecuted && (
-                  <div className="ml-24 mt-1 text-[11px] text-text-muted bg-surface/60 p-1.5 rounded border border-border-subtle/60">
-                    <span className="text-brand">$</span> {log.commandExecuted}
-                  </div>
-                )}
+        <div className="rounded-[6px] border border-border-subtle bg-surface-subtle overflow-hidden">
+          <div className="p-4 font-mono text-xs max-h-[400px] overflow-y-auto space-y-1.5">
+            {pagedItems.length === 0 ? (
+              <div className="text-text-muted italic py-6 text-center text-xs">
+                {logs.length === 0 ? t('diagnostics.noLogsYet') : t('diagnostics.noLogsMatch')}
               </div>
-            ))
-          )}
+            ) : (
+              pagedItems.map((log) => (
+                <div key={log.id} className="text-text-code leading-relaxed border-b border-border-subtle/40 pb-1 last:border-0">
+                  <div className="flex items-start gap-2">
+                    <span className="text-text-muted text-[11px] tabular-nums shrink-0">
+                      [{log.timestamp.slice(11, 19)}]
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 uppercase ${
+                        log.level === 'error'
+                          ? 'bg-status-dangerSubtle text-status-danger border border-status-danger/30'
+                          : log.level === 'warn'
+                          ? 'bg-status-warningSubtle text-status-warning border border-status-warning/30'
+                          : log.level === 'cmd'
+                          ? 'bg-brand-subtle text-brand border border-brand/30'
+                          : 'bg-status-successSubtle text-status-success border border-status-success/30'
+                      }`}
+                    >
+                      {log.level}
+                    </span>
+                    <span className="flex-1 text-text-primary">{log.message}</span>
+                  </div>
+                  {log.commandExecuted && (
+                    <div className="ml-24 mt-1 text-[11px] text-text-muted bg-surface/60 p-1.5 rounded border border-border-subtle/60">
+                      <span className="text-brand">$</span> {log.commandExecuted}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
         </div>
 
         <div className="flex items-center justify-between text-[11px] font-mono text-text-muted pt-1">

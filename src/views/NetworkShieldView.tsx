@@ -1,24 +1,22 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ShieldCheck,
   ShieldAlert,
-  ShieldX,
   Search,
   RefreshCw,
-  Filter,
   Lock,
-  Unlock,
   AlertTriangle,
   Globe,
   Radio,
   Server,
-  Layers,
   X,
   CheckCircle2,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { NetworkConnection, FirewallRuleInfo } from '../types/networkShield';
+import { NetworkConnection } from '../types/networkShield';
+import { useAccessibleModal } from '../components/common/useAccessibleModal';
+import { PaginationBar, usePagination } from '../components/common/VirtualList';
 
 export function NetworkShieldView() {
   const { t } = useTranslation();
@@ -32,16 +30,28 @@ export function NetworkShieldView() {
   const fetchFirewallRules = useAppStore((s) => s.fetchFirewallRules);
   const blockProcessFirewall = useAppStore((s) => s.blockProcessFirewall);
   const unblockProcessFirewall = useAppStore((s) => s.unblockProcessFirewall);
+  const addToast = useAppStore((s) => s.addToast);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [protocolFilter, setProtocolFilter] = useState<'ALL' | 'TCP' | 'UDP'>('ALL');
-  const [stateFilter, setStateFilter] = useState<string>('ALL');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
 
   // Modal / Drawer state for blocking
   const [selectedConnection, setSelectedConnection] = useState<NetworkConnection | null>(null);
   const [customRuleName, setCustomRuleName] = useState<string>('');
   const [showRulesDrawer, setShowRulesDrawer] = useState<boolean>(false);
+
+  const blockModalTitleId = useId();
+  const rulesModalTitleId = useId();
+  const blockModalRef = useAccessibleModal({
+    isOpen: Boolean(selectedConnection),
+    onClose: () => setSelectedConnection(null),
+    disabled: isNetworkLoading,
+  });
+  const rulesModalRef = useAccessibleModal({
+    isOpen: showRulesDrawer,
+    onClose: () => setShowRulesDrawer(false),
+  });
 
   useEffect(() => {
     fetchActiveConnections();
@@ -74,9 +84,6 @@ export function NetworkShieldView() {
       if (protocolFilter !== 'ALL' && conn.protocol.toUpperCase() !== protocolFilter) {
         return false;
       }
-      if (stateFilter !== 'ALL' && conn.state.toUpperCase() !== stateFilter.toUpperCase()) {
-        return false;
-      }
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesName = conn.processName.toLowerCase().includes(query);
@@ -89,7 +96,9 @@ export function NetworkShieldView() {
       }
       return true;
     });
-  }, [connections, protocolFilter, stateFilter, searchQuery]);
+  }, [connections, protocolFilter, searchQuery]);
+
+  const { page, totalPages, pageSize, totalItems, pagedItems, setPage } = usePagination(filteredConnections, 100);
 
   const stats = useMemo(() => {
     let tcpEstablished = 0;
@@ -119,14 +128,38 @@ export function NetworkShieldView() {
   };
 
   const handleConfirmBlock = async () => {
-    if (!selectedConnection) return;
+    const trimmedRule = customRuleName.trim();
+    if (!selectedConnection || !trimmedRule) {
+      addToast({
+        type: 'warning',
+        title: t('networkShield.modal.ruleNameRequired', 'Rule Name Required'),
+        message: t('networkShield.modal.ruleNameRequiredDesc', 'Please enter a valid firewall rule name.'),
+      });
+      return;
+    }
     const path = selectedConnection.processPath || selectedConnection.processName;
-    await blockProcessFirewall(path, customRuleName);
-    setSelectedConnection(null);
+    try {
+      await blockProcessFirewall(path, trimmedRule);
+      setSelectedConnection(null);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('networkShield.modal.blockFailed', 'Firewall Block Failed'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   const handleUnblockRule = async (ruleName: string) => {
-    await unblockProcessFirewall(ruleName);
+    try {
+      await unblockProcessFirewall(ruleName);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('networkShield.modal.unblockFailed', 'Firewall Unblock Failed'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   return (
@@ -149,24 +182,26 @@ export function NetworkShieldView() {
 
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => setShowRulesDrawer(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-xs font-mono bg-surface border border-border text-text-primary hover:bg-surface-hover transition-colors"
           >
             <Lock className="w-3.5 h-3.5 text-brand" />
-            <span>Rules ({firewallRules.length})</span>
+            <span>{t('networkShield.rulesBtn', { count: firewallRules.length, defaultValue: `Rules (${firewallRules.length})` })}</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-xs font-mono border transition-colors ${
               autoRefresh
                 ? 'bg-surface-active text-brand border-brand/30'
                 : 'bg-surface text-text-muted border-border hover:text-text-primary'
             }`}
-            aria-label={autoRefresh ? 'Pause Auto Refresh' : 'Resume Auto Refresh'}
+            aria-label={autoRefresh ? t('networkShield.pauseRefresh', 'Pause Auto Refresh') : t('networkShield.resumeRefresh', 'Resume Auto Refresh')}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${autoRefresh ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
-            <span>{autoRefresh ? '2s Polling' : 'Paused'}</span>
+            <span>{autoRefresh ? t('networkShield.pollingLabel', '2s Polling') : t('networkShield.pausedLabel', 'Paused')}</span>
           </button>
         </div>
       </div>
@@ -268,14 +303,14 @@ export function NetworkShieldView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-mono">
-              {filteredConnections.length === 0 ? (
+              {pagedItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-text-muted">
                     {t('networkShield.table.no_connections')}
                   </td>
                 </tr>
               ) : (
-                filteredConnections.slice(0, 100).map((conn, idx) => {
+                pagedItems.map((conn, idx) => {
                   const isBlocked = blockedProgramsSet.has(conn.processName.toLowerCase());
                   return (
                     <tr
@@ -289,7 +324,7 @@ export function NetworkShieldView() {
                           </span>
                           <span className="text-[10px] text-text-muted">PID: {conn.pid}</span>
                           {isBlocked && (
-                            <span className="px-1.5 py-0.2 rounded text-[9px] bg-status-danger/10 text-status-danger border border-status-danger/20">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] bg-status-danger/10 text-status-danger border border-status-danger/20">
                               {t('networkShield.table.blocked_badge')}
                             </span>
                           )}
@@ -343,21 +378,44 @@ export function NetworkShieldView() {
             </tbody>
           </table>
         </div>
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          showingLabel={t('networkShield.showingConnections', {
+            shown: pagedItems.length,
+            total: totalItems,
+            defaultValue: `Showing ${pagedItems.length} of ${totalItems}`,
+          })}
+        />
       </div>
 
       {/* Safety Confirmation Modal for Blocking Process */}
       {selectedConnection && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="bg-surface border border-border rounded-[8px] max-w-md w-full p-6 space-y-4 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={blockModalTitleId}
+        >
+          <div
+            ref={blockModalRef}
+            tabIndex={-1}
+            className="bg-surface border border-border rounded-[8px] max-w-md w-full p-6 space-y-4 shadow-2xl focus:outline-none"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-status-danger">
                 <ShieldAlert className="w-5 h-5" />
-                <h3 className="text-sm font-semibold text-text-primary">
+                <h3 id={blockModalTitleId} className="text-sm font-semibold text-text-primary">
                   {t('networkShield.modal.title')}
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedConnection(null)}
+                aria-label={t('common.close', 'Close')}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -371,7 +429,7 @@ export function NetworkShieldView() {
             <div className="p-3 rounded-[6px] bg-surface-subtle border border-border font-mono text-xs space-y-1">
               <div className="text-text-primary font-semibold">{selectedConnection.processName}</div>
               <div className="text-text-muted text-[11px]">
-                {selectedConnection.processPath || 'System executable'}
+                {selectedConnection.processPath || t('networkShield.modal.systemExecutable', 'System executable')}
               </div>
             </div>
 
@@ -389,14 +447,16 @@ export function NetworkShieldView() {
 
             <div className="flex justify-end gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setSelectedConnection(null)}
                 className="px-3 py-1.5 rounded-[6px] bg-surface-subtle border border-border text-text-secondary hover:text-text-primary text-xs font-medium transition-colors"
               >
-                Cancel
+                {t('common.cancel', 'Cancel')}
               </button>
               <button
+                type="button"
                 onClick={handleConfirmBlock}
-                disabled={isNetworkLoading}
+                disabled={isNetworkLoading || !customRuleName.trim()}
                 className="px-4 py-1.5 rounded-[6px] bg-status-danger hover:bg-status-danger/90 text-white text-xs font-medium transition-colors disabled:opacity-50"
               >
                 {t('networkShield.modal.block_confirm')}
@@ -408,17 +468,28 @@ export function NetworkShieldView() {
 
       {/* Rules Drawer / Modal */}
       {showRulesDrawer && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="bg-surface border border-border rounded-[8px] max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={rulesModalTitleId}
+        >
+          <div
+            ref={rulesModalRef}
+            tabIndex={-1}
+            className="bg-surface border border-border rounded-[8px] max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col focus:outline-none"
+          >
             <div className="flex items-center justify-between border-b border-border/40 pb-3">
               <div className="flex items-center gap-2">
                 <Lock className="w-5 h-5 text-brand" />
-                <h3 className="text-sm font-semibold text-text-primary">
+                <h3 id={rulesModalTitleId} className="text-sm font-semibold text-text-primary">
                   {t('networkShield.modal.rules_drawer_title')}
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setShowRulesDrawer(false)}
+                aria-label={t('common.close', 'Close')}
                 className="text-text-muted hover:text-text-primary transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -447,6 +518,7 @@ export function NetworkShieldView() {
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => handleUnblockRule(rule.name)}
                       disabled={isNetworkLoading}
                       className="px-2.5 py-1 rounded-[4px] bg-surface hover:bg-status-danger/10 hover:text-status-danger border border-border text-[11px] text-text-secondary shrink-0 transition-colors"
@@ -460,10 +532,11 @@ export function NetworkShieldView() {
 
             <div className="flex justify-end pt-2 border-t border-border/40">
               <button
+                type="button"
                 onClick={() => setShowRulesDrawer(false)}
                 className="px-4 py-1.5 rounded-[6px] bg-surface-subtle border border-border text-text-primary text-xs font-medium hover:bg-surface-hover transition-colors"
               >
-                Close
+                {t('common.close', 'Close')}
               </button>
             </div>
           </div>

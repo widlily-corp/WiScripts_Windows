@@ -13,6 +13,19 @@ export type MarkdownBlock =
   | { type: 'code'; lang: string; code: string }
   | { type: 'paragraph'; text: string };
 
+const ALLOWED_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+function getSafeHref(rawUrl: string): string | null {
+  const cleaned = rawUrl.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!cleaned) return null;
+  try {
+    const parsed = new URL(cleaned);
+    return ALLOWED_LINK_PROTOCOLS.has(parsed.protocol.toLowerCase()) ? cleaned : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   const regex = /\[([^\]]+)\]\(([^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/g;
@@ -25,18 +38,23 @@ export function parseInline(text: string): React.ReactNode[] {
     }
 
     if (match[1] !== undefined && match[2] !== undefined) {
-      // Link [text](url)
-      nodes.push(
-        <a
-          key={`link-${match.index}`}
-          href={match[2]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-brand hover:underline font-medium"
-        >
-          {match[1]}
-        </a>
-      );
+      // Link [text](url) — strictly allow only http:, https:, mailto:
+      const safeHref = getSafeHref(match[2]);
+      if (safeHref) {
+        nodes.push(
+          <a
+            key={`link-${match.index}`}
+            href={safeHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand hover:underline font-medium"
+          >
+            {match[1]}
+          </a>
+        );
+      } else {
+        nodes.push(<span key={`link-text-${match.index}`}>{match[1]}</span>);
+      }
     } else if (match[3] !== undefined) {
       // Inline code `code`
       nodes.push(

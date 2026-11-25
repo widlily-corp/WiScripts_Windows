@@ -189,7 +189,7 @@ export function Navigation() {
             })
           ) : (
             <div className="py-6 text-center text-xs text-text-muted font-mono">
-              Ничего не найдено
+              {t('nav.no_results', 'Nothing found')}
             </div>
           )
         ) : (

@@ -55,41 +55,43 @@ export function SmartRamView() {
     return () => clearInterval(interval);
   }, [autoRefresh, fetchMemoryBreakdown]);
 
-  // Memory calculations
+  // Memory calculations — never fabricate 16 GB / 16384 MB defaults before real telemetry loads
+  const hasMemoryData = Boolean(memoryBreakdown && memoryBreakdown.totalPhysicalBytes > 0);
+
   const totalGb = useMemo(() => {
-    if (!memoryBreakdown) return 16;
+    if (!hasMemoryData || !memoryBreakdown) return '—';
     return (memoryBreakdown.totalPhysicalBytes / (1024 * 1024 * 1024)).toFixed(1);
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
   const inUseMb = useMemo(() => {
-    if (!memoryBreakdown) return 0;
+    if (!hasMemoryData || !memoryBreakdown) return 0;
     return Math.round(memoryBreakdown.usedBytes / (1024 * 1024));
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
   const standbyMb = useMemo(() => {
-    if (!memoryBreakdown) return 0;
+    if (!hasMemoryData || !memoryBreakdown) return 0;
     return Math.round(memoryBreakdown.standbyBytes / (1024 * 1024));
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
   const modifiedMb = useMemo(() => {
-    if (!memoryBreakdown) return 0;
+    if (!hasMemoryData || !memoryBreakdown) return 0;
     return Math.round(memoryBreakdown.modifiedBytes / (1024 * 1024));
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
   const freeMb = useMemo(() => {
-    if (!memoryBreakdown) return 0;
+    if (!hasMemoryData || !memoryBreakdown) return 0;
     return Math.round(memoryBreakdown.freeBytes / (1024 * 1024));
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
   const totalMb = useMemo(() => {
-    if (!memoryBreakdown || memoryBreakdown.totalPhysicalBytes === 0) return 16384;
+    if (!hasMemoryData || !memoryBreakdown) return 0;
     return Math.round(memoryBreakdown.totalPhysicalBytes / (1024 * 1024));
-  }, [memoryBreakdown]);
+  }, [hasMemoryData, memoryBreakdown]);
 
-  const inUsePercent = Math.max(0, Math.min(100, (inUseMb / totalMb) * 100));
-  const standbyPercent = Math.max(0, Math.min(100, (standbyMb / totalMb) * 100));
-  const modifiedPercent = Math.max(0, Math.min(100, (modifiedMb / totalMb) * 100));
-  const freePercent = Math.max(0, Math.min(100, 100 - inUsePercent - standbyPercent - modifiedPercent));
+  const inUsePercent = totalMb > 0 ? Math.max(0, Math.min(100, (inUseMb / totalMb) * 100)) : 0;
+  const standbyPercent = totalMb > 0 ? Math.max(0, Math.min(100, (standbyMb / totalMb) * 100)) : 0;
+  const modifiedPercent = totalMb > 0 ? Math.max(0, Math.min(100, (modifiedMb / totalMb) * 100)) : 0;
+  const freePercent = totalMb > 0 ? Math.max(0, Math.min(100, 100 - inUsePercent - standbyPercent - modifiedPercent)) : 0;
 
   const handlePurgeStandby = async () => {
     await purgeStandbyMemory('all');
@@ -217,8 +219,14 @@ export function SmartRamView() {
               <span>{t('smartRam.distribution.in_use')}</span>
             </div>
             <div className="mt-2 text-lg font-mono font-semibold text-text-primary tabular-nums">
-              {inUseMb.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-text-muted">MB ({inUsePercent.toFixed(0)}%)</span>
+              {hasMemoryData ? (
+                <>
+                  {inUseMb.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-text-muted">MB ({inUsePercent.toFixed(0)}%)</span>
+                </>
+              ) : (
+                <span className="text-text-muted">—</span>
+              )}
             </div>
           </div>
 
@@ -228,8 +236,14 @@ export function SmartRamView() {
               <span>{t('smartRam.distribution.standby')}</span>
             </div>
             <div className="mt-2 text-lg font-mono font-semibold text-purple-400 tabular-nums">
-              {standbyMb.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-text-muted">MB ({standbyPercent.toFixed(0)}%)</span>
+              {hasMemoryData ? (
+                <>
+                  {standbyMb.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-text-muted">MB ({standbyPercent.toFixed(0)}%)</span>
+                </>
+              ) : (
+                <span className="text-text-muted">—</span>
+              )}
             </div>
           </div>
 
@@ -239,8 +253,14 @@ export function SmartRamView() {
               <span>{t('smartRam.distribution.modified')}</span>
             </div>
             <div className="mt-2 text-lg font-mono font-semibold text-amber-400 tabular-nums">
-              {modifiedMb.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-text-muted">MB ({modifiedPercent.toFixed(0)}%)</span>
+              {hasMemoryData ? (
+                <>
+                  {modifiedMb.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-text-muted">MB ({modifiedPercent.toFixed(0)}%)</span>
+                </>
+              ) : (
+                <span className="text-text-muted">—</span>
+              )}
             </div>
           </div>
 
@@ -250,8 +270,14 @@ export function SmartRamView() {
               <span>{t('smartRam.distribution.free')}</span>
             </div>
             <div className="mt-2 text-lg font-mono font-semibold text-emerald-400 tabular-nums">
-              {freeMb.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-text-muted">MB ({freePercent.toFixed(0)}%)</span>
+              {hasMemoryData ? (
+                <>
+                  {freeMb.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-text-muted">MB ({freePercent.toFixed(0)}%)</span>
+                </>
+              ) : (
+                <span className="text-text-muted">—</span>
+              )}
             </div>
           </div>
         </div>

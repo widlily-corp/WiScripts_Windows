@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { ExecutionSummary } from '../types';
-import { FileCode, Play, Copy, Check, ShieldAlert, Package, Layers, SlidersHorizontal, Loader2 } from 'lucide-react';
+import { FileCode, Play, Copy, Check, ShieldAlert, Package, Layers, SlidersHorizontal, Loader2, CheckSquare, Square } from 'lucide-react';
 
 const PRODUCT_OPTIONS = [
   { id: 'O365ProPlusRetail' },
@@ -38,6 +38,7 @@ export function OdtView() {
   const odtConfig = useAppStore((s) => s.odtConfig);
   const updateOdtConfig = useAppStore((s) => s.updateOdtConfig);
   const generatedXml = useAppStore((s) => s.generatedXml);
+  const setGeneratedXml = useAppStore((s) => s.setGeneratedXml);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
   const isElevated = useAppStore((s) => s.isElevated ?? s.systemInfo?.isElevated ?? false);
   const openSafetyModal = useAppStore((s) => s.openSafetyModal);
@@ -45,13 +46,43 @@ export function OdtView() {
   const isExecuting = useAppStore((s) => s.isExecuting);
   const setIsExecuting = useAppStore((s) => s.setIsExecuting);
 
-  const [copied, setCopied] = useState(false);
+  const addToast = useAppStore((s) => s.addToast);
 
-  const handleCopyXml = () => {
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    invoke<string>('generate_odt_xml', { config: odtConfig })
+      .then((xml) => {
+        if (active) setGeneratedXml(xml);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [odtConfig, setGeneratedXml]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleCopyXml = async () => {
     if (!generatedXml) return;
-    navigator.clipboard.writeText(generatedXml);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(generatedXml);
+      setCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t('common.clipboardError', 'Clipboard Copy Failed'),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   };
 
   const toggleProduct = (productId: string) => {
@@ -225,7 +256,7 @@ export function OdtView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Top Bar Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -288,11 +319,8 @@ export function OdtView() {
               {PRODUCT_OPTIONS.map((prod) => {
                 const isSelected = odtConfig.products.includes(prod.id);
                 return (
-                  <div
+                  <label
                     key={prod.id}
-                    onClick={() => {
-                      if (!isExecuting) toggleProduct(prod.id);
-                    }}
                     className={`rounded-[6px] border p-3 flex items-start gap-3 transition-colors ${
                       isExecuting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
                     } ${
@@ -305,7 +333,9 @@ export function OdtView() {
                       type="checkbox"
                       checked={isSelected}
                       disabled={isExecuting}
-                      onChange={() => {}}
+                      onChange={() => {
+                        if (!isExecuting) toggleProduct(prod.id);
+                      }}
                       className="mt-0.5 h-4 w-4 rounded border-border bg-surface text-brand disabled:cursor-not-allowed"
                     />
                     <div className="space-y-0.5 min-w-0 flex-1">
@@ -313,7 +343,7 @@ export function OdtView() {
                       <div className="text-[11px] text-text-muted">{t(`odtProducts.${prod.id}Desc`)}</div>
                       <div className="text-[10px] font-mono text-brand/80">{prod.id}</div>
                     </div>
-                  </div>
+                  </label>
                 );
               })}
             </div>
@@ -397,6 +427,8 @@ export function OdtView() {
                   <button
                     key={app.id}
                     type="button"
+                    role="checkbox"
+                    aria-checked={isExcluded}
                     disabled={isExecuting}
                     onClick={() => toggleExcludedApp(app.id)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-[6px] border text-xs font-medium text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -405,13 +437,11 @@ export function OdtView() {
                         : 'border-border-subtle bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary'
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isExcluded}
-                      disabled={isExecuting}
-                      readOnly
-                      className="h-3.5 w-3.5 rounded border-border text-status-warning disabled:cursor-not-allowed"
-                    />
+                    {isExcluded ? (
+                      <CheckSquare className="h-3.5 w-3.5 shrink-0 text-status-warning" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                    )}
                     <span className="truncate">{t(`odtApps.${app.id}`)}</span>
                   </button>
                 );

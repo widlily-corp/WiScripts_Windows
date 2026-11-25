@@ -63,7 +63,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -94,16 +94,22 @@ export function SettingsView() {
                   {t('settings.globalDryRunDesc')}
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={dryRunMode}
-                  onChange={(e) => setDryRunMode(e.target.checked)}
-                  aria-label={t('settings.globalDryRunLabel')}
-                  className="sr-only peer"
+              <button
+                type="button"
+                role="switch"
+                aria-checked={dryRunMode}
+                aria-label={t('settings.globalDryRunLabel')}
+                onClick={() => setDryRunMode(!dryRunMode)}
+                className={`relative inline-flex h-5 w-9 shrink-0 mt-0.5 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  dryRunMode ? 'bg-brand' : 'bg-surface-active'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    dryRunMode ? 'translate-x-4' : 'translate-x-0'
+                  }`}
                 />
-                <div className="w-9 h-5 bg-surface-active peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"></div>
-              </label>
+              </button>
             </div>
 
             <div className={`rounded-[6px] border p-3 text-xs font-mono ${
@@ -122,13 +128,16 @@ export function SettingsView() {
                 <RefreshCw className="h-4 w-4 text-brand" />
                 <h3 className="text-sm font-semibold text-text-primary">{t('settings.autoUpdaterTitle')}</h3>
               </div>
-              <button
-                onClick={() => triggerMockUpdate()}
-                className="text-[10px] font-mono px-2 py-0.5 border border-brand/30 bg-brand/10 hover:bg-brand/20 text-brand rounded transition-colors"
-                title={t('settings.mockUpdateTitle')}
-              >
-                {t('settings.mockUpdate')}
-              </button>
+              {import.meta.env.DEV && (
+                <button
+                  type="button"
+                  onClick={() => triggerMockUpdate()}
+                  className="text-[10px] font-mono px-2 py-0.5 border border-brand/30 bg-brand/10 hover:bg-brand/20 text-brand rounded transition-colors"
+                  title={t('settings.mockUpdateTitle')}
+                >
+                  {t('settings.mockUpdate')}
+                </button>
+              )}
             </div>
 
             <div className="flex items-start justify-between gap-4">
@@ -138,16 +147,22 @@ export function SettingsView() {
                   {t('settings.autoCheckDesc')}
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-                <input
-                  type="checkbox"
-                  checked={autoCheckUpdates}
-                  onChange={(e) => setAutoCheckUpdates(e.target.checked)}
-                  aria-label={t('settings.autoCheckLabel')}
-                  className="sr-only peer"
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoCheckUpdates}
+                aria-label={t('settings.autoCheckLabel')}
+                onClick={() => setAutoCheckUpdates(!autoCheckUpdates)}
+                className={`relative inline-flex h-5 w-9 shrink-0 mt-0.5 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  autoCheckUpdates ? 'bg-brand' : 'bg-surface-active'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    autoCheckUpdates ? 'translate-x-4' : 'translate-x-0'
+                  }`}
                 />
-                <div className="w-9 h-5 bg-surface-active peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand"></div>
-              </label>
+              </button>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-border-subtle text-xs">

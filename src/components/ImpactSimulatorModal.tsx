@@ -1,13 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ShieldAlert,
-  ShieldCheck,
   Sliders,
   X,
   Search,
   CheckCircle2,
-  AlertTriangle,
   Play,
   Terminal,
   Database,
@@ -17,14 +14,15 @@ import {
   Wifi,
   Cpu,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import type { ScriptManifestEntry } from '../types';
 import {
   analyzeScriptImpact,
   ImpactCategory,
   ImpactActionType,
-  ImpactItem,
 } from '../utils/scriptImpactAnalyzer';
+import { useAccessibleModal } from './common/useAccessibleModal';
 
 export interface ImpactSimulatorModalProps {
   script: ScriptManifestEntry | null;
@@ -74,24 +72,18 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
     );
   }, [scriptContent, script]);
 
+  const modalRef = useAccessibleModal({
+    isOpen,
+    onClose,
+    disabled: isExecutingScript,
+  });
+
   // Synchronize elevation checkbox with analysis recommendation or parent state
   useEffect(() => {
     if (isOpen) {
       setShouldElevate(analysis.requiresAdmin || isElevated);
     }
   }, [isOpen, analysis.requiresAdmin, isElevated]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -193,9 +185,13 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="impact-simulator-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in"
     >
-      <div className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface border border-border rounded-[8px] shadow-2xl overflow-hidden focus:outline-none"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-surface-subtle/40">
           <div className="flex items-center gap-3 min-w-0">
@@ -234,8 +230,10 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-text-muted hover:text-text-primary rounded-[6px] hover:bg-surface-elevated transition-colors"
+            className="p-1.5 text-text-muted hover:text-text-primary rounded-[6px] hover:bg-surface-hover transition-colors"
+            aria-label={t('script_runner.history_modal_close', 'Close')}
             title={t('script_runner.history_modal_close', 'Close')}
           >
             <X className="h-4 w-4" />
@@ -280,7 +278,7 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('script_runner.search_impact_placeholder', 'Filter affected targets, keys, services...')}
-              className="w-full pl-8 pr-3 py-1 text-xs bg-surface-card border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-hidden focus:border-brand"
+              className="w-full pl-8 pr-3 py-1 text-xs bg-surface border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
             />
           </div>
         </div>
@@ -288,22 +286,24 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
         {/* Category Filter Chips */}
         <div className="flex items-center gap-1.5 px-5 py-2 border-b border-border bg-surface-subtle/10 overflow-x-auto text-xs">
           <button
+            type="button"
             onClick={() => setSelectedCategory('all')}
             className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
               selectedCategory === 'all'
-                ? 'bg-brand text-brand-foreground'
-                : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                ? 'bg-brand text-white'
+                : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
             }`}
           >
             {t('script_runner.filter_all', 'All Items')} ({analysis.summary.totalItems})
           </button>
           {analysis.summary.servicesCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('service')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'service'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_services', 'Services')} ({analysis.summary.servicesCount})
@@ -311,11 +311,12 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
           )}
           {analysis.summary.registryCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('registry')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'registry'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_registry', 'Registry')} ({analysis.summary.registryCount})
@@ -323,11 +324,12 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
           )}
           {analysis.summary.tasksCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('scheduled_task')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'scheduled_task'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_tasks', 'Scheduled Tasks')} ({analysis.summary.tasksCount})
@@ -335,11 +337,12 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
           )}
           {analysis.summary.filesystemCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('filesystem')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'filesystem'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_filesystem', 'Filesystem')} ({analysis.summary.filesystemCount})
@@ -347,11 +350,12 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
           )}
           {analysis.summary.networkCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('network')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'network'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_network', 'Network')} ({analysis.summary.networkCount})
@@ -359,11 +363,12 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
           )}
           {analysis.summary.processCount > 0 && (
             <button
+              type="button"
               onClick={() => setSelectedCategory('process')}
               className={`px-2.5 py-1 rounded-[6px] font-medium transition-colors ${
                 selectedCategory === 'process'
-                  ? 'bg-brand text-brand-foreground'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated'
+                  ? 'bg-brand text-white'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
               }`}
             >
               {t('script_runner.category_processes', 'Processes')} ({analysis.summary.processCount})
@@ -389,7 +394,7 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
             filteredItems.map((item) => (
               <div
                 key={item.id}
-                className="flex items-start justify-between gap-3 p-3 bg-surface-card border border-border rounded-[6px] hover:border-border-hover transition-colors"
+                className="flex items-start justify-between gap-3 p-3 bg-surface border border-border rounded-[6px] hover:border-border-focus/50 transition-colors"
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <div className="p-1.5 rounded bg-surface-subtle/50 mt-0.5 shrink-0">
@@ -402,7 +407,7 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
                         {item.target}
                       </span>
                       {item.isCritical && (
-                        <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40">
                           {t('script_runner.critical_warning', 'Touches critical operating system components or core security services.')}
                         </span>
                       )}
@@ -439,12 +444,14 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary rounded-[6px] transition-colors"
             >
               {t('script_runner.cancel', 'Cancel')}
             </button>
             <button
+              type="button"
               disabled={isExecutingScript}
               onClick={() => {
                 onClose();
@@ -456,6 +463,7 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
               <span>{t('script_runner.execute_dryrun_cta', 'Execute Dry-Run')}</span>
             </button>
             <button
+              type="button"
               disabled={isExecutingScript}
               onClick={() => {
                 onClose();
@@ -464,7 +472,7 @@ export const ImpactSimulatorModal: React.FC<ImpactSimulatorModalProps> = ({
               className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-[6px] transition-colors disabled:opacity-50 ${
                 shouldElevate
                   ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                  : 'bg-brand hover:bg-brand/90 text-brand-foreground'
+                  : 'bg-brand hover:bg-brand-hover text-white'
               }`}
             >
               <Play className="h-3.5 w-3.5" />

@@ -4,6 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/useAppStore';
 import { TaskProgressPayload } from '../types';
 import { Loader2, Terminal, AlertOctagon, CheckCircle2, X } from 'lucide-react';
+import { useAccessibleModal } from './common/useAccessibleModal';
 
 export function ExecutionProgressModal() {
   const { t } = useTranslation();
@@ -64,7 +65,7 @@ export function ExecutionProgressModal() {
         unlisten();
       }
     };
-  }, [isExecuting, setCurrentProgress, setExecutionProgress, addLog]);
+  }, [isExecuting, setCurrentProgress, setExecutionProgress, addLog, t]);
 
   // Auto-scroll log console on logs update
   useEffect(() => {
@@ -73,11 +74,17 @@ export function ExecutionProgressModal() {
     }
   }, [logs]);
 
+  const hasError = logs.some((l) => l.level === 'error');
+  const isCompleted = executionProgress >= 100;
+  const canClose = totalSteps === 0 || executionProgress >= 100 || hasError;
+  const modalRef = useAccessibleModal({
+    isOpen: isExecuting,
+    onClose: () => setIsExecuting(false),
+    disabled: !canClose,
+  });
+
   if (!isExecuting) return null;
 
-  const hasError = logs.some((l) => l.level === 'error');
-  const isCompleted = executionProgress >= 100 || (totalSteps === 0 && executionProgress === 100);
-  const canClose = totalSteps === 0 || executionProgress >= 100 || hasError;
   const progressPercent = Math.min(Math.max(executionProgress, 0), 100);
 
   return (
@@ -87,7 +94,11 @@ export function ExecutionProgressModal() {
       aria-modal="true"
       aria-labelledby="progress-modal-title"
     >
-      <div className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl space-y-5">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl space-y-5 focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border pb-4 relative">
           <div className="flex items-center gap-3">
@@ -109,7 +120,7 @@ export function ExecutionProgressModal() {
                   {dryRunMode ? t('execution_modal.mode_dry_run') : t('execution_modal.mode_live')}
                 </span>
                 {dryRunMode && (
-                  <span className="rounded bg-brand/10 px-1.5 py-0.2 font-mono text-[9px] uppercase text-brand border border-brand/20">
+                  <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[9px] uppercase text-brand border border-brand/20">
                     {t('execution_modal.dry_run_active')}
                   </span>
                 )}
@@ -206,8 +217,9 @@ export function ExecutionProgressModal() {
         {canClose && (
           <div className="flex justify-end pt-2">
             <button
+              type="button"
               onClick={() => setIsExecuting(false)}
-              className="px-4 py-2 bg-brand text-brand-contrast rounded-[6px] text-sm font-medium hover:bg-brand/90 transition-colors"
+              className="px-4 py-2 bg-brand text-white rounded-[6px] text-sm font-medium hover:bg-brand-hover transition-colors"
             >
               {t('execution_modal.close')}
             </button>

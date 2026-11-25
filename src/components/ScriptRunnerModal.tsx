@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sliders, RotateCcw, X, Play, Shield, ShieldCheck, ShieldAlert } from 'lucide-react';
 import type { ScriptManifestEntry, ScriptParameterValue } from '../types';
+import { useAccessibleModal } from './common/useAccessibleModal';
 
 export interface ScriptRunnerModalProps {
   script: ScriptManifestEntry | null;
@@ -27,11 +28,18 @@ export function ScriptRunnerModal({
   onExecute,
 }: ScriptRunnerModalProps) {
   const { t } = useTranslation();
+  const titleId = useId();
 
   const [values, setValues] = useState<Record<string, ScriptParameterValue>>(initialValues);
   const [errors, setErrors] = useState<Record<string, string>>(validationErrors);
   const [runAsAdmin, setRunAsAdmin] = useState<boolean>(false);
   const [dryRun, setDryRun] = useState<boolean>(false);
+
+  const modalRef = useAccessibleModal({
+    isOpen: Boolean(script),
+    onClose,
+    disabled: isExecutingScript,
+  });
 
   useEffect(() => {
     setValues(initialValues);
@@ -110,11 +118,16 @@ export function ScriptRunnerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
     >
-      <div className="flex flex-col w-full max-w-xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="flex flex-col w-full max-w-xl max-h-[90vh] bg-surface border border-border rounded-[8px] shadow-2xl overflow-hidden focus:outline-none"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
           <div className="flex items-center gap-3">
@@ -122,7 +135,7 @@ export function ScriptRunnerModal({
               <Sliders className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-text-primary">
+              <h2 id={titleId} className="text-base font-bold text-text-primary">
                 {t('script_runner.param_dialog_title', 'Configure Script Parameters')}
               </h2>
               <p className="text-xs text-text-secondary">
@@ -131,7 +144,9 @@ export function ScriptRunnerModal({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={t('common.close', 'Close')}
             className="p-1.5 rounded-[6px] text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
           >
             <X className="h-4 w-4" />
@@ -148,7 +163,7 @@ export function ScriptRunnerModal({
               <div
                 key={param.name}
                 className={`p-3 rounded-[6px] border bg-surface-subtle space-y-1.5 ${
-                  error ? 'border-status-error/60' : 'border-border'
+                  error ? 'border-status-danger/60' : 'border-border'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -167,9 +182,12 @@ export function ScriptRunnerModal({
                   <div className="pt-1">
                     <button
                       type="button"
+                      role="switch"
+                      aria-checked={Boolean(value)}
+                      aria-label={param.name}
                       onClick={() => handleValueChange(param.name, !value)}
                       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none border border-transparent ${
-                        value ? 'bg-brand' : 'bg-surface-card border-border'
+                        value ? 'bg-brand' : 'bg-surface border-border'
                       }`}
                     >
                       <span
@@ -191,10 +209,10 @@ export function ScriptRunnerModal({
                           : e.target.value
                       )
                     }
-                    className="w-full bg-surface-card border border-border rounded-[4px] px-3 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                    className="w-full bg-surface border border-border rounded-[4px] px-3 py-1.5 text-xs font-mono text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                   />
                 )}
-                {error && <p className="text-[11px] text-status-error">{error}</p>}
+                {error && <p className="text-[11px] text-status-danger">{error}</p>}
               </div>
             );
           })}
@@ -220,7 +238,7 @@ export function ScriptRunnerModal({
                 checked={isElevated || runAsAdmin}
                 disabled={isElevated || isExecutingScript}
                 onChange={(e) => setRunAsAdmin(e.target.checked)}
-                className="rounded border-border text-brand focus:ring-brand bg-surface-card h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
+                className="rounded border-border text-brand focus:ring-brand bg-surface h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
               />
               {isElevated ? (
                 <ShieldCheck className="h-3.5 w-3.5 text-status-success" />
@@ -239,7 +257,7 @@ export function ScriptRunnerModal({
                 checked={dryRun}
                 disabled={isExecutingScript}
                 onChange={(e) => setDryRun(e.target.checked)}
-                className="rounded border-border text-brand focus:ring-brand bg-surface-card h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
+                className="rounded border-border text-brand focus:ring-brand bg-surface h-3.5 w-3.5 cursor-pointer disabled:opacity-50"
               />
               <span className="font-medium">{t('script_runner.dry_run', 'Dry Run')}</span>
             </label>
@@ -248,16 +266,18 @@ export function ScriptRunnerModal({
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleResetDefaults}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>{t('script_runner.param_dialog_reset', 'Reset to Defaults')}</span>
             </button>
 
             <button
+              type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface-card hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
+              className="px-3 py-1.5 rounded-[4px] text-xs font-medium bg-surface hover:bg-surface-hover border border-border text-text-secondary hover:text-text-primary transition-colors"
             >
               {t('script_runner.cancel', 'Cancel')}
             </button>

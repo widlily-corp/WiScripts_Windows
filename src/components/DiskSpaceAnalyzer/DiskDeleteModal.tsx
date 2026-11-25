@@ -1,17 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  AlertTriangle,
   Trash2,
   Recycle,
   ShieldAlert,
-  ShieldCheck,
   X,
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
 import { FsTreeNode, RankedFsItem } from '../../types';
 import { formatBytes, formatTabularBytes, isSystemProtectedPath } from '../../utils';
+import { useAccessibleModal } from '../common/useAccessibleModal';
 
 interface DiskDeleteModalProps {
   item: FsTreeNode | RankedFsItem | null;
@@ -35,6 +34,17 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
   const { t } = useTranslation();
   const [usePermanent, setUsePermanent] = useState(false);
   const [confirmInput, setConfirmInput] = useState('');
+  const titleId = useId();
+  const modalRef = useAccessibleModal({
+    isOpen: isOpen && Boolean(item),
+    onClose,
+    disabled: isDeleting,
+  });
+
+  useEffect(() => {
+    setUsePermanent(false);
+    setConfirmInput('');
+  }, [isOpen, item?.path]);
 
   if (!isOpen || !item) return null;
 
@@ -52,8 +62,17 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-surface border border-border rounded-[8px] max-w-lg w-full shadow-2xl overflow-hidden space-y-0 text-text">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="bg-surface border border-border rounded-[8px] max-w-lg w-full shadow-2xl overflow-hidden space-y-0 text-text-primary focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
           <div className="flex items-center gap-2">
@@ -61,7 +80,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
               {isProtected ? <ShieldAlert className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-text">
+              <h3 id={titleId} className="text-sm font-bold text-text-primary">
                 {t('diskAnalyzer.deleteModal.title', 'Safe Deletion Confirmation')}
               </h3>
               <p className="text-xs text-text-muted">
@@ -70,9 +89,11 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="p-1 rounded text-text-muted hover:text-text hover:bg-surface transition-colors"
+            aria-label={t('common.close', 'Close')}
+            className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -84,7 +105,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
           <div className="bg-surface-subtle border border-border rounded-[6px] p-3 space-y-1.5 font-mono text-xs">
             <div className="flex justify-between">
               <span className="text-text-muted">{t('diskAnalyzer.deleteModal.targetPath', 'Target Path:')}</span>
-              <span className="text-text font-bold truncate max-w-xs" title={path}>{path}</span>
+              <span className="text-text-primary font-bold truncate max-w-xs" title={path}>{path}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-text-muted">{t('diskAnalyzer.deleteModal.targetSize', 'Total Size:')}</span>
@@ -97,7 +118,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
             <div className="bg-brand/10 border border-brand/30 rounded-[6px] p-3 flex items-start gap-2.5 text-xs text-brand">
               <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Safety Dry-Run Preview Mode</span>
+                <span className="font-bold">{t('diskAnalyzer.deleteModal.dryRunTitle', 'Safety Dry-Run Preview Mode')}</span>
                 <p className="text-text-muted mt-0.5">
                   {t('diskAnalyzer.deleteModal.dryRunNotice', 'Dry-Run Simulation Mode is Active. No files will be modified on disk.')}
                 </p>
@@ -121,13 +142,12 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
           ) : (
             /* Mode Selection */
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-text block">
-                Select Deletion Mode:
-              </label>
+              <span className="text-xs font-semibold text-text-primary block">
+                {t('diskAnalyzer.deleteModal.selectMode', 'Select Deletion Mode:')}
+              </span>
 
               {/* Option 1: Recycle Bin (Safe) */}
-              <div
-                onClick={() => setUsePermanent(false)}
+              <label
                 className={'p-3 rounded-[6px] border cursor-pointer transition-all flex items-start gap-3 ' +
                   (!usePermanent
                     ? 'bg-surface-active border-brand shadow-sm shadow-brand/10'
@@ -135,6 +155,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
               >
                 <input
                   type="radio"
+                  name="disk-delete-mode"
                   checked={!usePermanent}
                   onChange={() => setUsePermanent(false)}
                   className="mt-1 text-brand focus:ring-brand"
@@ -142,7 +163,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <Recycle className="w-4 h-4 text-status-success" />
-                    <span className="font-semibold text-xs text-text">
+                    <span className="font-semibold text-xs text-text-primary">
                       {t('diskAnalyzer.deleteModal.modeRecycleBinTitle', 'Move to Windows Recycle Bin (Safe & Recoverable)')}
                     </span>
                   </div>
@@ -150,11 +171,10 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
                     {t('diskAnalyzer.deleteModal.modeRecycleBinDesc', 'Items can be restored later from the Windows Recycle Bin if needed.')}
                   </p>
                 </div>
-              </div>
+              </label>
 
               {/* Option 2: Permanent Deletion */}
-              <div
-                onClick={() => setUsePermanent(true)}
+              <label
                 className={'p-3 rounded-[6px] border cursor-pointer transition-all flex items-start gap-3 ' +
                   (usePermanent
                     ? 'bg-surface-active border-status-danger shadow-sm shadow-status-danger/10'
@@ -162,6 +182,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
               >
                 <input
                   type="radio"
+                  name="disk-delete-mode"
                   checked={usePermanent}
                   onChange={() => setUsePermanent(true)}
                   className="mt-1 text-status-danger focus:ring-status-danger"
@@ -177,7 +198,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
                     {t('diskAnalyzer.deleteModal.modePermanentDesc', 'Recursively deletes the folder and all sub-elements without Recycle Bin. Frees disk space immediately.')}
                   </p>
                 </div>
-              </div>
+              </label>
 
               {/* Large item confirmation input */}
               {requiresTypeConfirm && (
@@ -190,7 +211,7 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
                     value={confirmInput}
                     onChange={(e) => setConfirmInput(e.target.value)}
                     placeholder="CONFIRM"
-                    className="w-full bg-surface-subtle border border-border focus:border-status-danger rounded-[6px] px-3 py-1.5 text-xs font-mono text-text focus:outline-none"
+                    className="w-full bg-surface-subtle border border-border focus:border-status-danger rounded-[6px] px-3 py-1.5 text-xs font-mono text-text-primary focus:outline-none"
                   />
                 </div>
               )}
@@ -208,14 +229,16 @@ export const DiskDeleteModal: React.FC<DiskDeleteModalProps> = ({
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-2.5 p-4 border-t border-border bg-surface-subtle">
           <button
+            type="button"
             onClick={onClose}
             disabled={isDeleting}
-            className="px-4 py-2 rounded-[6px] border border-border hover:bg-surface-hover text-xs font-medium text-text transition-colors disabled:opacity-50"
+            className="px-4 py-2 rounded-[6px] border border-border hover:bg-surface-hover text-xs font-medium text-text-primary transition-colors disabled:opacity-50"
           >
             {t('common.cancel', 'Cancel')}
           </button>
 
           <button
+            type="button"
             onClick={handleExecute}
             disabled={!canExecute || isDeleting}
             className={'px-4 py-2 rounded-[6px] text-xs font-semibold flex items-center gap-1.5 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ' +

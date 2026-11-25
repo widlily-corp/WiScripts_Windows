@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FileCode,
@@ -14,6 +14,7 @@ import {
   Sliders,
 } from 'lucide-react';
 import type { ScriptManifestEntry } from '../types';
+import { useAccessibleModal } from './common/useAccessibleModal';
 
 export interface ScriptDetailsModalProps {
   script: ScriptManifestEntry | null;
@@ -40,6 +41,19 @@ export function ScriptDetailsModal({
 }: ScriptDetailsModalProps) {
   const { t } = useTranslation();
   const [copiedHash, setCopiedHash] = useState(false);
+  const titleId = useId();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modalRef = useAccessibleModal({
+    isOpen: Boolean(script),
+    onClose,
+    disabled: isExecutingScript,
+  });
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   if (!script) return null;
 
@@ -47,9 +61,10 @@ export function ScriptDetailsModal({
     try {
       await navigator.clipboard.writeText(hash);
       setCopiedHash(true);
-      setTimeout(() => setCopiedHash(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopiedHash(false), 2000);
     } catch {
-      // ignore
+      // Clipboard unavailable
     }
   };
 
@@ -57,7 +72,7 @@ export function ScriptDetailsModal({
     switch (risk) {
       case 'critical':
         return (
-          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-status-error/15 text-status-error border border-status-error/30 font-semibold">
+          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-status-danger/15 text-status-danger border border-status-danger/30 font-semibold">
             CRITICAL
           </span>
         );
@@ -78,11 +93,16 @@ export function ScriptDetailsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
     >
-      <div className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface border border-border rounded-[8px] shadow-2xl overflow-hidden focus:outline-none"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-surface-subtle">
           <div className="flex items-center gap-3">
@@ -91,26 +111,28 @@ export function ScriptDetailsModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-text-primary tracking-tight">
+                <h2 id={titleId} className="text-base font-bold text-text-primary tracking-tight">
                   {script.name}
                 </h2>
                 {getRiskBadge(script.riskLevel)}
                 {script.requiresAdmin && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-status-warning/15 text-status-warning border border-status-warning/30 font-semibold">
                     <ShieldAlert className="h-3 w-3" />
-                    <span>UAC Required</span>
+                    <span>{t('script_runner.uac_required_badge', 'UAC Required')}</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-text-secondary mt-0.5">
-                {script.path} | v{script.version} | Author: {script.author}
+                {script.path} | v{script.version} | {t('script_runner.author_label', 'Author')}: {script.author}
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-[6px] text-text-secondary hover:text-text-primary hover:bg-surface-hover border border-transparent hover:border-border transition-colors"
+            aria-label={t('script_runner.close_preview', 'Close Preview')}
             title={t('script_runner.close_preview', 'Close Preview')}
           >
             <X className="h-4 w-4" />
@@ -118,7 +140,7 @@ export function ScriptDetailsModal({
         </div>
 
         {/* Modal Metadata Header */}
-        <div className="p-4 bg-surface-card border-b border-border space-y-2 text-xs">
+        <div className="p-4 bg-surface border-b border-border space-y-2 text-xs">
           <p className="text-text-secondary leading-relaxed">
             {script.description}
           </p>
@@ -128,18 +150,19 @@ export function ScriptDetailsModal({
               {script.sha256}
             </code>
             <button
+              type="button"
               onClick={() => handleCopyHash(script.sha256)}
               className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline"
             >
               {copiedHash ? (
                 <>
                   <Check className="h-3 w-3 text-status-success" />
-                  <span className="text-status-success">Copied!</span>
+                  <span className="text-status-success">{t('script_runner.copied_short', 'Copied!')}</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3 w-3" />
-                  <span>Copy Hash</span>
+                  <span>{t('script_runner.copy_hash', 'Copy Hash')}</span>
                 </>
               )}
             </button>
@@ -189,7 +212,7 @@ export function ScriptDetailsModal({
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64 text-text-secondary space-y-2">
               <Loader2 className="h-6 w-6 animate-spin text-brand" />
-              <span className="text-xs">Loading verified script code...</span>
+              <span className="text-xs">{t('script_runner.loading_script_code', 'Loading verified script code...')}</span>
             </div>
           ) : (
             <pre className="font-mono text-xs text-text-code leading-relaxed whitespace-pre-wrap break-all">
@@ -202,17 +225,18 @@ export function ScriptDetailsModal({
         <div className="flex items-center justify-between p-4 border-t border-border bg-surface-subtle">
           <div className="flex items-center gap-2 text-xs text-text-secondary">
             <CheckCircle2 className="h-4 w-4 text-status-success" />
-            <span>SHA-256 Integrity Verified</span>
+            <span>{t('script_runner.sha_verified_label', 'SHA-256 Integrity Verified')}</span>
           </div>
 
           <div className="flex items-center gap-2">
             {onSimulateImpact && script && content && (
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onSimulateImpact(script, content);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface-card hover:bg-surface-hover text-text-primary border border-border transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface hover:bg-surface-hover text-text-primary border border-border transition-colors shadow-xs"
                 title={t('script_runner.simulate_impact_tooltip', 'Preview affected registry keys, services, tasks, and files before execution')}
               >
                 <Sliders className="h-4 w-4 text-text-secondary" />
@@ -221,8 +245,9 @@ export function ScriptDetailsModal({
             )}
 
             <button
+              type="button"
               onClick={() => onLoadToEditor(script)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface-card hover:bg-surface-hover text-text-primary border border-border transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface hover:bg-surface-hover text-text-primary border border-border transition-colors shadow-xs"
             >
               <Code2 className="h-4 w-4" />
               <span>{t('script_runner.load_to_editor', 'Load to Editor')}</span>
@@ -231,9 +256,10 @@ export function ScriptDetailsModal({
             {/* If script does NOT strictly require admin, provide standard Run option */}
             {!script.requiresAdmin && (
               <button
+                type="button"
                 onClick={() => onRunDirectly(script, { runAsAdmin: false })}
                 disabled={isExecutingScript}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface-card hover:bg-surface-hover text-text-primary border border-border transition-colors disabled:opacity-50 shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-xs font-medium bg-surface hover:bg-surface-hover text-text-primary border border-border transition-colors disabled:opacity-50 shadow-xs"
               >
                 <Play className="h-4 w-4 fill-current" />
                 <span>{t('script_runner.run_standard', 'Run Standard')}</span>

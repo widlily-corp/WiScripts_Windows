@@ -21,20 +21,20 @@ import { useAppStore } from '../store/useAppStore';
 import { MAX_HISTORY_ENTRIES, ScriptExecutionRecord, ExecutionStatus } from '../store/slices/scriptRunnerSlice';
 import { ExecutionLogModal } from './ExecutionLogModal';
 import { downloadScriptLogFile } from '../utils/scriptLogExporter';
+import { ConfirmModal } from './common/ConfirmModal';
 
 export const ScriptExecutionHistoryView: React.FC = () => {
   const { t } = useTranslation();
-  const {
-    executionHistory,
-    clearHistory,
-    deleteHistoryEntry,
-    rerunHistoryEntry,
-    setActiveRunnerTab,
-  } = useAppStore();
+  const executionHistory = useAppStore((s) => s.executionHistory);
+  const clearHistory = useAppStore((s) => s.clearHistory);
+  const deleteHistoryEntry = useAppStore((s) => s.deleteHistoryEntry);
+  const rerunHistoryEntry = useAppStore((s) => s.rerunHistoryEntry);
+  const setActiveRunnerTab = useAppStore((s) => s.setActiveRunnerTab);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ExecutionStatus>('all');
   const [selectedRecordForLog, setSelectedRecordForLog] = useState<ScriptExecutionRecord | null>(null);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const historyList = executionHistory || [];
 
@@ -55,9 +55,7 @@ export const ScriptExecutionHistoryView: React.FC = () => {
   });
 
   const handleClearHistory = () => {
-    if (window.confirm(t('script_runner.history_clear_confirm', 'Are you sure you want to clear all execution history records?'))) {
-      clearHistory();
-    }
+    setConfirmClearOpen(true);
   };
 
   const renderStatusBadge = (status: ExecutionStatus, exitCode: number) => {
@@ -88,7 +86,7 @@ export const ScriptExecutionHistoryView: React.FC = () => {
   return (
     <div className="flex flex-col h-full space-y-4">
       {/* Top Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-surface-card border border-border rounded-[8px]">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-surface border border-border rounded-[8px]">
         <div className="flex flex-wrap items-center gap-2">
           {/* Search Input */}
           <div className="relative w-72">
@@ -98,17 +96,18 @@ export const ScriptExecutionHistoryView: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('script_runner.history_search_placeholder', 'Filter history by script name or ID...')}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-subtle/50 border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-hidden focus:border-brand"
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-surface-subtle/50 border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
             />
           </div>
 
           {/* Status Filter Chips */}
           <div className="flex items-center gap-1 bg-surface-subtle/40 p-0.5 rounded-[6px] border border-border text-xs">
             <button
+              type="button"
               onClick={() => setStatusFilter('all')}
               className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${
                 statusFilter === 'all'
-                  ? 'bg-brand text-brand-foreground'
+                  ? 'bg-brand text-white'
                   : 'text-text-secondary hover:text-text-primary'
               }`}
             >
@@ -171,7 +170,7 @@ export const ScriptExecutionHistoryView: React.FC = () => {
 
       {/* History Content Area */}
       {filteredHistory.length === 0 ? (
-        <div className="flex flex-col items-center justify-center flex-1 p-12 bg-surface-card border border-border rounded-[8px] text-center">
+        <div className="flex flex-col items-center justify-center flex-1 p-12 bg-surface border border-border rounded-[8px] text-center">
           <div className="p-3 rounded-full bg-surface-subtle/50 text-text-muted mb-3 border border-border">
             <History className="h-8 w-8" />
           </div>
@@ -183,21 +182,23 @@ export const ScriptExecutionHistoryView: React.FC = () => {
           </p>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setActiveRunnerTab('editor')}
-              className="px-3 py-1.5 text-xs font-medium text-brand-foreground bg-brand hover:bg-brand/90 rounded-[6px] transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-brand hover:bg-brand-hover rounded-[6px] transition-colors"
             >
               {t('script_runner.history_empty_cta_editor', 'Open Script Editor')}
             </button>
             <button
+              type="button"
               onClick={() => setActiveRunnerTab('library')}
-              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-elevated border border-border rounded-[6px] transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-subtle hover:bg-surface-hover border border-border rounded-[6px] transition-colors"
             >
               {t('script_runner.history_empty_cta_library', 'Browse Online Library')}
             </button>
           </div>
         </div>
       ) : (
-        <div className="flex-1 bg-surface-card border border-border rounded-[8px] overflow-hidden flex flex-col">
+        <div className="flex-1 bg-surface border border-border rounded-[8px] overflow-hidden flex flex-col">
           <div className="overflow-x-auto flex-1">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-surface-subtle/40 border-b border-border text-text-muted font-mono uppercase text-[10px]">
@@ -232,11 +233,11 @@ export const ScriptExecutionHistoryView: React.FC = () => {
                           <span className="font-semibold text-text-primary truncate max-w-xs">
                             {record.scriptName}
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-surface-subtle border border-border text-text-muted">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-subtle border border-border text-text-muted">
                             {record.scriptType.toUpperCase()}
                           </span>
                           {record.isDryRun && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
                               DRY-RUN
                             </span>
                           )}
@@ -293,8 +294,9 @@ export const ScriptExecutionHistoryView: React.FC = () => {
 
                           {/* View Log */}
                           <button
+                            type="button"
                             onClick={() => setSelectedRecordForLog(record)}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-elevated hover:bg-surface-elevated/80 border border-border rounded-[4px] transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-subtle hover:bg-surface-hover border border-border rounded-[4px] transition-colors"
                             title={t('script_runner.history_view_log_tooltip', 'Inspect captured output stream and exit code')}
                           >
                             <Eye className="h-3 w-3" />
@@ -303,8 +305,9 @@ export const ScriptExecutionHistoryView: React.FC = () => {
 
                           {/* Download .log */}
                           <button
+                            type="button"
                             onClick={() => downloadScriptLogFile(record)}
-                            className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-surface-elevated transition-colors"
+                            className="p-1 text-text-muted hover:text-text-primary rounded hover:bg-surface-hover transition-colors"
                             title={t('script_runner.history_export_log_tooltip', 'Download output log as a .log file')}
                           >
                             <Download className="h-3.5 w-3.5" />
@@ -335,6 +338,20 @@ export const ScriptExecutionHistoryView: React.FC = () => {
         record={selectedRecordForLog}
         onClose={() => setSelectedRecordForLog(null)}
         onRerun={(rec) => rerunHistoryEntry(rec)}
+      />
+
+      <ConfirmModal
+        isOpen={confirmClearOpen}
+        title={t('script_runner.history_clear', 'Clear History')}
+        description={t('script_runner.history_clear_confirm', 'Are you sure you want to clear all execution history records?')}
+        confirmLabel={t('script_runner.history_clear', 'Clear History')}
+        cancelLabel={t('script_runner.cancel', 'Cancel')}
+        variant="danger"
+        onConfirm={() => {
+          clearHistory();
+          setConfirmClearOpen(false);
+        }}
+        onClose={() => setConfirmClearOpen(false)}
       />
     </div>
   );

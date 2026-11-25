@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SparklineAreaGraphProps {
   data: number[];
@@ -17,13 +18,15 @@ export function SparklineAreaGraph({
   maxValOverride,
   valueFormatter,
 }: SparklineAreaGraphProps) {
+  const { t } = useTranslation();
+
   if (!data || data.length < 2) {
     return (
       <div
         style={{ height }}
         className="w-full bg-surface-subtle border border-border-subtle/50 animate-pulse rounded-[4px] flex items-center justify-center text-xs font-mono text-text-muted"
       >
-        Collecting telemetry metrics...
+        {t('telemetry.collectingMetrics', 'Collecting telemetry metrics...')}
       </div>
     );
   }
@@ -55,7 +58,7 @@ export function SparklineAreaGraph({
   return (
     <div className="relative w-full overflow-hidden select-none flex flex-col justify-between">
       <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
-        <span className="text-text-muted">Live Load Path</span>
+        <span className="text-text-muted">{t('telemetry.liveLoadPath', 'Live Load Path')}</span>
         <span className="font-semibold text-text-primary tabular-nums" style={{ color: colorHex }}>
           {formattedLast}
         </span>
@@ -80,7 +83,7 @@ export function SparklineAreaGraph({
             y1={height * 0.25}
             x2={width}
             y2={height * 0.25}
-            stroke="#22252A"
+            className="stroke-border"
             strokeDasharray="2,2"
             strokeWidth="1"
           />
@@ -89,7 +92,7 @@ export function SparklineAreaGraph({
             y1={height * 0.5}
             x2={width}
             y2={height * 0.5}
-            stroke="#22252A"
+            className="stroke-border"
             strokeDasharray="2,2"
             strokeWidth="1"
           />
@@ -98,7 +101,7 @@ export function SparklineAreaGraph({
             y1={height * 0.75}
             x2={width}
             y2={height * 0.75}
-            stroke="#22252A"
+            className="stroke-border"
             strokeDasharray="2,2"
             strokeWidth="1"
           />

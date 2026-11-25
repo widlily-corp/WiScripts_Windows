@@ -105,6 +105,7 @@ export function Header() {
             type="button"
             role="switch"
             aria-checked={dryRunMode}
+            aria-label={t('header.safety_dry_run')}
             onClick={() => setDryRunMode(!dryRunMode)}
             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
               dryRunMode ? 'bg-status-success' : 'bg-surface-active border-status-warning'
@@ -120,13 +121,14 @@ export function Header() {
 
         {/* Command Palette Search Trigger Button */}
         <button
+          type="button"
           onClick={() => useAppStore.getState().setCommandPaletteOpen(true)}
           className="flex items-center gap-2 px-2.5 py-1 rounded-[6px] border border-border bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors text-xs"
-          title="Open Command Palette (Ctrl+K)"
-          aria-label="Open Command Palette"
+          title={t('header.openCommandPaletteTitle', 'Open Command Palette (Ctrl+K)')}
+          aria-label={t('header.openCommandPaletteAria', 'Open Command Palette')}
         >
           <Search className="h-3.5 w-3.5 text-brand" />
-          <span className="hidden sm:inline text-[11px] text-text-muted">Search...</span>
+          <span className="hidden sm:inline text-[11px] text-text-muted">{t('header.searchPlaceholder', 'Search...')}</span>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-[10px] font-mono text-text-muted">
             Ctrl+K
           </kbd>

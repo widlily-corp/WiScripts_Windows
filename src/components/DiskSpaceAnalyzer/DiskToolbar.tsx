@@ -75,33 +75,36 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
       {/* Left: View Mode Switcher */}
       <div className="flex items-center gap-1 bg-surface-subtle p-1 rounded-[6px] border border-border">
         <button
+          type="button"
           onClick={() => onViewModeChange('tree')}
           className={'px-3 py-1.5 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-colors ' +
             (viewMode === 'tree'
               ? 'bg-brand text-white shadow-sm'
-              : 'text-text-muted hover:text-text')}
+              : 'text-text-muted hover:text-text-primary')}
         >
           <FolderTree className="w-3.5 h-3.5" />
           <span>{t('diskAnalyzer.viewTree', 'Hierarchy Tree')}</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onViewModeChange('ranked_folders')}
           className={'px-3 py-1.5 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-colors ' +
             (viewMode === 'ranked_folders'
               ? 'bg-brand text-white shadow-sm'
-              : 'text-text-muted hover:text-text')}
+              : 'text-text-muted hover:text-text-primary')}
         >
           <Folder className="w-3.5 h-3.5" />
           <span>{t('diskAnalyzer.viewTopFolders', 'Top 20 Folders')}</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onViewModeChange('ranked_files')}
           className={'px-3 py-1.5 rounded-[4px] text-xs font-medium flex items-center gap-1.5 transition-colors ' +
             (viewMode === 'ranked_files'
               ? 'bg-brand text-white shadow-sm'
-              : 'text-text-muted hover:text-text')}
+              : 'text-text-muted hover:text-text-primary')}
         >
           <FileText className="w-3.5 h-3.5" />
           <span>{t('diskAnalyzer.viewTopFiles', 'Top 20 Files')}</span>
@@ -118,12 +121,14 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
             value={localQuery}
             onChange={(e) => setLocalQuery(e.target.value)}
             placeholder={t('diskAnalyzer.searchPlaceholder', 'Filter by name or ext (.log, .zip)...')}
-            className="w-full bg-surface-subtle border border-border rounded-[6px] pl-8 pr-7 py-1.5 text-xs text-text placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand font-mono"
+            className="w-full bg-surface-subtle border border-border rounded-[6px] pl-8 pr-7 py-1.5 text-xs text-text-primary placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand font-mono"
           />
           {localQuery && (
             <button
+              type="button"
               onClick={handleClear}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text p-0.5"
+              aria-label="Clear filter"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-0.5"
             >
               <X className="w-3 h-3" />
             </button>
@@ -136,10 +141,10 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
           <select
             value={sizeFilterThreshold}
             onChange={(e) => onSizeFilterChange(Number(e.target.value))}
-            className="bg-transparent text-xs text-text focus:outline-none cursor-pointer font-mono"
+            className="bg-transparent text-xs text-text-primary focus:outline-none cursor-pointer font-mono"
           >
             {SIZE_FILTER_OPTIONS.map((opt) => (
-              <option key={opt.bytes} value={opt.bytes} className="bg-surface text-text">
+              <option key={opt.bytes} value={opt.bytes} className="bg-surface text-text-primary">
                 {opt.label}
               </option>
             ))}
@@ -150,15 +155,17 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
         {viewMode === 'tree' && (
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={onExpandAll}
-              className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text transition-colors"
+              className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text-primary transition-colors"
               title={t('diskAnalyzer.expandAll', 'Expand All')}
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             <button
+              type="button"
               onClick={onCollapseAll}
-              className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text transition-colors"
+              className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text-primary transition-colors"
               title={t('diskAnalyzer.collapseAll', 'Collapse All')}
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -168,9 +175,10 @@ export const DiskToolbar: React.FC<DiskToolbarProps> = ({
 
         {/* Rescan Button */}
         <button
+          type="button"
           onClick={onRescan}
           disabled={isScanning}
-          className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text transition-colors disabled:opacity-50"
+          className="p-1.5 rounded-[6px] bg-surface-subtle hover:bg-surface-hover border border-border text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
           title="Rescan current target"
         >
           <RefreshCw className={'w-3.5 h-3.5 ' + (isScanning ? 'animate-spin' : '')} />

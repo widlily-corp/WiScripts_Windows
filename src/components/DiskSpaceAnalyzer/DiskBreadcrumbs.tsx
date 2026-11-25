@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, ArrowUp, Copy, Check, HardDrive } from 'lucide-react';
 
@@ -19,11 +19,19 @@ export const DiskBreadcrumbs: React.FC<DiskBreadcrumbsProps> = ({
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const handleCopy = () => {
     onCopyPath(currentPath);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const isAtBaseRoot = !currentPath ||
@@ -50,9 +58,10 @@ export const DiskBreadcrumbs: React.FC<DiskBreadcrumbsProps> = ({
       <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-x-auto scrollbar-none py-0.5">
         {/* Up One Level Button */}
         <button
+          type="button"
           onClick={onNavigateUp}
           disabled={isAtBaseRoot}
-          className="p-1 rounded text-text-muted hover:text-text hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex-shrink-0"
+          className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover disabled:opacity-30 disabled:hover:bg-transparent transition-colors flex-shrink-0"
           title={t('diskAnalyzer.upOneLevel', 'Up One Level')}
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -62,8 +71,9 @@ export const DiskBreadcrumbs: React.FC<DiskBreadcrumbsProps> = ({
 
         {/* Root Icon */}
         <button
+          type="button"
           onClick={() => onNavigate(baseRootPath)}
-          className="px-1.5 py-0.5 rounded text-xs font-mono text-text-muted hover:text-text hover:bg-surface-hover flex items-center gap-1 flex-shrink-0 transition-colors"
+          className="px-1.5 py-0.5 rounded text-xs font-mono text-text-muted hover:text-text-primary hover:bg-surface-hover flex items-center gap-1 flex-shrink-0 transition-colors"
           title="Jump to root"
         >
           <HardDrive className="w-3.5 h-3.5 text-brand" />
@@ -76,11 +86,12 @@ export const DiskBreadcrumbs: React.FC<DiskBreadcrumbsProps> = ({
             <React.Fragment key={seg.path}>
               <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
               <button
+                type="button"
                 onClick={() => onNavigate(seg.path)}
                 className={'px-1.5 py-0.5 rounded text-xs font-mono truncate transition-colors flex-shrink-0 ' +
                   (isLast
                     ? 'font-bold text-brand bg-brand/10'
-                    : 'text-text-muted hover:text-text hover:bg-surface-hover')}
+                    : 'text-text-muted hover:text-text-primary hover:bg-surface-hover')}
                 title={seg.path}
               >
                 {seg.label}
@@ -92,8 +103,9 @@ export const DiskBreadcrumbs: React.FC<DiskBreadcrumbsProps> = ({
 
       {/* Copy Path Quick Button */}
       <button
+        type="button"
         onClick={handleCopy}
-        className="p-1.5 rounded text-text-muted hover:text-text hover:bg-surface-hover transition-colors flex-shrink-0"
+        className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors flex-shrink-0"
         title={t('diskAnalyzer.copyPath', 'Copy Path')}
       >
         {copied ? (

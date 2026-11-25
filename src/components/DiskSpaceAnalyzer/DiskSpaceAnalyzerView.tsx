@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { HardDrive, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
 import { DiskTargetSelector } from './DiskTargetSelector';
@@ -13,49 +12,45 @@ import { DiskRankedLargestView } from './DiskRankedLargestView';
 import { DiskDeleteModal } from './DiskDeleteModal';
 
 export const DiskSpaceAnalyzerView: React.FC = () => {
-  const { t } = useTranslation();
+  const drives = useAppStore((s) => s.drives);
+  const selectedDrive = useAppStore((s) => s.selectedDrive);
+  const customPath = useAppStore((s) => s.customPath);
+  const isDrivesLoading = useAppStore((s) => s.isDrivesLoading);
+  const fastMode = useAppStore((s) => s.fastMode);
+  const scanResult = useAppStore((s) => s.scanResult);
+  const isScanning = useAppStore((s) => s.isScanning);
+  const scanProgress = useAppStore((s) => s.scanProgress);
+  const scanError = useAppStore((s) => s.scanError);
+  const viewMode = useAppStore((s) => s.viewMode);
+  const currentRootPath = useAppStore((s) => s.currentRootPath);
+  const searchQuery = useAppStore((s) => s.searchQuery);
+  const sizeFilterThreshold = useAppStore((s) => s.sizeFilterThreshold);
+  const expandedNodePaths = useAppStore((s) => s.expandedNodePaths);
+  const isDeleteModalOpen = useAppStore((s) => s.isDeleteModalOpen);
+  const itemToDelete = useAppStore((s) => s.itemToDelete);
+  const isDeleting = useAppStore((s) => s.isDeleting);
+  const deleteError = useAppStore((s) => s.deleteError);
+  const dryRunMode = useAppStore((s) => s.dryRunMode);
 
-  const {
-    drives,
-    selectedDrive,
-    customPath,
-    isDrivesLoading,
-    fastMode,
-    scanResult,
-    isScanning,
-    scanProgress,
-    scanError,
-    viewMode,
-    currentRootPath,
-    searchQuery,
-    sizeFilterThreshold,
-    expandedNodePaths,
-    isDeleteModalOpen,
-    itemToDelete,
-    isDeleting,
-    deleteError,
-    dryRunMode,
-
-    fetchDrives,
-    setSelectedDrive,
-    setCustomPath,
-    setFastMode,
-    startScan,
-    cancelScan,
-    deleteItem,
-    navigateTo,
-    navigateUp,
-    toggleNode,
-    expandAllNodes,
-    collapseAllNodes,
-    setSearchQuery,
-    setSizeFilter,
-    setViewMode,
-    openDeleteModal,
-    closeDeleteModal,
-    openInExplorer,
-    copyPathToClipboard,
-  } = useAppStore();
+  const fetchDrives = useAppStore((s) => s.fetchDrives);
+  const setSelectedDrive = useAppStore((s) => s.setSelectedDrive);
+  const setCustomPath = useAppStore((s) => s.setCustomPath);
+  const setFastMode = useAppStore((s) => s.setFastMode);
+  const startScan = useAppStore((s) => s.startScan);
+  const cancelScan = useAppStore((s) => s.cancelScan);
+  const deleteItem = useAppStore((s) => s.deleteItem);
+  const navigateTo = useAppStore((s) => s.navigateTo);
+  const navigateUp = useAppStore((s) => s.navigateUp);
+  const toggleNode = useAppStore((s) => s.toggleNode);
+  const expandAllNodes = useAppStore((s) => s.expandAllNodes);
+  const collapseAllNodes = useAppStore((s) => s.collapseAllNodes);
+  const setSearchQuery = useAppStore((s) => s.setSearchQuery);
+  const setSizeFilter = useAppStore((s) => s.setSizeFilter);
+  const setViewMode = useAppStore((s) => s.setViewMode);
+  const openDeleteModal = useAppStore((s) => s.openDeleteModal);
+  const closeDeleteModal = useAppStore((s) => s.closeDeleteModal);
+  const openInExplorer = useAppStore((s) => s.openInExplorer);
+  const copyPathToClipboard = useAppStore((s) => s.copyPathToClipboard);
 
   useEffect(() => {
     if (drives.length === 0) {
@@ -64,7 +59,7 @@ export const DiskSpaceAnalyzerView: React.FC = () => {
   }, [fetchDrives, drives.length]);
 
   return (
-    <div className="space-y-5 animate-fade-in text-text">
+    <div className="space-y-5 animate-fade-in text-text-primary">
       {/* Target Drives & Custom Folder Selector */}
       <DiskTargetSelector
         drives={drives}

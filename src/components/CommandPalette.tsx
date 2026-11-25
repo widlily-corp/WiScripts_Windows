@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { TabType } from '../types';
-import { invoke } from '@tauri-apps/api/core';
+import { useAccessibleModal } from './common/useAccessibleModal';
 import {
   Search,
   LayoutDashboard,
@@ -119,15 +119,16 @@ export function CommandPalette() {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'tab' | 'tweak' | 'script' | 'action'>('all');
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const modalRef = useAccessibleModal({ isOpen, onClose: () => setOpen(false) });
 
   useEffect(() => {
-    if (isOpen) {
-      setQuery('');
-      setSelectedIndex(0);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    }
+    if (!isOpen) return;
+    setQuery('');
+    setSelectedIndex(0);
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
   // Build the complete search index
@@ -136,13 +137,14 @@ export function CommandPalette() {
 
     // 1. Navigation Tabs (25 Views)
     for (const tab of NAVIGATION_TABS) {
+      const localizedTitle = t(`nav.items.${tab.id}`, tab.title);
       items.push({
         id: `tab_${tab.id}`,
         type: 'tab',
-        title: tab.title,
-        category: 'Navigation',
-        keywords: tab.keywords,
-        description: `Navigate to ${tab.title}`,
+        title: localizedTitle,
+        category: t('commandPalette.categories.navigation', 'Navigation'),
+        keywords: [...tab.keywords, tab.title.toLowerCase()],
+        description: t('commandPalette.navigateTo', { target: localizedTitle, defaultValue: `Navigate to ${localizedTitle}` }),
         icon: tab.icon,
         action: { type: 'navigate', tab: tab.id },
       });
@@ -150,17 +152,17 @@ export function CommandPalette() {
 
     // 2. Optimization Tweaks (70+ items)
     for (const tweak of optimizations) {
-      let catLabel = 'Optimization & Tweaks';
+      let catLabel = t('commandPalette.categories.optimization', 'Optimization & Tweaks');
       if (tweak.id.startsWith('win11_')) {
-        catLabel = 'Windows 11 24H2 / AI';
+        catLabel = t('commandPalette.categories.win11', 'Windows 11 24H2 / AI');
       } else if (tweak.category === 'privacy') {
-        catLabel = 'Privacy & Telemetry';
+        catLabel = t('commandPalette.categories.privacy', 'Privacy & Telemetry');
       } else if (tweak.category === 'services') {
-        catLabel = 'Windows Services';
+        catLabel = t('commandPalette.categories.services', 'Windows Services');
       } else if (tweak.category === 'ui_tweaks') {
-        catLabel = 'Explorer & UI';
+        catLabel = t('commandPalette.categories.ui', 'Explorer & UI');
       } else if (tweak.category === 'disk_cleanup') {
-        catLabel = 'Disk & Storage';
+        catLabel = t('commandPalette.categories.disk', 'Disk & Storage');
       }
 
       items.push({
@@ -183,7 +185,7 @@ export function CommandPalette() {
         title: sc.title,
         category: sc.category,
         keywords: sc.keywords,
-        description: `Execute or edit ${sc.title}`,
+        description: t('commandPalette.openScriptDesc', { title: sc.title, defaultValue: `Execute or edit ${sc.title}` }),
         icon: FileCode,
         action: { type: 'open_script', scriptId: sc.id },
       });
@@ -193,10 +195,15 @@ export function CommandPalette() {
     items.push({
       id: 'action_toggle_dry_run',
       type: 'action',
-      title: `Toggle Dry-Run Simulation Mode (${dryRunMode ? 'Currently Active' : 'Currently Inactive'})`,
-      category: 'Quick Actions',
+      title: t('commandPalette.toggleDryRunTitle', {
+        state: dryRunMode
+          ? t('commandPalette.currentlyActive', 'Currently Active')
+          : t('commandPalette.currentlyInactive', 'Currently Inactive'),
+        defaultValue: `Toggle Dry-Run Simulation Mode (${dryRunMode ? 'Currently Active' : 'Currently Inactive'})`,
+      }),
+      category: t('commandPalette.categories.quickActions', 'Quick Actions'),
       keywords: ['dry-run', 'simulation', 'safe mode', 'test', 'safety'],
-      description: 'Switch between actual system execution and dry-run command simulation',
+      description: t('commandPalette.toggleDryRunDesc', 'Switch between actual system execution and dry-run command simulation'),
       icon: dryRunMode ? ShieldCheck : ShieldAlert,
       action: { type: 'toggle_dry_run' },
     });
@@ -204,16 +211,16 @@ export function CommandPalette() {
     items.push({
       id: 'action_create_restore_point',
       type: 'action',
-      title: 'Create System Restore Point (VSS Checkpoint)',
-      category: 'Quick Actions',
+      title: t('commandPalette.createRestorePointTitle', 'Create System Restore Point (VSS Checkpoint)'),
+      category: t('commandPalette.categories.quickActions', 'Quick Actions'),
       keywords: ['vss', 'restore point', 'checkpoint', 'backup', 'system restore'],
-      description: 'Create an immediate Windows System Restore Point prior to configuration changes',
+      description: t('commandPalette.createRestorePointDesc', 'Create an immediate Windows System Restore Point prior to configuration changes'),
       icon: RotateCcw,
       action: { type: 'create_restore_point' },
     });
 
     return items;
-  }, [optimizations, dryRunMode]);
+  }, [optimizations, dryRunMode, t]);
 
   // Fuzzy Search Scoring Engine
   const searchResults = useMemo(() => {
@@ -312,8 +319,11 @@ export function CommandPalette() {
           setActiveTab('optimization');
           addToast({
             type: 'info',
-            title: 'Tweak Toggled',
-            message: `Selected status updated for "${item.title}".`,
+            title: t('commandPalette.toastTweakToggled', 'Tweak Toggled'),
+            message: t('commandPalette.toastTweakToggledMsg', {
+              title: item.title,
+              defaultValue: `Selected status updated for "${item.title}".`,
+            }),
           });
         }
         break;
@@ -322,8 +332,11 @@ export function CommandPalette() {
         setActiveTab('script_runner');
         addToast({
           type: 'info',
-          title: 'Script Selected',
-          message: `Opened "${item.title}" in Script Runner.`,
+          title: t('commandPalette.toastScriptSelected', 'Script Selected'),
+          message: t('commandPalette.toastScriptSelectedMsg', {
+            title: item.title,
+            defaultValue: `Opened "${item.title}" in Script Runner.`,
+          }),
         });
         break;
       }
@@ -332,8 +345,10 @@ export function CommandPalette() {
         setDryRunMode(nextMode);
         addToast({
           type: nextMode ? 'success' : 'warning',
-          title: 'Simulation Mode',
-          message: nextMode ? 'Dry-Run simulation mode ENABLED' : 'Dry-Run simulation mode DISABLED (Live Execution)',
+          title: t('commandPalette.toastSimulationMode', 'Simulation Mode'),
+          message: nextMode
+            ? t('commandPalette.toastDryRunEnabled', 'Dry-Run simulation mode ENABLED')
+            : t('commandPalette.toastDryRunDisabled', 'Dry-Run simulation mode DISABLED (Live Execution)'),
         });
         break;
       }
@@ -368,10 +383,12 @@ export function CommandPalette() {
       onClick={() => setOpen(false)}
       role="dialog"
       aria-modal="true"
-      aria-label="Global Command Palette"
+      aria-label={t('commandPalette.ariaLabel', 'Global Command Palette')}
     >
       <div
-        className="w-full max-w-2xl rounded-[8px] border border-border bg-surface shadow-2xl overflow-hidden animate-scale-in"
+        ref={modalRef}
+        tabIndex={-1}
+        className="w-full max-w-2xl rounded-[8px] border border-border bg-surface shadow-2xl overflow-hidden animate-scale-in focus:outline-none"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -380,18 +397,20 @@ export function CommandPalette() {
           <Search className="h-5 w-5 text-brand shrink-0" />
           <input
             ref={inputRef}
+            data-autofocus="true"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command, tweak, view, or script... (↑↓ to navigate, Enter to run, Esc to close)"
+            placeholder={t('commandPalette.searchPlaceholder', 'Type a command, tweak, view, or script...')}
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
             aria-autocomplete="list"
           />
           {query && (
             <button
+              type="button"
               onClick={() => setQuery('')}
               className="p-1 rounded text-text-muted hover:text-text-primary"
-              aria-label="Clear query"
+              aria-label={t('commandPalette.clearQuery', 'Clear query')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -402,20 +421,21 @@ export function CommandPalette() {
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border-subtle bg-surface text-xs">
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border-subtle bg-surface text-xs overflow-x-auto">
           {(
             [
-              { id: 'all' as const, label: 'All Items' },
-              { id: 'tab' as const, label: `Views (${NAVIGATION_TABS.length})` },
-              { id: 'tweak' as const, label: 'Tweaks (70+)' },
-              { id: 'script' as const, label: `Scripts (${SCRIPT_LIBRARY_ENTRIES.length})` },
-              { id: 'action' as const, label: 'Quick Actions' },
+              { id: 'all' as const, label: t('commandPalette.filters.all', 'All Items') },
+              { id: 'tab' as const, label: t('commandPalette.filters.views', { count: NAVIGATION_TABS.length, defaultValue: `Views (${NAVIGATION_TABS.length})` }) },
+              { id: 'tweak' as const, label: t('commandPalette.filters.tweaks', { count: optimizations.length, defaultValue: `Tweaks (${optimizations.length})` }) },
+              { id: 'script' as const, label: t('commandPalette.filters.scripts', { count: SCRIPT_LIBRARY_ENTRIES.length, defaultValue: `Scripts (${SCRIPT_LIBRARY_ENTRIES.length})` }) },
+              { id: 'action' as const, label: t('commandPalette.filters.actions', 'Quick Actions') },
             ]
           ).map((filter) => (
             <button
+              type="button"
               key={filter.id}
               onClick={() => setSelectedFilter(filter.id)}
-              className={`px-2.5 py-1 rounded-[4px] text-[11px] font-medium transition-colors ${
+              className={`px-2.5 py-1 rounded-[4px] text-[11px] font-medium transition-colors whitespace-nowrap ${
                 selectedFilter === filter.id
                   ? 'bg-brand text-white'
                   : 'bg-surface-subtle text-text-secondary hover:bg-surface-hover hover:text-text-primary'
@@ -424,8 +444,8 @@ export function CommandPalette() {
               {filter.label}
             </button>
           ))}
-          <div className="ml-auto text-[10px] font-mono text-text-muted">
-            {searchResults.length} results
+          <div className="ml-auto text-[10px] font-mono text-text-muted shrink-0">
+            {t('commandPalette.resultsCount', { count: searchResults.length, defaultValue: `${searchResults.length} results` })}
           </div>
         </div>
 
@@ -437,7 +457,7 @@ export function CommandPalette() {
         >
           {searchResults.length === 0 ? (
             <div className="py-12 text-center text-xs text-text-muted">
-              No matching commands or tweaks found for &ldquo;{query}&rdquo;
+              {t('commandPalette.noResults', { query, defaultValue: `No matching commands or tweaks found for "${query}"` })}
             </div>
           ) : (
             searchResults.map((item, idx) => {
@@ -445,13 +465,14 @@ export function CommandPalette() {
               const Icon = item.icon || FileText;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={item.id}
                   onClick={() => handleExecuteItem(item)}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   role="option"
                   aria-selected={isSelected}
-                  className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-[6px] cursor-pointer transition-all ${
+                  className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-[6px] cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-surface-active text-text-primary border border-border-focus/40 shadow-sm'
                       : 'text-text-secondary hover:bg-surface-hover/80 hover:text-text-primary border border-transparent'
@@ -472,7 +493,7 @@ export function CommandPalette() {
                         <span className="text-xs font-semibold truncate text-text-primary">
                           {item.title}
                         </span>
-                        <span className="text-[10px] font-mono uppercase bg-surface-subtle border border-border-subtle px-1.5 py-0.2 rounded text-text-muted shrink-0">
+                        <span className="text-[10px] font-mono uppercase bg-surface-subtle border border-border-subtle px-1.5 py-0.5 rounded text-text-muted shrink-0">
                           {item.category}
                         </span>
                       </div>
@@ -487,11 +508,11 @@ export function CommandPalette() {
                   <div className="flex items-center gap-2 shrink-0">
                     {isSelected && (
                       <span className="flex items-center gap-1 text-[10px] font-mono text-brand bg-brand-subtle px-2 py-0.5 rounded border border-brand/20">
-                        <CornerDownLeft className="h-3 w-3" /> Select
+                        <CornerDownLeft className="h-3 w-3" /> {t('commandPalette.selectKey', 'Select')}
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })
           )}
@@ -500,11 +521,11 @@ export function CommandPalette() {
         {/* Footer info bar */}
         <div className="px-4 py-2 border-t border-border bg-surface-subtle flex items-center justify-between text-[11px] text-text-muted font-mono">
           <div className="flex items-center gap-3">
-            <span>↑↓ Navigate</span>
-            <span>↵ Select</span>
-            <span>ESC Close</span>
+            <span>↑↓ {t('commandPalette.footerNavigate', 'Navigate')}</span>
+            <span>↵ {t('commandPalette.selectKey', 'Select')}</span>
+            <span>ESC {t('commandPalette.footerClose', 'Close')}</span>
           </div>
-          <div>WiScripts Command Engine v1.0</div>
+          <div>WiScripts Command Engine</div>
         </div>
       </div>
     </div>

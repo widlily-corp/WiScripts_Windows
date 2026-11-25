@@ -46,25 +46,25 @@ export const DiskScanProgress: React.FC<DiskScanProgressProps> = ({ progress, on
         <div className="flex flex-wrap items-center gap-2">
           <div className="px-2.5 py-1 rounded-[6px] bg-surface-subtle border border-border flex items-center gap-1.5 text-xs font-mono">
             <Files className="w-3.5 h-3.5 text-text-muted" />
-            <span className="text-text font-medium">{filesCount.toLocaleString()}</span>
+            <span className="text-text-primary font-medium">{filesCount.toLocaleString()}</span>
             <span className="text-text-muted text-[10px]">files</span>
           </div>
 
           <div className="px-2.5 py-1 rounded-[6px] bg-surface-subtle border border-border flex items-center gap-1.5 text-xs font-mono">
             <FolderTree className="w-3.5 h-3.5 text-text-muted" />
-            <span className="text-text font-medium">{dirsCount.toLocaleString()}</span>
+            <span className="text-text-primary font-medium">{dirsCount.toLocaleString()}</span>
             <span className="text-text-muted text-[10px]">dirs</span>
           </div>
 
           <div className="px-2.5 py-1 rounded-[6px] bg-surface-subtle border border-border flex items-center gap-1.5 text-xs font-mono">
             <HardDrive className="w-3.5 h-3.5 text-brand" />
-            <span className="text-text font-medium">{formatBytes(bytesScanned)}</span>
+            <span className="text-text-primary font-medium">{formatBytes(bytesScanned)}</span>
           </div>
 
           {itemsPerSec > 0 && (
             <div className="px-2.5 py-1 rounded-[6px] bg-surface-subtle border border-border flex items-center gap-1.5 text-xs font-mono">
               <Gauge className="w-3.5 h-3.5 text-status-warning" />
-              <span className="text-text font-medium">{itemsPerSec.toLocaleString()}</span>
+              <span className="text-text-primary font-medium">{itemsPerSec.toLocaleString()}</span>
               <span className="text-text-muted text-[10px]">items/s</span>
             </div>
           )}

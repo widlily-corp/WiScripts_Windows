@@ -25,7 +25,12 @@
     "mediumRisk": "Medium Risk",
     "lowRisk": "Low Risk",
     "reversible": "Reversible",
-    "nonReversible": "Non-Reversible"
+    "nonReversible": "Non-Reversible",
+    "clear": "Clear",
+    "clipboardError": "Clipboard Copy Failed",
+    "close": "Close",
+    "loading": "Loading...",
+    "retry": "Retry"
   },
   "nav": {
     "items": {
@@ -87,7 +92,8 @@
     "odt": "Office ODT",
     "activation": "Activation MAS",
     "restore_points": "Restore Points",
-    "settings": "Settings"
+    "settings": "Settings",
+    "no_results": "Nothing found"
   },
   "header": {
     "tab_titles": {
@@ -141,7 +147,10 @@
     "odt": "Office Deployment Tool (ODT) Configurator",
     "activation": "Microsoft Activation Scripts (MAS)",
     "restore_points": "Windows System Restore Checkpoints",
-    "settings": "Global Configuration & Preferences"
+    "settings": "Global Configuration & Preferences",
+    "openCommandPaletteAria": "Open Command Palette",
+    "openCommandPaletteTitle": "Open Command Palette (Ctrl+K)",
+    "searchPlaceholder": "Search..."
   },
   "cleaner": {
     "title": "System Cleaner & Cache Optimizer",
@@ -329,7 +338,29 @@
     "author": "Author",
     "icon": "Icon",
     "rulesCount": "{{count}} rules selected for export",
-    "saveFileBtn": "Save JSON File"
+    "saveFileBtn": "Save JSON File",
+    "applyErrorTitle": "Profile Application Failed",
+    "applyImportedBtn": "Apply Imported Profile",
+    "checksumWarning": "Cryptographic checksum warning: Profile content was modified since checksum generation.",
+    "compatibilityWarnings": "Profile Compatibility Warnings",
+    "exportErrorTitle": "Export Failed",
+    "exportProfileBtn": "Export Profile",
+    "exportSuccessMsg": "Exported .wiscripts profile with {{count}} active tweaks (SHA-256: {{hash}}...).",
+    "exportSuccessTitle": "Profile Exported",
+    "fileReadErrorTitle": "File Read Error",
+    "importAppliedMsg": "Successfully applied profile \"{{name}}\" ({{count}} rules enabled).",
+    "importAppliedTitle": "Profile Applied",
+    "importProfileBtn": "Import Profile (.wiscripts)",
+    "invalidProfileTitle": "Invalid Profile Format",
+    "preflightGuarantee": "Pre-Flight Safety verification & snapshot will run before applying this profile.",
+    "profileAuthorLabel": "Author / Origin:",
+    "profileNameLabel": "Profile Name:",
+    "profileSchemaLabel": "Schema Version:",
+    "reviewImportedTitle": "Review Imported .wiscripts Profile",
+    "rulesCountShort": "{{count}} tweaks",
+    "safetyModalImportDesc": "Apply {{count}} optimization rules from imported profile.",
+    "safetyModalImportTitle": "Apply Imported Profile: {{name}}",
+    "validRulesLabel": "Valid Tweak Rules:"
   },
   "startup": {
     "title": "Startup Apps Manager",
@@ -520,7 +551,8 @@
     "toastFailedTitle": "Optimizations Failed",
     "toastFailedMsg": "{{msg}}",
     "toastSuccessTitle": "Optimizations Applied",
-    "toastSuccessMsg": "Successfully executed {{count}} optimization rules."
+    "toastSuccessMsg": "Successfully executed {{count}} optimization rules.",
+    "criticalRisk": "Critical"
   },
   "packageManager": {
     "title": "Package & Bloatware Manager",
@@ -550,7 +582,8 @@
     "colAppName": "Application Name",
     "colPackageFullName": "Package Full Name",
     "colPublisherId": "Publisher ID",
-    "uninstall": "Uninstall"
+    "uninstall": "Uninstall",
+    "adminRequired": "Administrator privileges or Dry-Run mode required"
   },
   "systemCleaner": {
     "title": "System Cleaner & Cache Optimizer",
@@ -645,7 +678,8 @@
     "safetyDryRun": "Safety Dry-Run Mode is ACTIVE. Deletion will be simulated without altering disk files.",
     "cancel": "Cancel",
     "confirmDelete": "Confirm Delete",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "freeUnit": "free"
   },
   "diskAnalyzer": {
     "title": "Disk Space Analyzer & Tree Explorer",
@@ -730,8 +764,14 @@
       "successTitle": "Item Deleted Successfully",
       "successMsg": "Freed {{bytes}} across {{items}} items.",
       "dryRunNotice": "Dry-Run Simulation Mode is Active. No files will be modified on disk.",
-      "errorTitle": "Deletion Failed"
-    }
+      "errorTitle": "Deletion Failed",
+      "dryRunTitle": "Safety Dry-Run Preview Mode",
+      "selectMode": "Select Deletion Mode:"
+    },
+    "presetDownloads": "Downloads",
+    "presetTemp": "Temp Cache",
+    "presetUsers": "User Profile",
+    "refreshDrivesTooltip": "Refresh logical drives list"
   },
   "startupView": {
     "removeStartupEntryTitle": "Remove Startup Entry: {{name}}",
@@ -848,7 +888,8 @@
     "statusDescription": "Exporting drivers online requires Administrator access. If safety dry-run is turned on, PowerShell runs in dry-run mode and simulates file creation without writing to disk.",
     "exportComplete": "Export Complete",
     "successMessage": "Successfully exported drivers to \"{{path}}\" in {{duration}}ms.",
-    "errorMessage": "Driver backup failed or encountered errors."
+    "errorMessage": "Driver backup failed or encountered errors.",
+    "exportFailed": "Driver Backup Failed"
   },
   "diagnostics": {
     "title": "System Diagnostics & Integrity Tools",
@@ -1098,7 +1139,10 @@
     "cancel": "Cancel",
     "processing": "Processing...",
     "simulate_dry_run": "Simulate in Dry-Run",
-    "execute_live": "Execute Live Action"
+    "execute_live": "Execute Live Action",
+    "preflight_state_engine": "StateEngine JSON Delta Capture",
+    "preflight_title": "Pre-Flight Safety Engine (Dual-Tier)",
+    "preflight_vss": "Windows VSS System Restore Point"
   },
   "update_banner": {
     "ready": "Update ready to install!",
@@ -1135,7 +1179,13 @@
     "mute": "Mute",
     "unmute": "Unmute",
     "resetRouting": "Reset Route",
-    "systemDefault": "Default System Device"
+    "systemDefault": "Default System Device",
+    "autoPollOff": "Auto-Poll: OFF",
+    "autoPollOn": "Auto-Poll: ON",
+    "autoPollTooltip": "Auto-refresh active audio app sessions every 3 seconds",
+    "dryRunMode": "Dry-Run Mode",
+    "noDeviceFound": "No Device Found",
+    "toggleAutoPoll": "Toggle session auto-polling"
   },
   "autoruns": {
     "title": "AutoRuns & Security Inspector",
@@ -1178,7 +1228,10 @@
       "processing": "Quarantining...",
       "success_title": "Entry Quarantined Successfully",
       "success_msg": "Binary payload and registry entry isolated to quarantine storage.",
-      "failed_title": "Quarantine Operation Error"
+      "failed_title": "Quarantine Operation Error",
+      "backupRegistryLabel": "Backup Registry File:",
+      "quarantinedPathLabel": "Quarantined Path:",
+      "unknownError": "Unknown error during quarantine"
     },
     "toast": {
       "scan_failed": "AutoRuns Scan Failed",
@@ -1186,7 +1239,9 @@
       "toggle_failed": "Toggle Failed",
       "quarantine_success": "Entry Quarantined",
       "quarantine_failed": "Quarantine Failed"
-    }
+    },
+    "disableEntry": "Disable Entry",
+    "enableEntry": "Enable Entry"
   },
   "governor": {
     "title": "ProFlow & Dynamic Resource Governor",
@@ -1219,7 +1274,28 @@
     "assigned_cores": "Assigned Cores",
     "rule_modal_title": "Configure Process Governor Rule",
     "core_affinity": "CPU Core Affinity Assignment",
-    "auto_trim_threshold_label": "Auto RAM Trim Threshold (MB, Optional)"
+    "auto_trim_threshold_label": "Auto RAM Trim Threshold (MB, Optional)",
+    "audio_endpoint_label": "Audio Endpoint ID (Optional)",
+    "audioEndpointPlaceholder": "e.g. {0.0.0.00000000}.{device-id} or leave empty for default",
+    "configRuleBtn": "Config Rule",
+    "defaultRoute": "Default",
+    "disabled": "Disabled",
+    "endpointRouted": "Endpoint Routed",
+    "invalidTrimThreshold": "Auto RAM Trim Threshold must be an integer of at least 10 MB",
+    "maskLabel": "Mask:",
+    "noMatchingProcesses": "No running processes match the current filter.",
+    "priorityUpdatedMsg": "Set {{name}} priority to {{priority}}",
+    "processesUnit": "processes",
+    "processPlaceholder": "e.g. chrome.exe, csgo.exe",
+    "processRequired": "Process name is required",
+    "ramTrimmedMsg": "Trimmed {{mb}} MB working set for {{name}} (PID {{pid}})",
+    "ruleBadge": "RULE",
+    "ruleConfiguredMsg": "Governor rule configured for {{name}}",
+    "ruleDeletedMsg": "Removed governor rule for {{name}}",
+    "scanningProcesses": "Scanning running processes & governor status...",
+    "trimming": "Trimming...",
+    "trimPlaceholder": "e.g. 1024 (min 10 MB)",
+    "trimRamBtn": "Trim RAM"
   },
   "github_modal": {
     "title": "Submit GitHub Issue",
@@ -1280,7 +1356,15 @@
     "targetAppLabel": "Target Application:",
     "regPathLabel": "Registry Path:",
     "cmdLabel": "Uninstaller Executable Command:",
-    "sortOrderTooltip": "Sort Order: {{order}}"
+    "sortOrderTooltip": "Sort Order: {{order}}",
+    "actionLabel": "Action:",
+    "eraseFromRegistry": "Erase from Registry",
+    "eraseFromRegistryTooltip": "Erase orphaned registry record",
+    "ghostAppsCard": "Orphaned / Ghost",
+    "ghostBadge": "Ghost Entry",
+    "onlyGhostFilter": "Orphaned ({{count}})",
+    "removeGhostDesc": "Uninstaller files were not found on disk for {{name}}. This action safely erases the orphaned record from the Windows Registry.",
+    "removeGhostTitle": "Remove registry entry for \"{{name}}\""
   },
   "stateEngine": {
     "title": "StateEngine & Surgical Undo Engine",
@@ -1341,7 +1425,10 @@
       "deleteSuccessTitle": "Snapshot Deleted",
       "deleteSuccessMsg": "Snapshot {{id}} removed from disk.",
       "deleteErrorTitle": "Snapshot Deletion Failed"
-    }
+    },
+    "confirmDeleteDesc": "Permanently delete snapshot \"{{label}}\" ({{id}})? You will no longer be able to perform surgical rollback to this checkpoint.",
+    "confirmDeleteTitle": "Delete State Snapshot?",
+    "loadingSnapshots": "Loading system state snapshots..."
   },
   "script_runner": {
     "title": "Script Runner",
@@ -1473,7 +1560,6 @@
     "category_registry": "Registry",
     "category_tasks": "Scheduled Tasks",
     "category_filesystem": "Filesystem",
-    "category_network": "Network",
     "category_processes": "Processes",
     "action_create": "Create",
     "action_modify": "Modify",
@@ -1492,7 +1578,22 @@
     "execute_elevated_cta": "Execute Elevated (UAC)",
     "custom_script": "Custom Script",
     "search_impact_placeholder": "Filter affected targets, keys, services...",
-    "total_mutations": "{{count}} mutations detected"
+    "total_mutations": "{{count}} mutations detected",
+    "author_label": "Author",
+    "autoscroll_label": "Auto-scroll",
+    "clear_filters": "Clear Filters",
+    "clear_filters_hint": "Try clearing your search query or selecting another category above.",
+    "copied_short": "Copied!",
+    "copy_hash": "Copy Hash",
+    "elevated_badge": "ELEVATED",
+    "elevated_running_tooltip": "Running with elevated Administrator privileges",
+    "loading_script_code": "Loading verified script code...",
+    "risk_filter_label": "Risk:",
+    "search_output_placeholder": "Search output...",
+    "sha_verified_label": "SHA-256 Integrity Verified",
+    "uac_required_badge": "UAC Required",
+    "upload_too_large_msg": "Script files must be 2 MB or smaller.",
+    "upload_too_large_title": "File Too Large"
   },
   "update_modal": {
     "title": "New Version Available",
@@ -1522,7 +1623,8 @@
     "status": {
       "optimal": "Optimal (< 500 µs)",
       "moderate": "Moderate (500-1000 µs)",
-      "high": "High Jitter (> 1000 µs)"
+      "high": "High Jitter (> 1000 µs)",
+      "awaiting": "Awaiting Telemetry"
     },
     "metrics": {
       "current_dpc": "Current DPC Latency",
@@ -1536,7 +1638,8 @@
     },
     "sparkline": {
       "title": "Real-Time DPC/ISR Latency Trace",
-      "threshold": "1000 µs Critical Threshold"
+      "threshold": "1000 µs Critical Threshold",
+      "awaitingData": "Collecting DPC latency samples..."
     },
     "timer_resolution_card": {
       "title": "System Timer Resolution",
@@ -1546,7 +1649,9 @@
       "force_05ms": "Force 0.500 ms Precision",
       "force_10ms": "Set 1.000 ms",
       "restore_default": "Restore Default (15.6 ms)",
-      "custom": "Custom"
+      "custom": "Custom",
+      "defaultPreset": "15.625 ms (Default)",
+      "esportsPreset": "0.500 ms (Esports)"
     },
     "game_boost": {
       "title": "Game Boost Engine",
@@ -1565,7 +1670,9 @@
       "timer_success": "Timer resolution adjusted to {{resolution}} ms",
       "boost_activated": "Game Boost activated for {{process}}",
       "boost_deactivated": "Game Boost deactivated. Services restored."
-    }
+    },
+    "liveTelemetry": "1.5s Live Telemetry",
+    "paused": "Paused"
   },
   "gamingDaemon": {
     "heroTitle": "Smart Game Daemon Ready",
@@ -1588,7 +1695,8 @@
       "tuningOptions": "Tuning Options",
       "selectPrompt": "Select a process from the list on the left to configure tuning",
       "optimizing": "Applying optimizations...",
-      "boostButton": "Optimize Process"
+      "boostButton": "Optimize Process",
+      "selectedProcess": "Selected Process:"
     },
     "tuning": {
       "priority": "High Priority Class",
@@ -1601,7 +1709,17 @@
       "ramDesc": "Clears standby list memory cache to prevent sudden paging stalls",
       "services": "Suspend Background Services",
       "servicesDesc": "Temporarily pauses SysMain, DiagTrack, and WSearch"
-    }
+    },
+    "activeBadge": "Game Boost Active",
+    "affinityPinnedTag": "P-Cores Affinity Pinned",
+    "autoDetectActive": "Active (1.5s scan)",
+    "autoDetectDisabled": "Disabled",
+    "autoDetectStatus": "Status",
+    "autoRecoveryArmed": "Auto-Recovery Armed",
+    "defaultProcessName": "Game Process",
+    "servicesSuspendedTag": "{{count}} Services Suspended",
+    "timerLockedTag": "0.500 ms Timer Locked",
+    "zeroAltTabThrashing": "Zero Alt-Tab Thrashing"
   },
   "shaderNuker": {
     "title": "Shader Cache Nuker — Stutter Eliminator",
@@ -1613,7 +1731,15 @@
     "cachedFiles": "Cached Files",
     "stutterImpact": "Stutter Impact",
     "resultTitle": "Shader caches successfully nuked!",
-    "detectedStorages": "Detected Shader Storages"
+    "detectedStorages": "Detected Shader Storages",
+    "cleanupRecommended": "Cleanup recommended",
+    "confirmDesc": "This will delete {{count}} cached shader files ({{size}}). Active GPU driver files in use will be skipped.",
+    "confirmTitle": "Clear Shader Caches?",
+    "filesCount": "{{formatted}} files",
+    "freedSummary": "Freed: {{size}} ({{count}} files removed).",
+    "optimalState": "Optimal state",
+    "scanning": "Scanning...",
+    "skippedLocked": "{{count}} files locked by active GPU driver and safely skipped."
   },
   "smartRam": {
     "title": "Smart RAM & Standby List Memory Purger",
@@ -1695,8 +1821,19 @@
       "rule_name_label": "Rule Name",
       "block_confirm": "Block Traffic",
       "rules_drawer_title": "Active WiScripts Firewall Rules",
-      "no_rules": "No active firewall rules created yet."
-    }
+      "no_rules": "No active firewall rules created yet.",
+      "blockFailed": "Firewall Block Failed",
+      "ruleNameRequired": "Rule Name Required",
+      "ruleNameRequiredDesc": "Please enter a valid firewall rule name.",
+      "systemExecutable": "System executable",
+      "unblockFailed": "Firewall Unblock Failed"
+    },
+    "pausedLabel": "Paused",
+    "pauseRefresh": "Pause Auto Refresh",
+    "pollingLabel": "2s Polling",
+    "resumeRefresh": "Resume Auto Refresh",
+    "rulesBtn": "Rules ({{count}})",
+    "showingConnections": "Showing {{shown}} of {{total}}"
   },
   "hardwareHealth": {
     "title": "Hardware NVMe SMART & Battery/Power Analytics",
@@ -1747,7 +1884,27 @@
       "health_bad": "Bad",
       "health_unknown": "Unknown",
       "refresh_telemetry": "Refresh Telemetry",
-      "copied_clipboard": "Copied to clipboard"
+      "copied_clipboard": "Copied to clipboard",
+      "attributesCountLabel": "attributes",
+      "capacityLabel": "Capacity",
+      "copyFirmware": "Copy Firmware",
+      "copySerial": "Copy Serial",
+      "daysSuffix": "days",
+      "featuresLabel": "Features",
+      "healthStatusHeader": "Health Status (CrystalDiskInfo)",
+      "hostReads": "Host Reads",
+      "hostWrites": "Host Writes",
+      "lifetimeLabel": "Lifetime",
+      "limitedNonElevated": "Limited (Non-Elevated)",
+      "mediaType": "Media Type",
+      "noMatchingAttrs": "No matching S.M.A.R.T. attributes found.",
+      "powerOnCount": "Power-On Count",
+      "reserveBlocks": "Reserve Blocks",
+      "sensorStandby": "Sensor Standby",
+      "suddenPowerLoss": "Sudden Power Loss",
+      "tempElevatedRange": "Elevated (> 60°C)",
+      "tempNormalRange": "Normal Range (< 60°C)",
+      "volumesLabel": "Volumes"
     },
     "battery": {
       "title": "Battery & Power Analytics",
@@ -1771,6 +1928,55 @@
       "ultimate_title": "Windows Ultimate Performance Scheme",
       "ultimate_desc": "Eliminates micro-latencies and processor core throttling for maximum system responsiveness.",
       "enable_ultimate_btn": "Activate Ultimate Performance"
-    }
+    },
+    "paused": "Paused",
+    "pauseRefresh": "Pause Auto Refresh",
+    "resumeRefresh": "Resume Auto Refresh"
+  },
+  "commandPalette": {
+    "ariaLabel": "Global Command Palette",
+    "categories": {
+      "disk": "Disk & Storage",
+      "navigation": "Navigation",
+      "optimization": "Optimization & Tweaks",
+      "privacy": "Privacy & Telemetry",
+      "quickActions": "Quick Actions",
+      "services": "Windows Services",
+      "ui": "Explorer & UI",
+      "win11": "Windows 11 24H2 / AI"
+    },
+    "clearQuery": "Clear query",
+    "createRestorePointDesc": "Create an immediate Windows System Restore Point prior to configuration changes",
+    "createRestorePointTitle": "Create System Restore Point (VSS Checkpoint)",
+    "currentlyActive": "Currently Active",
+    "currentlyInactive": "Currently Inactive",
+    "filters": {
+      "actions": "Quick Actions",
+      "all": "All Items",
+      "scripts": "Scripts ({{count}})",
+      "tweaks": "Tweaks ({{count}})",
+      "views": "Views ({{count}})"
+    },
+    "footerClose": "Close",
+    "footerNavigate": "Navigate",
+    "navigateTo": "Navigate to {{target}}",
+    "noResults": "No matching commands or tweaks found for \"{{query}}\"",
+    "openScriptDesc": "Execute or edit {{title}}",
+    "resultsCount": "{{count}} results",
+    "searchPlaceholder": "Type a command, tweak, view, or script...",
+    "selectKey": "Select",
+    "toastDryRunDisabled": "Dry-Run simulation mode DISABLED (Live Execution)",
+    "toastDryRunEnabled": "Dry-Run simulation mode ENABLED",
+    "toastScriptSelected": "Script Selected",
+    "toastScriptSelectedMsg": "Opened \"{{title}}\" in Script Runner.",
+    "toastSimulationMode": "Simulation Mode",
+    "toastTweakToggled": "Tweak Toggled",
+    "toastTweakToggledMsg": "Selected status updated for \"{{title}}\".",
+    "toggleDryRunDesc": "Switch between actual system execution and dry-run command simulation",
+    "toggleDryRunTitle": "Toggle Dry-Run Simulation Mode ({{state}})"
+  },
+  "telemetry": {
+    "collectingMetrics": "Collecting telemetry metrics...",
+    "liveLoadPath": "Live Load Path"
   }
 }

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HardDrive, FolderSearch, RefreshCw, Sparkles, Folder, Play, Zap } from 'lucide-react';
+import { HardDrive, FolderSearch, RefreshCw, Sparkles, Play, Zap } from 'lucide-react';
 import { DiskDriveInfo } from '../../types';
 import { formatBytes } from '../../utils';
 
@@ -18,14 +18,6 @@ interface DiskTargetSelectorProps {
   onRefreshDrives: () => void;
 }
 
-const PRESET_PATHS = [
-  { label: 'User Profile', path: 'C:\\Users' },
-  { label: 'Downloads', path: 'C:\\Users\\Default\\Downloads' },
-  { label: 'AppData', path: 'C:\\Users\\Default\\AppData' },
-  { label: 'Temp Cache', path: 'C:\\Windows\\Temp' },
-  { label: 'Program Files', path: 'C:\\Program Files' },
-];
-
 export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
   drives,
   selectedDrive,
@@ -41,6 +33,56 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
 }) => {
   const { t } = useTranslation();
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  const [resolvedDirs, setResolvedDirs] = useState<{
+    home?: string;
+    downloads?: string;
+    appData?: string;
+  }>({});
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const pathApi = await import('@tauri-apps/api/path');
+        const [home, downloads, localData] = await Promise.all([
+          pathApi.homeDir().catch(() => undefined),
+          pathApi.downloadDir().catch(() => undefined),
+          pathApi.localDataDir().catch(() => undefined),
+        ]);
+        if (!active) return;
+        const clean = (p?: string) => (p ? p.replace(/[\\/]+$/, '') : undefined);
+        const homeClean = clean(home);
+        const appDataParent = clean(localData)?.replace(/[\\/]Local$/i, '') || (homeClean ? `${homeClean}\\AppData` : undefined);
+        setResolvedDirs({
+          home: homeClean,
+          downloads: clean(downloads),
+          appData: appDataParent,
+        });
+      } catch {
+        // Non-Tauri environment fallback uses system-level directories below
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const presetPaths = useMemo(() => {
+    const items = [
+      { label: t('diskAnalyzer.presetUsers', 'User Profile'), path: resolvedDirs.home || 'C:\\Users' },
+    ];
+    if (resolvedDirs.downloads) {
+      items.push({ label: t('diskAnalyzer.presetDownloads', 'Downloads'), path: resolvedDirs.downloads });
+    }
+    if (resolvedDirs.appData) {
+      items.push({ label: 'AppData', path: resolvedDirs.appData });
+    }
+    items.push(
+      { label: t('diskAnalyzer.presetTemp', 'Temp Cache'), path: 'C:\\Windows\\Temp' },
+      { label: 'Program Files', path: 'C:\\Program Files' }
+    );
+    return items;
+  }, [resolvedDirs, t]);
 
   const handlePresetClick = (presetPath: string, label: string) => {
     setActivePreset(label);
@@ -51,7 +93,7 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
     <div className="bg-surface border border-border rounded-[8px] p-5 shadow-sm space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
             <HardDrive className="w-4 h-4 text-brand" />
             {t('diskAnalyzer.targetDrives', 'Select Target Drive')}
           </h3>
@@ -60,10 +102,11 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
           </p>
         </div>
         <button
+          type="button"
           onClick={onRefreshDrives}
           disabled={isDrivesLoading || isScanning}
-          className="px-2.5 py-1.5 rounded-[6px] text-xs font-medium text-text-muted hover:text-text bg-surface-subtle hover:bg-surface-hover border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50"
-          title="Refresh logical drives list"
+          className="px-2.5 py-1.5 rounded-[6px] text-xs font-medium text-text-muted hover:text-text-primary bg-surface-subtle hover:bg-surface-hover border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          title={t('diskAnalyzer.refreshDrivesTooltip', 'Refresh logical drives list')}
         >
           <RefreshCw className={'w-3.5 h-3.5 ' + (isDrivesLoading ? 'animate-spin' : '')} />
           {t('common.refresh', 'Refresh')}
@@ -75,7 +118,7 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
         {drives.map((drive) => {
           const isSelected = selectedDrive === drive.mountPoint && !customPath;
           const usagePct = drive.usagePercentage || (drive.totalBytes > 0 ? (drive.usedBytes / drive.totalBytes) * 100 : 0);
-          
+
           let usageColor = 'bg-brand';
           if (usagePct > 90) usageColor = 'bg-status-danger';
           else if (usagePct > 75) usageColor = 'bg-status-warning';
@@ -83,28 +126,31 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
           return (
             <div
               key={drive.mountPoint}
-              onClick={() => {
-                onChangeCustomPath('');
-                onSelectDrive(drive.mountPoint);
-              }}
-              className={'relative p-3.5 rounded-[6px] border cursor-pointer transition-all ' +
+              className={'relative p-3.5 rounded-[6px] border transition-all ' +
                 (isSelected
                   ? 'bg-surface-active border-brand shadow-sm shadow-brand/10'
                   : 'bg-surface-subtle border-border hover:border-border-focus hover:bg-surface-hover')}
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className={'p-2 rounded-[6px] ' + (isSelected ? 'bg-brand/20 text-brand' : 'bg-surface text-text-muted')}>
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangeCustomPath('');
+                    onSelectDrive(drive.mountPoint);
+                  }}
+                  className="flex items-center gap-2.5 text-left flex-1 min-w-0 focus:outline-none"
+                >
+                  <div className={'p-2 rounded-[6px] shrink-0 ' + (isSelected ? 'bg-brand/20 text-brand' : 'bg-surface text-text-muted')}>
                     <HardDrive className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-sm text-text">{drive.name || drive.mountPoint}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-semibold text-sm text-text-primary truncate">{drive.name || drive.mountPoint}</span>
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-text-muted">
                         {drive.mountPoint}
                       </span>
                       {drive.isSystemDrive && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-brand/15 text-brand border border-brand/30">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-brand/15 text-brand border border-brand/30">
                           OS
                         </span>
                       )}
@@ -113,17 +159,18 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
                       {drive.fileSystem} · {formatBytes(drive.availableBytes)} free
                     </p>
                   </div>
-                </div>
+                </button>
 
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  type="button"
+                  onClick={() => {
                     onChangeCustomPath('');
                     onSelectDrive(drive.mountPoint);
                     onStartScan(drive.mountPoint);
                   }}
                   disabled={isScanning}
-                  className="p-1.5 rounded-[4px] bg-brand/10 hover:bg-brand text-brand hover:text-white transition-colors disabled:opacity-50"
+                  aria-label={`Scan ${drive.mountPoint}`}
+                  className="p-1.5 rounded-[4px] bg-brand/10 hover:bg-brand text-brand hover:text-white transition-colors disabled:opacity-50 shrink-0"
                   title={'Scan ' + drive.mountPoint}
                 >
                   <Play className="w-3.5 h-3.5" />
@@ -151,25 +198,25 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
       {/* Custom Path Section */}
       <div className="pt-2 border-t border-border-subtle space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <label className="text-xs font-semibold text-text flex items-center gap-1.5">
+          <label className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
             <FolderSearch className="w-3.5 h-3.5 text-brand" />
             {t('diskAnalyzer.customDirectory', 'Custom Folder Path')}
           </label>
-          {/* Quick Presets */}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-status-warning" />
               {t('diskAnalyzer.presets', 'Presets')}:
             </span>
-            {PRESET_PATHS.map((preset) => (
+            {presetPaths.map((preset) => (
               <button
+                type="button"
                 key={preset.label}
                 onClick={() => handlePresetClick(preset.path, preset.label)}
                 disabled={isScanning}
                 className={'px-2 py-0.5 rounded-[4px] text-[11px] font-medium border transition-colors ' +
                   (activePreset === preset.label && customPath === preset.path
                     ? 'bg-brand/20 border-brand text-brand'
-                    : 'bg-surface-subtle border-border text-text-muted hover:text-text hover:bg-surface-hover')}
+                    : 'bg-surface-subtle border-border text-text-muted hover:text-text-primary hover:bg-surface-hover')}
               >
                 {preset.label}
               </button>
@@ -177,18 +224,20 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
           </div>
         </div>
 
-        {/* Modern Unambiguous Turbo Drill-Down Switch Banner */}
+        {/* Turbo Drill-Down Switch */}
         {onToggleFastMode && (
-          <div
+          <button
+            type="button"
             onClick={() => !isScanning && onToggleFastMode(!fastMode)}
-            className={`p-3 rounded-[6px] border flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all select-none ${
+            disabled={isScanning}
+            className={`w-full text-left p-3 rounded-[6px] border flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all select-none ${
               fastMode
                 ? 'bg-status-success/10 border-status-success/40 hover:bg-status-success/15'
                 : 'bg-surface-subtle border-border hover:bg-surface-hover hover:border-border-focus'
             } ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
             role="switch"
             aria-checked={fastMode}
-            title={t('diskAnalyzer.turboDrilldownTooltip', 'Drill-Down Engine: skips millions of Windows OS files and instantly locates heavy games and user hubs')}
+            title={t('diskAnalyzer.turboDrilldownTooltip', 'Drill-Down Engine: skips system files and locates large folders')}
           >
             <div className="flex items-center gap-3">
               <div
@@ -200,10 +249,10 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-text">
+                  <span className="text-xs font-semibold text-text-primary">
                     {fastMode
-                      ? t('diskAnalyzer.turboDrilldownOn', 'ВКЛ: Режим Turbo Drill-Down (Быстрый скан)')
-                      : t('diskAnalyzer.turboDrilldownOff', 'ВЫКЛ: Полный глубокий перебор (Все файлы)')}
+                      ? t('diskAnalyzer.turboDrilldownOn', 'ON: Turbo Drill-Down Mode (Fast Scan)')
+                      : t('diskAnalyzer.turboDrilldownOff', 'OFF: Full Deep Scan (All Files)')}
                   </span>
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
@@ -213,28 +262,21 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
                     }`}
                   >
                     {fastMode
-                      ? t('diskAnalyzer.turboDrilldownBadgeOn', 'ВКЛ')
-                      : t('diskAnalyzer.turboDrilldownBadgeOff', 'ВЫКЛ')}
+                      ? t('diskAnalyzer.turboDrilldownBadgeOn', 'ON')
+                      : t('diskAnalyzer.turboDrilldownBadgeOff', 'OFF')}
                   </span>
                 </div>
                 <p className="text-[11px] text-text-muted mt-0.5">
                   {fastMode
-                    ? t(
-                        'diskAnalyzer.turboDrilldownDescOn',
-                        'Пропуск служебных папок Windows ($Recycle.bin, System Volume, WinSxS) для мгновенного нахождения игр и тяжелых папок.'
-                      )
-                    : t(
-                        'diskAnalyzer.turboDrilldownDescOff',
-                        'Полный перебор всех файлов системы байт-в-байт (может занять несколько минут на системном диске).'
-                      )}
+                    ? t('diskAnalyzer.turboDrilldownDescOn', 'Skips protected OS folders for fast results.')
+                    : t('diskAnalyzer.turboDrilldownDescOff', 'Scans every file on the target path.')}
                 </p>
               </div>
             </div>
 
-            {/* Sliding Toggle Control */}
             <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
               <div
-                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                className={`relative inline-flex h-5 w-10 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
                   fastMode ? 'bg-status-success' : 'bg-slate-700'
                 }`}
               >
@@ -245,7 +287,7 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
                 />
               </div>
             </div>
-          </div>
+          </button>
         )}
 
         <div className="flex flex-col sm:flex-row items-stretch gap-2">
@@ -259,11 +301,12 @@ export const DiskTargetSelector: React.FC<DiskTargetSelectorProps> = ({
               }}
               placeholder="C:\Users\... or D:\Projects"
               disabled={isScanning}
-              className="w-full bg-surface-subtle border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-text placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand disabled:opacity-50"
+              className="w-full bg-surface-subtle border border-border rounded-[6px] px-3 py-2 text-xs font-mono text-text-primary placeholder-text-muted focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand disabled:opacity-50"
             />
           </div>
 
           <button
+            type="button"
             onClick={() => onStartScan(customPath || selectedDrive || undefined)}
             disabled={isScanning}
             className="px-5 py-2 rounded-[6px] bg-brand hover:bg-brand-hover text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors disabled:opacity-50"

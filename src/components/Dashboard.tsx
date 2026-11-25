@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { useMetricsPoller } from '../hooks/useMetricsPoller';
 import { SparklineAreaGraph } from './SparklineAreaGraph';
 import { TemperatureSensorWidget } from './TemperatureSensorWidget';
+import { OptimizationCategory } from '../types';
 import {
   ShieldCheck,
   Activity,
@@ -19,8 +20,6 @@ import {
   Gauge,
   Wifi,
   Disc,
-  Zap,
-  SlidersHorizontal,
 } from 'lucide-react';
 
 function formatBytesPerSec(bytes: number): string {
@@ -56,26 +55,54 @@ export function Dashboard() {
   const selectedGpuSensorId = useAppStore((s) => s.selectedGpuSensorId);
   const setSelectedCpuSensorId = useAppStore((s) => s.setSelectedCpuSensorId);
   const setSelectedGpuSensorId = useAppStore((s) => s.setSelectedGpuSensorId);
+  const metricsError = useAppStore((s) => (s as { metricsError?: string | null }).metricsError ?? null);
 
-  const cpuSensors = sensorItems.filter((s) => s.sensorType === 'cpu');
-  const gpuSensors = sensorItems.filter((s) => s.sensorType === 'gpu');
-  const availableCpuSensors = cpuSensors.length > 0 ? cpuSensors : sensorItems;
-  const availableGpuSensors = gpuSensors;
+  const { availableCpuSensors, availableGpuSensors } = useMemo(() => {
+    const cpuSensors = sensorItems.filter((s) => s.sensorType === 'cpu');
+    const gpuSensors = sensorItems.filter((s) => s.sensorType === 'gpu');
+    return {
+      availableCpuSensors: cpuSensors.length > 0 ? cpuSensors : sensorItems,
+      availableGpuSensors: gpuSensors,
+    };
+  }, [sensorItems]);
 
   useEffect(() => {
     fetchOptimizationsStatus();
   }, [fetchOptimizationsStatus]);
 
-  const unappliedCount = optimizations.filter((o) => !o.isApplied).length;
+  const unappliedCount = useMemo(
+    () => optimizations.filter((o) => !o.isApplied).length,
+    [optimizations]
+  );
   const isFullyOptimized = unappliedCount === 0;
 
-  const cpuSeries = metricsHistory.map((m) => m.cpuUsagePercent);
-  const ramSeries = metricsHistory.map((m) => m.memoryUsagePercent);
-  const diskReadSeries = metricsHistory.map((m) => m.diskReadBytesPerSec / (1024 * 1024)); // MB/s
-  const netRxSeries = metricsHistory.map((m) => m.networkRxBytesPerSec / 1024); // KB/s
+  const { cpuSeries, ramSeries, diskReadSeries, netRxSeries } = useMemo(
+    () => ({
+      cpuSeries: metricsHistory.map((m) => m.cpuUsagePercent),
+      ramSeries: metricsHistory.map((m) => m.memoryUsagePercent),
+      diskReadSeries: metricsHistory.map((m) => m.diskReadBytesPerSec / (1024 * 1024)),
+      netRxSeries: metricsHistory.map((m) => m.networkRxBytesPerSec / 1024),
+    }),
+    [metricsHistory]
+  );
+
+  const categoryStats = useMemo(() => {
+    const cats: OptimizationCategory[] = ['telemetry', 'bloatware', 'privacy', 'services', 'ui_tweaks', 'disk_cleanup'];
+    return cats.map((cat) => {
+      let count = 0;
+      let selCount = 0;
+      for (const o of optimizations) {
+        if (o.category === cat) {
+          count++;
+          if (o.isSelected) selCount++;
+        }
+      }
+      return { cat, count, selCount };
+    });
+  }, [optimizations]);
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Top Banner */}
       <div
         className={`rounded-[6px] border p-5 flex items-center justify-between shadow-sm ${
@@ -128,6 +155,12 @@ export function Dashboard() {
       </div>
 
       {/* Real-time Telemetry Controls Bar */}
+      {metricsError && (
+        <div className="rounded-[6px] border border-status-danger/40 bg-status-dangerSubtle p-3 text-xs font-mono text-status-danger flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>{metricsError}</span>
+        </div>
+      )}
       <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Gauge className="h-4 w-4 text-brand" />
@@ -295,17 +328,17 @@ export function Dashboard() {
       </div>
 
       {/* Core Specs Grid Cards */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 space-y-2">
           <div className="flex items-center justify-between text-text-muted">
             <span className="text-[11px] font-mono uppercase tracking-wider">{t('dashboard.operatingSystem')}</span>
             <Activity className="h-4 w-4 text-brand" />
           </div>
           <div className="text-lg font-semibold text-text-primary">
-            {systemInfo?.osName || 'Windows 11'}
+            {systemInfo?.osName || '—'}
           </div>
           <div className="text-xs font-mono text-text-secondary">
-            {t('dashboard.build', { build: systemInfo?.osBuild || '22631.3880', version: systemInfo?.osVersion || '23H2' })}
+            {t('dashboard.build', { build: systemInfo?.osBuild || '—', version: systemInfo?.osVersion || '—' })}
           </div>
         </div>
 
@@ -377,25 +410,22 @@ export function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1 pb-2">
-          {['telemetry', 'bloatware', 'privacy', 'services', 'ui_tweaks', 'disk_cleanup'].map((cat) => {
-            const count = optimizations.filter((o) => o.category === cat).length;
-            const selCount = optimizations.filter((o) => o.category === cat && o.isSelected).length;
-            return (
-              <div
-                key={cat}
-                onClick={() => {
-                  useAppStore.getState().setSelectedCategory(cat);
-                  setActiveTab('optimization');
-                }}
-                className="cursor-pointer rounded-[6px] border border-border-subtle bg-surface-subtle p-2.5 hover:bg-surface-hover transition-colors"
-              >
-                <div className="text-[10px] font-mono uppercase text-text-muted">{t(`dashboard.categories.${cat}`)}</div>
-                <div className="text-xs font-semibold text-text-primary font-mono tabular-nums mt-0.5">
-                  {selCount} / {count} <span className="text-[10px] text-text-muted font-normal">{t('dashboard.active')}</span>
-                </div>
+          {categoryStats.map(({ cat, count, selCount }) => (
+            <button
+              type="button"
+              key={cat}
+              onClick={() => {
+                useAppStore.getState().setSelectedCategory(cat);
+                setActiveTab('optimization');
+              }}
+              className="w-full text-left cursor-pointer rounded-[6px] border border-border-subtle bg-surface-subtle p-2.5 hover:bg-surface-hover transition-colors"
+            >
+              <div className="text-[10px] font-mono uppercase text-text-muted">{t(`dashboard.categories.${cat}`)}</div>
+              <div className="text-xs font-semibold text-text-primary font-mono tabular-nums mt-0.5">
+                {selCount} / {count} <span className="text-[10px] text-text-muted font-normal">{t('dashboard.active')}</span>
               </div>
-            );
-          })}
+            </button>
+          ))}
         </div>
 
         <div className="divide-y divide-border-subtle max-h-64 overflow-y-auto">

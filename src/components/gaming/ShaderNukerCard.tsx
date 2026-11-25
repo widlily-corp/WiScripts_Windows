@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Sparkles,
@@ -7,11 +7,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  HardDrive,
-  Info,
   Flame,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -30,6 +29,7 @@ export function ShaderNukerCard() {
   const nukeResult = useAppStore((s) => s.nukeResult);
   const scanShaderCaches = useAppStore((s) => s.scanShaderCaches);
   const nukeShaderCaches = useAppStore((s) => s.nukeShaderCaches);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!shaderSummary) {
@@ -41,31 +41,32 @@ export function ShaderNukerCard() {
   const totalFiles = shaderSummary?.totalFiles ?? 0;
   const isHighCache = totalBytes > 1024 * 1024 * 1024; // > 1 GB
 
-  const handleNukeAll = () => {
-    nukeShaderCaches();
+  const handleConfirmNuke = async () => {
+    await nukeShaderCaches();
+    setConfirmOpen(false);
   };
 
   return (
     <div className="space-y-4 animate-fade-in select-none">
       {/* Top Banner Card */}
-      <div className="p-4 rounded-xl border border-surface-border bg-surface-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-4 rounded-xl border border-border bg-surface-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="p-2.5 rounded-xl bg-brand/10 text-brand shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
             <h3 className="font-semibold text-text-primary text-sm flex items-center gap-2">
-              {t('shaderNuker.title', 'Shader Cache Nuker — Ликвидатор статтеров')}
+              {t('shaderNuker.title', 'Shader Cache Nuker')}
               {isHighCache && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-status-warning/20 text-status-warning border border-status-warning/30">
-                  <AlertTriangle className="w-3 h-3" /> {t('shaderNuker.heavyCache', 'Большой объём')}
+                  <AlertTriangle className="w-3 h-3" /> {t('shaderNuker.heavyCache', 'Large Cache')}
                 </span>
               )}
             </h3>
             <p className="text-xs text-text-muted mt-1 max-w-xl">
               {t(
                 'shaderNuker.description',
-                'Удаление устаревших и фрагментированных кэшей DirectX 12, Vulkan, NVIDIA, AMD и Unreal Engine для устранения фризов и статтеров при загрузке ассетов в играх.'
+                'Clear stale and fragmented DirectX 12, Vulkan, NVIDIA, AMD, and Unreal Engine shader caches to eliminate stuttering.'
               )}
             </p>
           </div>
@@ -73,28 +74,30 @@ export function ShaderNukerCard() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
+            type="button"
             onClick={() => scanShaderCaches()}
             disabled={isScanningShaders || isNukingShaders}
-            className="px-3.5 py-2 bg-surface-base hover:bg-surface-highlight border border-surface-border rounded-lg text-xs font-medium text-text-primary flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-medium text-text-primary flex items-center gap-1.5 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isScanningShaders ? 'animate-spin text-brand' : ''}`} />
-            {t('common.refresh', 'Сканировать')}
+            {t('common.refresh', 'Refresh')}
           </button>
 
           <button
-            onClick={handleNukeAll}
+            type="button"
+            onClick={() => setConfirmOpen(true)}
             disabled={isScanningShaders || isNukingShaders || totalFiles === 0}
             className="px-4 py-2 bg-status-danger/90 hover:bg-status-danger text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-status-danger/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             {isNukingShaders ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                {t('shaderNuker.cleaning', 'Очистка кэшей...')}
+                {t('shaderNuker.cleaning', 'Cleaning caches...')}
               </>
             ) : (
               <>
                 <Trash2 className="w-3.5 h-3.5" />
-                {t('shaderNuker.cleanButton', 'Очистить кэши шейдеров')}
+                {t('shaderNuker.cleanButton', 'Clear Shader Caches')}
               </>
             )}
           </button>
@@ -103,44 +106,44 @@ export function ShaderNukerCard() {
 
       {/* Metrics Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-xl border border-surface-border bg-surface-base">
+        <div className="p-3.5 rounded-xl border border-border bg-surface">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider block">
-            {t('shaderNuker.totalSize', 'Общий объём кэшей')}
+            {t('shaderNuker.totalSize', 'Total Cache Size')}
           </span>
           <div className="text-lg font-bold text-text-primary mt-1 font-mono">
             {isScanningShaders ? (
-              <span className="text-text-muted text-xs animate-pulse">Сканирование...</span>
+              <span className="text-text-muted text-xs animate-pulse">{t('shaderNuker.scanning', 'Scanning...')}</span>
             ) : (
               formatBytes(totalBytes)
             )}
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl border border-surface-border bg-surface-base">
+        <div className="p-3.5 rounded-xl border border-border bg-surface">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider block">
-            {t('shaderNuker.cachedFiles', 'Файлов кэша')}
+            {t('shaderNuker.cachedFiles', 'Cached Files')}
           </span>
           <div className="text-lg font-bold text-text-primary mt-1 font-mono">
             {isScanningShaders ? (
-              <span className="text-text-muted text-xs animate-pulse">Сканирование...</span>
+              <span className="text-text-muted text-xs animate-pulse">{t('shaderNuker.scanning', 'Scanning...')}</span>
             ) : (
-              `${totalFiles.toLocaleString()} файлов`
+              t('shaderNuker.filesCount', { count: totalFiles, formatted: totalFiles.toLocaleString(), defaultValue: `${totalFiles.toLocaleString()} files` })
             )}
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl border border-surface-border bg-surface-base">
+        <div className="p-3.5 rounded-xl border border-border bg-surface">
           <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider block">
-            {t('shaderNuker.stutterImpact', 'Влияние на статтеры')}
+            {t('shaderNuker.stutterImpact', 'Stutter Impact')}
           </span>
           <div className="text-xs font-semibold mt-1 flex items-center gap-1.5">
             {totalBytes > 1024 * 1024 * 500 ? (
               <span className="text-status-warning flex items-center gap-1">
-                <Flame className="w-3.5 h-3.5" /> Рекомендуется очистка
+                <Flame className="w-3.5 h-3.5" /> {t('shaderNuker.cleanupRecommended', 'Cleanup recommended')}
               </span>
             ) : (
               <span className="text-status-success flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Оптимальное состояние
+                <CheckCircle2 className="w-3.5 h-3.5" /> {t('shaderNuker.optimalState', 'Optimal state')}
               </span>
             )}
           </div>
@@ -153,14 +156,20 @@ export function ShaderNukerCard() {
           <CheckCircle2 className="w-4 h-4 text-status-success shrink-0 mt-0.5" />
           <div className="space-y-1">
             <span className="font-semibold block text-status-success">
-              {t('shaderNuker.resultTitle', 'Кэши шейдеров успешно очищены!')}
+              {t('shaderNuker.resultTitle', 'Shader caches cleared successfully!')}
             </span>
             <div className="text-text-muted text-[11px]">
-              Освобождено: <span className="font-semibold text-text-primary">{formatBytes(nukeResult.bytesFreed)}</span>{' '}
-              ({nukeResult.filesRemoved} файлов удалено).
+              {t('shaderNuker.freedSummary', {
+                size: formatBytes(nukeResult.bytesFreed),
+                count: nukeResult.filesRemoved,
+                defaultValue: `Freed: ${formatBytes(nukeResult.bytesFreed)} (${nukeResult.filesRemoved} files removed).`,
+              })}
               {nukeResult.skippedLockedCount > 0 && (
                 <span className="ml-1 text-text-muted">
-                  • {nukeResult.skippedLockedCount} файлов заняты активным видеодрайвером и безопасно пропущены.
+                  • {t('shaderNuker.skippedLocked', {
+                    count: nukeResult.skippedLockedCount,
+                    defaultValue: `${nukeResult.skippedLockedCount} files locked by active GPU driver and safely skipped.`,
+                  })}
                 </span>
               )}
             </div>
@@ -171,7 +180,7 @@ export function ShaderNukerCard() {
       {/* Cache Locations Grid */}
       <div className="space-y-2">
         <h4 className="text-xs font-semibold text-text-primary uppercase tracking-wider">
-          {t('shaderNuker.detectedStorages', 'Обнаруженные хранилища шейдеров')}
+          {t('shaderNuker.detectedStorages', 'Detected Shader Storages')}
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -180,14 +189,14 @@ export function ShaderNukerCard() {
               key={entry.id}
               className={`p-3 rounded-lg border text-xs flex items-center justify-between transition-colors ${
                 entry.exists && entry.fileCount > 0
-                  ? 'bg-surface-base border-surface-border'
-                  : 'bg-surface-subtle/40 border-surface-border/50 opacity-60'
+                  ? 'bg-surface border-border'
+                  : 'bg-surface-subtle/40 border-border/50 opacity-60'
               }`}
             >
               <div className="min-w-0 pr-3">
                 <div className="flex items-center gap-1.5 font-medium text-text-primary">
                   <span className="truncate">{entry.name}</span>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase bg-surface-highlight text-text-muted">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase bg-surface-hover text-text-muted">
                     {entry.vendor}
                   </span>
                 </div>
@@ -201,13 +210,29 @@ export function ShaderNukerCard() {
                   {formatBytes(entry.sizeBytes)}
                 </div>
                 <div className="text-[10px] text-text-muted font-mono">
-                  {entry.fileCount} файлов
+                  {t('shaderNuker.filesCount', { count: entry.fileCount, formatted: entry.fileCount.toLocaleString(), defaultValue: `${entry.fileCount} files` })}
                 </div>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title={t('shaderNuker.confirmTitle', 'Clear Shader Caches?')}
+        description={t('shaderNuker.confirmDesc', {
+          size: formatBytes(totalBytes),
+          count: totalFiles,
+          defaultValue: `This will delete ${totalFiles.toLocaleString()} cached shader files (${formatBytes(totalBytes)}). Active GPU driver files in use will be skipped.`,
+        })}
+        confirmLabel={t('shaderNuker.cleanButton', 'Clear Shader Caches')}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        variant="danger"
+        isConfirming={isNukingShaders}
+        onConfirm={handleConfirmNuke}
+        onClose={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

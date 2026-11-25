@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AlertTriangle, Terminal, X, ShieldAlert, ShieldCheck, History, RotateCcw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { useAccessibleModal } from './common/useAccessibleModal';
 
 export interface PreflightSnapshotResult {
   snapshotId: string;
@@ -29,20 +30,28 @@ export function SafetyModal() {
   const [createPreflightSnapshot, setCreatePreflightSnapshot] = useState(true);
   const [createVssRestorePoint, setCreateVssRestorePoint] = useState(true);
 
-  useEffect(() => {
-    setConfirmInput('');
-    setShowCommands(false);
-  }, [modal?.isOpen]);
+  const isOpen = Boolean(modal && modal.isOpen);
+  const modalRef = useAccessibleModal({
+    isOpen,
+    onClose: closeModal,
+    disabled: isSubmitting,
+    closeOnEscape: false,
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && modal?.isOpen && !isSubmitting) {
+      if (e.key === 'Escape' && isOpen && !isSubmitting) {
         closeModal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [modal?.isOpen, isSubmitting, closeModal]);
+  }, [isOpen, isSubmitting, closeModal]);
+
+  useEffect(() => {
+    setConfirmInput('');
+    setShowCommands(false);
+  }, [modal?.isOpen]);
 
   if (!modal || !modal.isOpen) return null;
 
@@ -63,6 +72,7 @@ export function SafetyModal() {
           const snapshotRes = await invoke<PreflightSnapshotResult>('create_preflight_snapshot', {
             description: `Pre-flight safety snapshot: ${modal.title}`,
             rule_ids: modal.commandsToRun,
+            create_vss_restore_point: createVssRestorePoint,
           });
 
           if (snapshotRes.stateEngineSuccess) {
@@ -118,7 +128,11 @@ export function SafetyModal() {
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className="w-full max-w-lg rounded-[8px] border border-border bg-surface p-6 shadow-2xl animate-scale-in">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-[8px] border border-border bg-surface p-6 shadow-2xl animate-scale-in focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border pb-4">
           <div className="flex items-center gap-3">
@@ -160,14 +174,14 @@ export function SafetyModal() {
           <div className="space-y-2 rounded-[6px] border border-border-subtle bg-surface-subtle p-3.5">
             <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">
               <ShieldCheck className="h-4 w-4 text-brand" />
-              <span>Pre-Flight Safety Engine (Dual-Tier)</span>
+              <span>{t('safety_modal.preflight_title', 'Pre-Flight Safety Engine (Dual-Tier)')}</span>
             </div>
 
             <div className="space-y-2 pt-1 text-xs">
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex items-center gap-2 text-text-secondary">
                   <History className="h-3.5 w-3.5 text-brand" />
-                  <span>StateEngine JSON Delta Capture</span>
+                  <span>{t('safety_modal.preflight_state_engine', 'StateEngine JSON Delta Capture')}</span>
                 </div>
                 <input
                   type="checkbox"
@@ -180,7 +194,7 @@ export function SafetyModal() {
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex items-center gap-2 text-text-secondary">
                   <RotateCcw className="h-3.5 w-3.5 text-brand" />
-                  <span>Windows VSS System Restore Point</span>
+                  <span>{t('safety_modal.preflight_vss', 'Windows VSS System Restore Point')}</span>
                 </div>
                 <input
                   type="checkbox"
@@ -193,7 +207,7 @@ export function SafetyModal() {
           </div>
 
           {/* Dry Run Toggle Card */}
-          <div className="flex items-center justify-between rounded-[6px] border border-border-subtle bg-surface-subtle p-3">
+          <label className="flex items-center justify-between rounded-[6px] border border-border-subtle bg-surface-subtle p-3 cursor-pointer">
             <div>
               <div className="text-xs font-medium text-text-primary">{t('safety_modal.safety_mode', 'Dry-Run Simulation Mode')}</div>
               <div className="text-[11px] text-text-muted">{t('safety_modal.simulate_desc', 'Simulate commands without modifying system settings')}</div>
@@ -204,7 +218,7 @@ export function SafetyModal() {
               onChange={(e) => setDryRunMode(e.target.checked)}
               className="h-4 w-4 rounded border-border bg-surface text-brand focus:ring-brand"
             />
-          </div>
+          </label>
 
           {/* Commands Disclosure */}
           <div>

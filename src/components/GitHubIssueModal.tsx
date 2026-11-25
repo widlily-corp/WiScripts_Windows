@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { GitHubIssueCategory, GitHubIssuePayload } from '../types';
+import { useAccessibleModal } from './common/useAccessibleModal';
 import { Bug, Sparkles, HelpCircle, X, Send, Key, FileText, Cpu, ExternalLink, Loader2 } from 'lucide-react';
 
 interface GitHubIssueModalProps {
@@ -31,6 +32,12 @@ export function GitHubIssueModal({
   const [githubToken, setGithubToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const modalRef = useAccessibleModal({
+    isOpen,
+    onClose,
+    disabled: isSubmitting,
+    closeOnEscape: false,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -99,11 +106,17 @@ export function GitHubIssueModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="github-issue-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
+      }}
     >
-      <div className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl animate-scale-in">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="github-issue-modal-title"
+        className="w-full max-w-xl rounded-[6px] border border-border bg-surface p-6 shadow-2xl animate-scale-in"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border pb-4">
           <div className="flex items-center gap-3">

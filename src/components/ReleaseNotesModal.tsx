@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { useAccessibleModal } from './common/useAccessibleModal';
 import { Sparkles, Download, Clock, X, Calendar, ArrowRight } from 'lucide-react';
 
 export interface ReleaseNotesModalProps {
@@ -23,31 +24,22 @@ export function ReleaseNotesModal({ isOpen: propIsOpen, onClose: propOnClose }: 
       ? propIsOpen
       : updateStatus === 'available' && updateInfo !== null && !bannerDismissed;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isModalVisible) {
-        if (propOnClose) {
-          propOnClose();
-        } else {
-          dismissUpdateBanner();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalVisible, propOnClose, dismissUpdateBanner]);
-
-  if (!isModalVisible || !updateInfo) {
-    return null;
-  }
-
-  const handleDismiss = () => {
+  const handleDismiss = useCallback(() => {
     if (propOnClose) {
       propOnClose();
     } else {
       dismissUpdateBanner();
     }
-  };
+  }, [propOnClose, dismissUpdateBanner]);
+
+  const modalRef = useAccessibleModal({
+    isOpen: isModalVisible && updateInfo !== null,
+    onClose: handleDismiss,
+  });
+
+  if (!isModalVisible || !updateInfo) {
+    return null;
+  }
 
   const handleInstall = async () => {
     handleDismiss();
@@ -58,11 +50,12 @@ export function ReleaseNotesModal({ isOpen: propIsOpen, onClose: propOnClose }: 
     <div
       className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in select-none"
       onClick={handleDismiss}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="release-notes-modal-title"
     >
       <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="release-notes-modal-title"
         className="max-w-2xl w-full bg-surface border border-border rounded-[8px] shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

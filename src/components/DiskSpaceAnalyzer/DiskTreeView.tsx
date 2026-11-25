@@ -83,7 +83,7 @@ export const DiskTreeView: React.FC<DiskTreeViewProps> = ({
     return (
       <div className="bg-surface border border-border rounded-[8px] p-12 text-center space-y-3">
         <FolderSearch className="w-8 h-8 text-text-muted mx-auto" />
-        <p className="text-sm font-semibold text-text">
+        <p className="text-sm font-semibold text-text-primary">
           {t('diskAnalyzer.noResults', 'No items match your search or filter criteria.')}
         </p>
         <p className="text-xs text-text-muted">

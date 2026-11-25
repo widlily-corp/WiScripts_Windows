@@ -14,6 +14,7 @@ import {
   Folder,
   Database,
   Layers,
+  Loader2,
 } from 'lucide-react';
 
 export function StartupView() {
@@ -63,7 +64,7 @@ export function StartupView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       <AdminElevationBanner featureName={t('startupView.title')} />
 
       {/* View Header */}
@@ -96,7 +97,7 @@ export function StartupView() {
       </div>
 
       {/* Summary Metrics */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
             <div className="text-[10px] font-mono uppercase text-text-muted">{t('startupView.totalStartupApps')}</div>
@@ -149,40 +150,50 @@ export function StartupView() {
 
       {/* Startup Items Table */}
       <div className="rounded-[6px] border border-border bg-surface overflow-hidden">
-        {filteredItems.length === 0 ? (
+        {isStartupLoading && startupItems.length === 0 ? (
+          <div className="p-12 text-center text-text-muted space-y-2">
+            <Loader2 className="h-8 w-8 text-brand mx-auto animate-spin" />
+            <div className="text-sm font-medium">{t('common.loading', 'Loading...')}</div>
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="p-12 text-center text-text-muted space-y-2">
             <AlertTriangle className="h-8 w-8 text-text-muted mx-auto" />
             <div className="text-sm font-medium">{t('startupView.noStartupApps')}</div>
           </div>
         ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
-              <tr>
-                <th className="py-3 px-4 font-semibold">{t('startupView.status')}</th>
-                <th className="py-3 px-4 font-semibold">{t('startupView.appAndPublisher')}</th>
-                <th className="py-3 px-4 font-semibold">{t('startupView.location')}</th>
-                <th className="py-3 px-4 font-semibold">{t('startupView.commandTarget')}</th>
-                <th className="py-3 px-4 font-semibold text-right">{t('startupView.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle">
-              {filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-surface-hover/50 transition-colors">
-                  {/* Status Toggle */}
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleStartupItem(item.id, item.valueName || item.name, item.location, !item.enabled)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        item.enabled ? 'bg-brand' : 'bg-surface-subtle border-border-subtle'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          item.enabled ? 'translate-x-4' : 'translate-x-0'
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-surface-subtle text-text-muted font-mono uppercase text-[10px] border-b border-border-subtle">
+                <tr>
+                  <th className="py-3 px-4 font-semibold">{t('startupView.status')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('startupView.appAndPublisher')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('startupView.location')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('startupView.commandTarget')}</th>
+                  <th className="py-3 px-4 font-semibold text-right">{t('startupView.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {filteredItems.map((item) => (
+                  <tr key={item.id} className="hover:bg-surface-hover/50 transition-colors">
+                    {/* Status Toggle */}
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={item.enabled}
+                        aria-label={`${t('startupView.status')} ${item.name}`}
+                        onClick={() => toggleStartupItem(item.id, item.valueName || item.name, item.location, !item.enabled)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          item.enabled ? 'bg-brand' : 'bg-surface-subtle border-border-subtle'
                         }`}
-                      />
-                    </button>
-                  </td>
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            item.enabled ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </td>
 
                   {/* Name & Publisher */}
                   <td className="py-3 px-4">
@@ -223,6 +234,7 @@ export function StartupView() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

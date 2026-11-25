@@ -138,7 +138,7 @@ export function MasView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -177,12 +177,9 @@ export function MasView() {
         {ACTIVATION_METHODS.map((method) => {
           const isSelected = selectedMasMethod === method.id;
           return (
-            <div
+            <label
               key={method.id}
-              onClick={() => {
-                if (!isExecuting) setSelectedMasMethod(method.id);
-              }}
-              className={`rounded-[6px] border p-4 space-y-3 transition-colors ${
+              className={`rounded-[6px] border p-4 space-y-3 transition-colors block ${
                 isExecuting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               } ${
                 isSelected
@@ -221,7 +218,7 @@ export function MasView() {
                   className="h-4 w-4 border-border text-brand focus:ring-brand disabled:cursor-not-allowed"
                 />
               </div>
-            </div>
+            </label>
           );
         })}
       </div>

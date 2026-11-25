@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Terminal,
@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import type { ScriptExecutionRecord } from '../store/slices/scriptRunnerSlice';
 import { downloadScriptLogFile, generateStructuredLogText } from '../utils/scriptLogExporter';
+import { useAccessibleModal } from './common/useAccessibleModal';
+import { PaginationBar, usePagination } from './common/VirtualList';
 
 export interface ExecutionLogModalProps {
   isOpen: boolean;
@@ -31,40 +33,45 @@ export const ExecutionLogModal: React.FC<ExecutionLogModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [logFilter, setLogFilter] = useState('');
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const modalRef = useAccessibleModal({
+    isOpen: isOpen && Boolean(record),
+    onClose,
+  });
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, []);
+
+  const filteredLogs = (record?.logLines ?? []).filter(
+    (l) => !logFilter || l.line.toLowerCase().includes(logFilter.toLowerCase())
+  );
+
+  const { page, totalPages, pageSize, totalItems, pagedItems, setPage } = usePagination(filteredLogs, 150);
 
   if (!isOpen || !record) return null;
 
   const handleCopyLogs = async () => {
+    setCopyError(null);
     try {
       const fullText = generateStructuredLogText(record);
       await navigator.clipboard.writeText(fullText);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setCopyError(err instanceof Error ? err.message : String(err));
     }
   };
 
   const handleDownload = () => {
     downloadScriptLogFile(record);
   };
-
-  const filteredLogs = record.logLines.filter(
-    (l) => !logFilter || l.line.toLowerCase().includes(logFilter.toLowerCase())
-  );
 
   const durationSec = (record.durationMs / 1000).toFixed(2);
 
@@ -95,9 +102,13 @@ export const ExecutionLogModal: React.FC<ExecutionLogModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="exec-log-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in"
     >
-      <div className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface-card border border-border rounded-[8px] shadow-2xl overflow-hidden">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        className="flex flex-col w-full max-w-4xl max-h-[90vh] bg-surface border border-border rounded-[8px] shadow-2xl overflow-hidden focus:outline-none"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-surface-subtle/40">
           <div className="flex items-center gap-3 min-w-0">
@@ -120,8 +131,10 @@ export const ExecutionLogModal: React.FC<ExecutionLogModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-text-muted hover:text-text-primary rounded-[6px] hover:bg-surface-elevated transition-colors"
+            className="p-1.5 text-text-muted hover:text-text-primary rounded-[6px] hover:bg-surface-hover transition-colors"
+            aria-label={t('script_runner.history_modal_close', 'Close')}
             title={t('script_runner.history_modal_close', 'Close')}
           >
             <X className="h-4 w-4" />
@@ -166,58 +179,75 @@ export const ExecutionLogModal: React.FC<ExecutionLogModalProps> = ({
               type="text"
               value={logFilter}
               onChange={(e) => setLogFilter(e.target.value)}
-              placeholder="Search output..."
-              className="w-full pl-8 pr-3 py-1 text-xs bg-surface-card border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-hidden focus:border-brand"
+              placeholder={t('script_runner.search_output_placeholder', 'Search output...')}
+              className="w-full pl-8 pr-3 py-1 text-xs bg-surface border border-border rounded-[6px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand"
             />
           </div>
         </div>
 
         {/* Log Viewer Content Area */}
         <div className="flex-1 overflow-y-auto p-4 bg-[#0A0D14] font-mono text-xs text-text-code select-text">
-          {filteredLogs.length === 0 ? (
+          {pagedItems.length === 0 ? (
             <div className="flex items-center justify-center h-48 text-text-muted">
               <p>{t('script_runner.history_modal_no_logs', 'No log lines were captured during this execution.')}</p>
             </div>
           ) : (
             <div className="space-y-1">
-              {filteredLogs.map((log, idx) => (
-                <div
-                  key={log.id || idx}
-                  className={`flex items-start gap-3 px-2 py-0.5 rounded hover:bg-white/5 ${
-                    log.stream === 'stderr' ? 'text-rose-400' : 'text-text-code'
-                  }`}
-                >
-                  <span className="text-[11px] text-text-muted/60 select-none w-8 text-right shrink-0">
-                    {idx + 1}
-                  </span>
-                  <span className="text-[10px] text-text-muted/70 select-none shrink-0">
-                    [{log.timestamp}]
-                  </span>
-                  <span
-                    className={`text-[9px] px-1 py-0.2 rounded font-semibold select-none shrink-0 ${
-                      log.stream === 'stderr'
-                        ? 'bg-rose-500/20 text-rose-300'
-                        : 'bg-blue-500/20 text-blue-300'
+              {pagedItems.map((log, idx) => {
+                const lineNum = (page - 1) * pageSize + idx + 1;
+                return (
+                  <div
+                    key={log.id || lineNum}
+                    className={`flex items-start gap-3 px-2 py-0.5 rounded hover:bg-white/5 ${
+                      log.stream === 'stderr' ? 'text-rose-400' : 'text-text-code'
                     }`}
                   >
-                    {log.stream.toUpperCase()}
-                  </span>
-                  <span className="break-all whitespace-pre-wrap">{log.line}</span>
-                </div>
-              ))}
+                    <span className="text-[11px] text-text-muted/60 select-none w-8 text-right shrink-0">
+                      {lineNum}
+                    </span>
+                    <span className="text-[10px] text-text-muted/70 select-none shrink-0">
+                      [{log.timestamp}]
+                    </span>
+                    <span
+                      className={`text-[9px] px-1 py-0.5 rounded font-semibold select-none shrink-0 ${
+                        log.stream === 'stderr'
+                          ? 'bg-rose-500/20 text-rose-300'
+                          : 'bg-blue-500/20 text-blue-300'
+                      }`}
+                    >
+                      {log.stream.toUpperCase()}
+                    </span>
+                    <span className="break-all whitespace-pre-wrap">{log.line}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
+        <PaginationBar
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
+
         {/* Modal Footer */}
         <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-surface-subtle/40">
-          <span className="text-xs text-text-muted font-mono">
-            {filteredLogs.length} / {record.logLines.length} lines
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-text-muted font-mono">
+              {filteredLogs.length} / {record.logLines.length} lines
+            </span>
+            {copyError && (
+              <span className="text-xs text-status-danger font-mono">{copyError}</span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleCopyLogs}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-elevated hover:bg-surface-elevated/80 border border-border rounded-[6px] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-subtle hover:bg-surface-hover border border-border rounded-[6px] transition-colors"
             >
               {copied ? (
                 <>
@@ -232,25 +262,28 @@ export const ExecutionLogModal: React.FC<ExecutionLogModalProps> = ({
               )}
             </button>
             <button
+              type="button"
               onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-elevated hover:bg-surface-elevated/80 border border-border rounded-[6px] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-subtle hover:bg-surface-hover border border-border rounded-[6px] transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
               <span>{t('script_runner.history_modal_download', 'Download .log')}</span>
             </button>
             {onRerun && (
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onRerun(record);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-foreground bg-brand hover:bg-brand/90 rounded-[6px] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand hover:bg-brand-hover rounded-[6px] transition-colors"
               >
                 <RotateCw className="h-3.5 w-3.5" />
                 <span>{t('script_runner.history_rerun', 'Re-run')}</span>
               </button>
             )}
             <button
+              type="button"
               onClick={onClose}
               className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary rounded-[6px] transition-colors"
             >

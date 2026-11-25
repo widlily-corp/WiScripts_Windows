@@ -22,7 +22,7 @@ export const DiskScanSummary: React.FC<DiskScanSummaryProps> = ({ result }) => {
           <span className="text-xs font-medium">{t('diskAnalyzer.totalScanned', 'Total Scanned Size')}</span>
           <HardDrive className="w-4 h-4 text-brand" />
         </div>
-        <div className="text-lg font-bold text-text font-mono">
+        <div className="text-lg font-bold text-text-primary font-mono">
           {formatBytes(result.totalBytes)}
         </div>
         <div className="text-[10px] text-text-muted font-mono truncate">
@@ -36,7 +36,7 @@ export const DiskScanSummary: React.FC<DiskScanSummaryProps> = ({ result }) => {
           <span className="text-xs font-medium">{t('diskAnalyzer.totalFiles', 'Files Analyzed')}</span>
           <Files className="w-4 h-4 text-brand" />
         </div>
-        <div className="text-lg font-bold text-text font-mono">
+        <div className="text-lg font-bold text-text-primary font-mono">
           {result.totalFiles.toLocaleString()}
         </div>
         <div className="text-[10px] text-text-muted">
@@ -50,7 +50,7 @@ export const DiskScanSummary: React.FC<DiskScanSummaryProps> = ({ result }) => {
           <span className="text-xs font-medium">{t('diskAnalyzer.totalDirs', 'Directories Analyzed')}</span>
           <FolderTree className="w-4 h-4 text-brand" />
         </div>
-        <div className="text-lg font-bold text-text font-mono">
+        <div className="text-lg font-bold text-text-primary font-mono">
           {totalFolders.toLocaleString()}
         </div>
         <div className="text-[10px] text-text-muted">
@@ -68,7 +68,7 @@ export const DiskScanSummary: React.FC<DiskScanSummaryProps> = ({ result }) => {
             <CheckCircle2 className="w-4 h-4 text-status-success" />
           )}
         </div>
-        <div className="text-lg font-bold text-text font-mono">
+        <div className="text-lg font-bold text-text-primary font-mono">
           {durationSec}s
         </div>
         <div className="text-[10px] text-text-muted flex items-center gap-1">

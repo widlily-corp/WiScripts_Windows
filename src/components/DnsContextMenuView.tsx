@@ -106,7 +106,7 @@ export function DnsContextMenuView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="space-y-1">
@@ -127,7 +127,7 @@ export function DnsContextMenuView() {
       </div>
 
       {/* Admin Elevation Warning Banner */}
-      <AdminElevationBanner featureName="System DNS Resolver Configuration" />
+      <AdminElevationBanner featureName={t('dnsContextMenuView.title')} />
 
       {/* Section 1: Win11 Classic Context Menu Manager */}
       <div className="rounded-[6px] border border-border bg-surface p-5 space-y-4">

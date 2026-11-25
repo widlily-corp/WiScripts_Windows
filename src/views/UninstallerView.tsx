@@ -1,20 +1,18 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n/config';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from '../components/AdminElevationBanner';
+import { PaginationBar, usePagination } from '../components/common/VirtualList';
 import { InstalledApp } from '../types';
 import {
   Trash2,
   RefreshCw,
   Search,
   ArrowUpDown,
-  ShieldAlert,
   HardDrive,
   Layers,
   Info,
-  CheckCircle2,
-  ExternalLink,
   Package,
   Ghost,
 } from 'lucide-react';
@@ -99,6 +97,13 @@ export function UninstallerView() {
   const [onlyGhostApps, setOnlyGhostApps] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const ghostPromptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (ghostPromptTimerRef.current) clearTimeout(ghostPromptTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     fetchInstalledApps();
@@ -147,6 +152,8 @@ export function UninstallerView() {
   const totalStorageKb = useMemo(() => {
     return filteredAndSortedApps.reduce((acc, app) => acc + (app.estimatedSizeKb || 0), 0);
   }, [filteredAndSortedApps]);
+
+  const { page, totalPages, pageSize, totalItems, pagedItems, setPage } = usePagination(filteredAndSortedApps, 50);
 
   const handleRemoveGhostEntry = (app: InstalledApp) => {
     openSafetyModal({
@@ -204,7 +211,8 @@ export function UninstallerView() {
             errMsg.toLowerCase().includes('os error 2');
 
           if (isFileNotFound) {
-            setTimeout(() => {
+            if (ghostPromptTimerRef.current) clearTimeout(ghostPromptTimerRef.current);
+            ghostPromptTimerRef.current = setTimeout(() => {
               handleRemoveGhostEntry(app);
             }, 300);
           }
@@ -218,7 +226,7 @@ export function UninstallerView() {
   };
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(100vh-3.5rem)]">
+    <div className="p-6 space-y-6">
       <AdminElevationBanner featureName={t('uninstaller.title')} />
 
       {/* Header Bar */}
@@ -272,28 +280,30 @@ export function UninstallerView() {
           <Package className="h-6 w-6 text-brand opacity-80" />
         </div>
 
-        <div
+        <button
+          type="button"
+          disabled={ghostAppsCount === 0}
           onClick={() => {
             if (ghostAppsCount > 0) {
               setOnlyGhostApps((prev) => !prev);
             }
           }}
-          className={`rounded-[6px] border p-4 flex items-center justify-between transition-colors ${
+          className={`w-full text-left rounded-[6px] border p-4 flex items-center justify-between transition-colors ${
             ghostAppsCount > 0
               ? 'border-amber-500/30 bg-amber-500/5 cursor-pointer hover:bg-amber-500/10'
-              : 'border-border bg-surface'
+              : 'border-border bg-surface cursor-default'
           }`}
         >
           <div>
             <div className="text-[10px] font-mono uppercase text-text-muted">
-              {t('uninstaller.ghostAppsCard', 'Осиротевшие / Ghost')}
+              {t('uninstaller.ghostAppsCard', 'Orphaned / Ghost')}
             </div>
             <div className={`text-xl font-bold font-mono mt-1 ${ghostAppsCount > 0 ? 'text-amber-400' : 'text-text-muted'}`}>
               {ghostAppsCount}
             </div>
           </div>
           <Ghost className={`h-6 w-6 ${ghostAppsCount > 0 ? 'text-amber-400' : 'text-text-muted opacity-50'}`} />
-        </div>
+        </button>
 
         <div className="rounded-[6px] border border-border bg-surface p-4 flex items-center justify-between">
           <div>
@@ -400,7 +410,7 @@ export function UninstallerView() {
             </div>
 
             {/* Application Rows */}
-            {filteredAndSortedApps.map((app) => (
+            {pagedItems.map((app) => (
               <div
                 key={app.id}
                 className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-surface-hover/50 transition-colors"
@@ -427,7 +437,7 @@ export function UninstallerView() {
                       {app.isGhost && (
                         <span className="text-[9px] font-mono bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 font-semibold shrink-0">
                           <Ghost className="h-2.5 w-2.5" />
-                          <span>{t('uninstaller.ghostBadge', 'Осиротевшая запись / Ghost')}</span>
+                          <span>{t('uninstaller.ghostBadge', 'Ghost Entry')}</span>
                         </span>
                       )}
                       {app.isSystemComponent && (
@@ -453,15 +463,17 @@ export function UninstallerView() {
                 <div className="col-span-2 flex justify-end items-center gap-1.5">
                   {app.isGhost ? (
                     <button
+                      type="button"
                       onClick={() => handleRemoveGhostEntry(app)}
                       className="flex items-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-mono text-amber-300 hover:bg-amber-500 hover:text-black transition-all shadow-sm"
-                      title={t('uninstaller.eraseFromRegistryTooltip', 'Стереть осиротевшую запись из реестра')}
+                      title={t('uninstaller.eraseFromRegistryTooltip', 'Erase orphaned registry record')}
                     >
                       <Ghost className="h-3 w-3" />
-                      <span>{t('uninstaller.eraseFromRegistry', 'Стереть из реестра')}</span>
+                      <span>{t('uninstaller.eraseFromRegistry', 'Erase from Registry')}</span>
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handleUninstallClick(app)}
                       className="flex items-center gap-1.5 rounded-[6px] border border-status-danger/30 bg-status-dangerSubtle px-2.5 py-1 text-xs font-mono text-status-danger hover:bg-status-danger hover:text-white transition-all shadow-sm"
                     >
@@ -472,6 +484,13 @@ export function UninstallerView() {
                 </div>
               </div>
             ))}
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={setPage}
+            />
           </div>
         )}
       </div>

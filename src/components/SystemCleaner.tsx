@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
-import { CleanerScanResult, CleanerCleanResult, CleanerCategoryItem } from '../types';
+import { CleanerScanResult, CleanerCleanResult } from '../types';
+import { useAccessibleModal } from './common/useAccessibleModal';
 import {
   Sparkles,
   RefreshCw,
@@ -10,7 +11,6 @@ import {
   CheckSquare,
   Square,
   AlertTriangle,
-  Folder,
   HardDrive,
   FileText,
   ShieldAlert,
@@ -34,6 +34,19 @@ export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerCont
   const [isScanning, setIsScanning] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const dryRunTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTitleId = useId();
+  const confirmModalRef = useAccessibleModal({
+    isOpen: showConfirmModal,
+    onClose: () => setShowConfirmModal(false),
+    disabled: isCleaning,
+  });
+
+  useEffect(() => {
+    return () => {
+      if (dryRunTimerRef.current) clearTimeout(dryRunTimerRef.current);
+    };
+  }, []);
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -108,7 +121,10 @@ export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerCont
     try {
       if (dryRunMode) {
         // Simulate cleanup in dry-run mode
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        await new Promise<void>((resolve) => {
+          if (dryRunTimerRef.current) clearTimeout(dryRunTimerRef.current);
+          dryRunTimerRef.current = setTimeout(() => resolve(), 800);
+        });
         addLog({
           level: 'cmd',
           message: `[DRY-RUN] Simulated cleanup of ${catArray.length} categories (${formatBytes(totalSelectedBytes)}). No files modified.`,
@@ -361,14 +377,23 @@ export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerCont
 
       {/* Confirmation Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md bg-surface border border-border rounded-[6px] p-5 space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={confirmTitleId}
+        >
+          <div
+            ref={confirmModalRef}
+            tabIndex={-1}
+            className="w-full max-w-md bg-surface border border-border rounded-[6px] p-5 space-y-4 shadow-xl focus:outline-none"
+          >
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-[6px] bg-status-warning/10 text-status-warning border border-status-warning/20">
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-text-primary">{t('systemCleaner.confirmTitle')}</h3>
+                <h3 id={confirmTitleId} className="text-sm font-semibold text-text-primary">{t('systemCleaner.confirmTitle')}</h3>
                 <p className="text-xs text-text-muted">{t('systemCleaner.confirmDesc')}</p>
               </div>
             </div>

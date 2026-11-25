@@ -25,7 +25,12 @@
     "mediumRisk": "Средний риск",
     "lowRisk": "Низкий риск",
     "reversible": "Обратимо",
-    "nonReversible": "Необратимо"
+    "nonReversible": "Необратимо",
+    "clear": "Очистить",
+    "clipboardError": "Ошибка копирования в буфер обмена",
+    "close": "Закрыть",
+    "loading": "Загрузка...",
+    "retry": "Повторить"
   },
   "nav": {
     "items": {
@@ -87,7 +92,8 @@
     "odt": "Office ODT",
     "activation": "Активация MAS",
     "restore_points": "Точки восстановления",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "no_results": "Ничего не найдено"
   },
   "header": {
     "tab_titles": {
@@ -141,7 +147,10 @@
     "odt": "Конфигуратор Office Deployment Tool (ODT)",
     "activation": "Активация Microsoft (MAS)",
     "restore_points": "Точки восстановления Windows",
-    "settings": "Глобальные настройки приложения"
+    "settings": "Глобальные настройки приложения",
+    "openCommandPaletteAria": "Открыть палитру команд",
+    "openCommandPaletteTitle": "Открыть палитру команд (Ctrl+K)",
+    "searchPlaceholder": "Поиск..."
   },
   "cleaner": {
     "title": "Очистка системы и кэша",
@@ -329,7 +338,29 @@
     "author": "Автор",
     "icon": "Иконка",
     "rulesCount": "Выбрано правил для экспорта: {{count}}",
-    "saveFileBtn": "Сохранить JSON файл"
+    "saveFileBtn": "Сохранить JSON файл",
+    "applyErrorTitle": "Ошибка применения профиля",
+    "applyImportedBtn": "Применить импортированный профиль",
+    "checksumWarning": "Предупреждение контрольной суммы: содержимое профиля изменено после генерации хэша.",
+    "compatibilityWarnings": "Предупреждения совместимости профиля",
+    "exportErrorTitle": "Ошибка экспорта",
+    "exportProfileBtn": "Экспорт профиля",
+    "exportSuccessMsg": "Экспортирован профиль .wiscripts с {{count}} активными твиками (SHA-256: {{hash}}...).",
+    "exportSuccessTitle": "Профиль экспортирован",
+    "fileReadErrorTitle": "Ошибка чтения файла",
+    "importAppliedMsg": "Профиль «{{name}}» успешно применён (включено правил: {{count}}).",
+    "importAppliedTitle": "Профиль применён",
+    "importProfileBtn": "Импорт профиля (.wiscripts)",
+    "invalidProfileTitle": "Неверный формат профиля",
+    "preflightGuarantee": "Перед применением профиля будет выполнена Pre-Flight проверка и снимок состояния.",
+    "profileAuthorLabel": "Автор / Источник:",
+    "profileNameLabel": "Название профиля:",
+    "profileSchemaLabel": "Версия схемы:",
+    "reviewImportedTitle": "Проверка импортированного профиля .wiscripts",
+    "rulesCountShort": "Твиков: {{count}}",
+    "safetyModalImportDesc": "Применить {{count}} правил оптимизации из импортированного профиля.",
+    "safetyModalImportTitle": "Применить импортированный профиль: {{name}}",
+    "validRulesLabel": "Корректных правил:"
   },
   "startup": {
     "title": "Менеджер автозагрузки",
@@ -520,7 +551,8 @@
     "toastFailedTitle": "Сбой оптимизаций",
     "toastFailedMsg": "{{msg}}",
     "toastSuccessTitle": "Оптимизации применены",
-    "toastSuccessMsg": "Успешно выполнено {{count}} правил оптимизации."
+    "toastSuccessMsg": "Успешно выполнено {{count}} правил оптимизации.",
+    "criticalRisk": "Критический"
   },
   "packageManager": {
     "title": "Менеджер пакетов и очистка ПО",
@@ -550,7 +582,8 @@
     "colAppName": "Название приложения",
     "colPackageFullName": "Полное имя пакета",
     "colPublisherId": "ID Издателя",
-    "uninstall": "Удалить"
+    "uninstall": "Удалить",
+    "adminRequired": "Требуются права администратора или режим Dry-Run"
   },
   "systemCleaner": {
     "title": "Очистка системы и оптимизация кэша",
@@ -645,7 +678,8 @@
     "safetyDryRun": "Включен режим БЕЗОПАСНОГО ПРОБНОГО ЗАПУСКА. Удаление будет сымитировано без изменения файлов на диске.",
     "cancel": "Отмена",
     "confirmDelete": "Подтвердить удаление",
-    "unknown": "Неизвестно"
+    "unknown": "Неизвестно",
+    "freeUnit": "свободно"
   },
   "diskAnalyzer": {
     "title": "Анализатор занятого места и дерева диска",
@@ -730,8 +764,14 @@
       "successTitle": "Объект успешно удален",
       "successMsg": "Освобождено {{bytes}} (удалено объектов: {{items}}).",
       "dryRunNotice": "Активен режим пробного запуска. Файлы на диске не будут удалены.",
-      "errorTitle": "Ошибка удаления"
-    }
+      "errorTitle": "Ошибка удаления",
+      "dryRunTitle": "Безопасный предпросмотр Dry-Run",
+      "selectMode": "Выберите режим удаления:"
+    },
+    "presetDownloads": "Загрузки",
+    "presetTemp": "Временный кэш",
+    "presetUsers": "Профиль пользователя",
+    "refreshDrivesTooltip": "Обновить список логических дисков"
   },
   "startupView": {
     "removeStartupEntryTitle": "Удалить запись из автозагрузки: {{name}}",
@@ -848,7 +888,8 @@
     "statusDescription": "Для экспорта драйверов требуются права Администратора. Если включен безопасный режим (dry-run), PowerShell запускается в режиме симуляции без записи на диск.",
     "exportComplete": "Экспорт завершен",
     "successMessage": "Драйверы успешно экспортированы в \"{{path}}\" за {{duration}}мс.",
-    "errorMessage": "Бэкап драйверов не удался или произошли ошибки."
+    "errorMessage": "Бэкап драйверов не удался или произошли ошибки.",
+    "exportFailed": "Ошибка резервного копирования драйверов"
   },
   "diagnostics": {
     "title": "Диагностика системы и утилиты целостности",
@@ -1098,7 +1139,10 @@
     "cancel": "Отмена",
     "processing": "Обработка...",
     "simulate_dry_run": "Симуляция в Dry-Run",
-    "execute_live": "Выполнить"
+    "execute_live": "Выполнить",
+    "preflight_state_engine": "Снимок дельт StateEngine (JSON)",
+    "preflight_title": "Система защиты Pre-Flight (Dual-Tier)",
+    "preflight_vss": "Точка восстановления Windows (VSS)"
   },
   "update_banner": {
     "ready": "Обновление готово к установке!",
@@ -1135,7 +1179,13 @@
     "mute": "Выключить звук",
     "unmute": "Включить звук",
     "resetRouting": "Сбросить маршрут",
-    "systemDefault": "Системное по умолчанию"
+    "systemDefault": "Системное по умолчанию",
+    "autoPollOff": "Авто-опрос: ВЫКЛ",
+    "autoPollOn": "Авто-опрос: ВКЛ",
+    "autoPollTooltip": "Автоматически обновлять аудиосессии приложений каждые 3 секунды",
+    "dryRunMode": "Режим Dry-Run",
+    "noDeviceFound": "Устройство не найдено",
+    "toggleAutoPoll": "Переключить авто-опрос сессий"
   },
   "autoruns": {
     "title": "Инспектор автозапуска & AutoRuns Security",
@@ -1178,7 +1228,10 @@
       "processing": "Изоляция...",
       "success_title": "Элемент успешно помещен в карантин",
       "success_msg": "Исполняемый файл и запись реестра изолированы в хранилище карантина.",
-      "failed_title": "Ошибка карантина"
+      "failed_title": "Ошибка карантина",
+      "backupRegistryLabel": "Резервная копия реестра:",
+      "quarantinedPathLabel": "Путь в карантине:",
+      "unknownError": "Неизвестная ошибка при помещении в карантин"
     },
     "toast": {
       "scan_failed": "Ошибка сканирования автозапуска",
@@ -1186,7 +1239,9 @@
       "toggle_failed": "Ошибка изменения статуса",
       "quarantine_success": "Элемент помещен в карантин",
       "quarantine_failed": "Ошибка поместить в карантин"
-    }
+    },
+    "disableEntry": "Отключить запись",
+    "enableEntry": "Включить запись"
   },
   "governor": {
     "title": "ProFlow & Динамический Диспетчер Ресурсов",
@@ -1219,7 +1274,28 @@
     "assigned_cores": "Назначенные ядра",
     "rule_modal_title": "Настройка правила процесса",
     "core_affinity": "Привязка ядер процессора",
-    "auto_trim_threshold_label": "Порог авто-очистки ОЗУ (МБ, опционально)"
+    "auto_trim_threshold_label": "Порог авто-очистки ОЗУ (МБ, опционально)",
+    "audio_endpoint_label": "ID аудиовыхода (необязательно)",
+    "audioEndpointPlaceholder": "напр. {0.0.0.00000000}.{device-id} или оставьте пустым",
+    "configRuleBtn": "Настроить правило",
+    "defaultRoute": "По умолчанию",
+    "disabled": "Отключено",
+    "endpointRouted": "Маршрут настроен",
+    "invalidTrimThreshold": "Порог авто-очистки ОЗУ должен быть целым числом не менее 10 МБ",
+    "maskLabel": "Маска:",
+    "noMatchingProcesses": "Нет запущенных процессов, соответствующих фильтру.",
+    "priorityUpdatedMsg": "Для {{name}} установлен приоритет {{priority}}",
+    "processesUnit": "процессов",
+    "processPlaceholder": "напр. chrome.exe, csgo.exe",
+    "processRequired": "Укажите имя процесса",
+    "ramTrimmedMsg": "Высвобождено {{mb}} МБ рабочей памяти для {{name}} (PID {{pid}})",
+    "ruleBadge": "ПРАВИЛО",
+    "ruleConfiguredMsg": "Правило Governor настроено для {{name}}",
+    "ruleDeletedMsg": "Удалено правило Governor для {{name}}",
+    "scanningProcesses": "Сканирование запущенных процессов и статуса Governor...",
+    "trimming": "Очистка...",
+    "trimPlaceholder": "напр. 1024 (мин. 10 МБ)",
+    "trimRamBtn": "Сжать ОЗУ"
   },
   "github_modal": {
     "title": "Отправить обращение на GitHub",
@@ -1280,7 +1356,15 @@
     "targetAppLabel": "Целевое приложение:",
     "regPathLabel": "Путь в реестре:",
     "cmdLabel": "Команда удаления:",
-    "sortOrderTooltip": "Порядок сортировки: {{order}}"
+    "sortOrderTooltip": "Порядок сортировки: {{order}}",
+    "actionLabel": "Действие:",
+    "eraseFromRegistry": "Удалить из реестра",
+    "eraseFromRegistryTooltip": "Удалить осиротевшую запись из реестра",
+    "ghostAppsCard": "Осиротевшие / Призраки",
+    "ghostBadge": "Призрачная запись",
+    "onlyGhostFilter": "Осиротевшие ({{count}})",
+    "removeGhostDesc": "Файлы деинсталлятора для {{name}} не найдены на диске. Это действие безопасно удалит осиротевшую запись из реестра Windows.",
+    "removeGhostTitle": "Удалить запись «{{name}}» из реестра"
   },
   "stateEngine": {
     "title": "StateEngine и Движок хирургического отката",
@@ -1341,7 +1425,10 @@
       "deleteSuccessTitle": "Снимок удален",
       "deleteSuccessMsg": "Снимок {{id}} удален с диска.",
       "deleteErrorTitle": "Ошибка удаления снимка"
-    }
+    },
+    "confirmDeleteDesc": "Безвозвратно удалить снимок «{{label}}» ({{id}})? Вы больше не сможете выполнить точечный откат к этой контрольной точке.",
+    "confirmDeleteTitle": "Удалить снимок состояния?",
+    "loadingSnapshots": "Загрузка снимков состояния системы..."
   },
   "script_runner": {
     "title": "Исполнитель скриптов (Script Runner)",
@@ -1371,7 +1458,7 @@
     "search_placeholder": "Поиск скриптов по названию, тегам, описанию...",
     "category_all": "Все категории",
     "category_maintenance": "Обслуживание",
-    "category_network": "Сеть",
+    "category_network": "Сеть и QoS",
     "category_security": "Безопасность",
     "category_performance": "Производительность",
     "category_diagnostics": "Диагностика",
@@ -1473,7 +1560,6 @@
     "category_registry": "Реестр Windows",
     "category_tasks": "Планировщик задач",
     "category_filesystem": "Файловая система",
-    "category_network": "Сеть и QoS",
     "category_processes": "Процессы",
     "action_create": "Создание",
     "action_modify": "Изменение",
@@ -1492,7 +1578,22 @@
     "execute_elevated_cta": "Выполнить с правами админа",
     "custom_script": "Пользовательский скрипт",
     "search_impact_placeholder": "Поиск по ключам, службам, путям...",
-    "total_mutations": "Обнаружено изменений: {{count}}"
+    "total_mutations": "Обнаружено изменений: {{count}}",
+    "author_label": "Автор",
+    "autoscroll_label": "Автопрокрутка",
+    "clear_filters": "Сбросить фильтры",
+    "clear_filters_hint": "Попробуйте очистить строку поиска или выбрать другую категорию.",
+    "copied_short": "Скопировано!",
+    "copy_hash": "Копировать хэш",
+    "elevated_badge": "ПОВЫШЕННЫЕ ПРАВА",
+    "elevated_running_tooltip": "Выполняется с правами администратора",
+    "loading_script_code": "Загрузка проверенного кода скрипта...",
+    "risk_filter_label": "Риск:",
+    "search_output_placeholder": "Поиск по выводу...",
+    "sha_verified_label": "Целостность SHA-256 подтверждена",
+    "uac_required_badge": "Требуется UAC",
+    "upload_too_large_msg": "Размер файла скрипта не должен превышать 2 МБ.",
+    "upload_too_large_title": "Файл слишком большой"
   },
   "update_modal": {
     "title": "Доступна новая версия",
@@ -1522,7 +1623,8 @@
     "status": {
       "optimal": "Оптимально (< 500 мкс)",
       "moderate": "Умеренно (500-1000 мкс)",
-      "high": "Высокие задержки (> 1000 мкс)"
+      "high": "Высокие задержки (> 1000 мкс)",
+      "awaiting": "Ожидание телеметрии"
     },
     "metrics": {
       "current_dpc": "Текущая задержка DPC",
@@ -1536,7 +1638,8 @@
     },
     "sparkline": {
       "title": "График задержек DPC/ISR в реальном времени",
-      "threshold": "Критический порог 1000 мкс"
+      "threshold": "Критический порог 1000 мкс",
+      "awaitingData": "Сбор замеров задержки DPC..."
     },
     "timer_resolution_card": {
       "title": "Разрешение системного таймера",
@@ -1546,7 +1649,9 @@
       "force_05ms": "Установить 0.500 мс",
       "force_10ms": "Установить 1.000 мс",
       "restore_default": "По умолчанию (15.6 мс)",
-      "custom": "Пользовательское"
+      "custom": "Пользовательское",
+      "defaultPreset": "15.625 мс (По умолчанию)",
+      "esportsPreset": "0.500 мс (Киберспорт)"
     },
     "game_boost": {
       "title": "Движок Game Boost",
@@ -1565,7 +1670,9 @@
       "timer_success": "Разрешение таймера изменено на {{resolution}} мс",
       "boost_activated": "Режим Game Boost активирован для {{process}}",
       "boost_deactivated": "Режим Game Boost отключен. Службы восстановлены."
-    }
+    },
+    "liveTelemetry": "Живая телеметрия (1.5 с)",
+    "paused": "Пауза"
   },
   "gamingDaemon": {
     "heroTitle": "Smart Game Daemon готов к ускорению",
@@ -1588,7 +1695,8 @@
       "tuningOptions": "Параметры ускорения",
       "selectPrompt": "Выберите процесс из списка слева для настройки",
       "optimizing": "Применение оптимизаций...",
-      "boostButton": "Оптимизировать процесс"
+      "boostButton": "Оптимизировать процесс",
+      "selectedProcess": "Выбранный процесс:"
     },
     "tuning": {
       "priority": "Высокий приоритет",
@@ -1601,7 +1709,17 @@
       "ramDesc": "Очистка кэша памяти перед запуском для устранения фризов",
       "services": "Пауза фоновых служб",
       "servicesDesc": "Временная пауза SysMain, DiagTrack и WSearch"
-    }
+    },
+    "activeBadge": "Game Boost активен",
+    "affinityPinnedTag": "Закреплено на P-ядрах",
+    "autoDetectActive": "Активно (опрос 1.5 с)",
+    "autoDetectDisabled": "Отключено",
+    "autoDetectStatus": "Статус",
+    "autoRecoveryArmed": "Автовосстановление готово",
+    "defaultProcessName": "Игровой процесс",
+    "servicesSuspendedTag": "Приостановлено служб: {{count}}",
+    "timerLockedTag": "Таймер 0.500 мс зафиксирован",
+    "zeroAltTabThrashing": "Без просадок при Alt-Tab"
   },
   "shaderNuker": {
     "title": "Shader Cache Nuker — Ликвидатор статтеров",
@@ -1613,7 +1731,15 @@
     "cachedFiles": "Файлов кэша",
     "stutterImpact": "Влияние на статтеры",
     "resultTitle": "Кэши шейдеров успешно очищены!",
-    "detectedStorages": "Обнаруженные хранилища шейдеров"
+    "detectedStorages": "Обнаруженные хранилища шейдеров",
+    "cleanupRecommended": "Рекомендуется очистка",
+    "confirmDesc": "Будет удалено кэшированных файлов шейдеров: {{count}} ({{size}}). Занятые драйвером GPU файлы будут безопасно пропущены.",
+    "confirmTitle": "Очистить кэш шейдеров?",
+    "filesCount": "Файлов: {{formatted}}",
+    "freedSummary": "Освобождено: {{size}} (удалено файлов: {{count}}).",
+    "optimalState": "Оптимальное состояние",
+    "scanning": "Сканирование...",
+    "skippedLocked": "Безопасно пропущено {{count}} файлов, занятых драйвером GPU."
   },
   "smartRam": {
     "title": "Очистка памяти Smart RAM и Standby List",
@@ -1695,8 +1821,19 @@
       "rule_name_label": "Имя правила",
       "block_confirm": "Заблокировать трафик",
       "rules_drawer_title": "Активные правила Брандмауэра WiScripts",
-      "no_rules": "Правила блокировки еще не созданы."
-    }
+      "no_rules": "Правила блокировки еще не созданы.",
+      "blockFailed": "Ошибка блокировки в брандмауэре",
+      "ruleNameRequired": "Требуется имя правила",
+      "ruleNameRequiredDesc": "Введите корректное имя правила брандмауэра.",
+      "systemExecutable": "Системный файл",
+      "unblockFailed": "Ошибка снятия блокировки"
+    },
+    "pausedLabel": "Пауза",
+    "pauseRefresh": "Пауза автообновления",
+    "pollingLabel": "Опрос 2 с",
+    "resumeRefresh": "Возобновить автообновление",
+    "rulesBtn": "Правила ({{count}})",
+    "showingConnections": "Показано {{shown}} из {{total}}"
   },
   "hardwareHealth": {
     "title": "Здоровье SSD/NVMe и аналитика питания",
@@ -1747,7 +1884,27 @@
       "health_bad": "Критическое",
       "health_unknown": "Неизвестно",
       "refresh_telemetry": "Обновить телеметрию",
-      "copied_clipboard": "Скопировано в буфер"
+      "copied_clipboard": "Скопировано в буфер",
+      "attributesCountLabel": "атрибутов",
+      "capacityLabel": "Ёмкость",
+      "copyFirmware": "Копировать прошивку",
+      "copySerial": "Копировать серийный №",
+      "daysSuffix": "дн.",
+      "featuresLabel": "Функции",
+      "healthStatusHeader": "Состояние здоровья (CrystalDiskInfo)",
+      "hostReads": "Чтение хостом",
+      "hostWrites": "Запись хостом",
+      "lifetimeLabel": "Наработка",
+      "limitedNonElevated": "Ограничено (без прав админа)",
+      "mediaType": "Тип носителя",
+      "noMatchingAttrs": "Подходящие S.M.A.R.T.-атрибуты не найдены.",
+      "powerOnCount": "Включений",
+      "reserveBlocks": "Резервные блоки",
+      "sensorStandby": "Ожидание датчика",
+      "suddenPowerLoss": "Внезапные отключения",
+      "tempElevatedRange": "Повышенная (> 60°C)",
+      "tempNormalRange": "Норма (< 60°C)",
+      "volumesLabel": "Тома"
     },
     "battery": {
       "title": "Аналитика аккумулятора и питания",
@@ -1771,6 +1928,55 @@
       "ultimate_title": "Схема Максимальной производительности Windows",
       "ultimate_desc": "Устраняет микрозадержки и троттлинг ядер процессора для максимальной отзывчивости системы.",
       "enable_ultimate_btn": "Включить Максимальную производительность"
-    }
+    },
+    "paused": "Пауза",
+    "pauseRefresh": "Приостановить автообновление",
+    "resumeRefresh": "Возобновить автообновление"
+  },
+  "commandPalette": {
+    "ariaLabel": "Глобальная палитра команд",
+    "categories": {
+      "disk": "Диски и хранилище",
+      "navigation": "Навигация",
+      "optimization": "Оптимизация и твики",
+      "privacy": "Приватность и телеметрия",
+      "quickActions": "Быстрые действия",
+      "services": "Службы Windows",
+      "ui": "Проводник и интерфейс",
+      "win11": "Windows 11 24H2 / ИИ"
+    },
+    "clearQuery": "Очистить запрос",
+    "createRestorePointDesc": "Создать немедленную точку восстановления Windows перед изменением настроек",
+    "createRestorePointTitle": "Создать точку восстановления системы (VSS)",
+    "currentlyActive": "Сейчас активно",
+    "currentlyInactive": "Сейчас неактивно",
+    "filters": {
+      "actions": "Быстрые действия",
+      "all": "Все элементы",
+      "scripts": "Скрипты ({{count}})",
+      "tweaks": "Твики ({{count}})",
+      "views": "Разделы ({{count}})"
+    },
+    "footerClose": "Закрыть",
+    "footerNavigate": "Навигация",
+    "navigateTo": "Перейти в {{target}}",
+    "noResults": "Не найдено команд или твиков по запросу «{{query}}»",
+    "openScriptDesc": "Выполнить или редактировать {{title}}",
+    "resultsCount": "Результатов: {{count}}",
+    "searchPlaceholder": "Введите команду, твик, раздел или скрипт...",
+    "selectKey": "Выбрать",
+    "toastDryRunDisabled": "Режим симуляции Dry-Run ОТКЛЮЧЕН (Реальное выполнение)",
+    "toastDryRunEnabled": "Режим симуляции Dry-Run ВКЛЮЧЕН",
+    "toastScriptSelected": "Скрипт выбран",
+    "toastScriptSelectedMsg": "Открыт «{{title}}» в Script Runner.",
+    "toastSimulationMode": "Режим симуляции",
+    "toastTweakToggled": "Твик переключён",
+    "toastTweakToggledMsg": "Статус выбора обновлён для «{{title}}».",
+    "toggleDryRunDesc": "Переключение между реальным выполнением и симуляцией команд без изменений",
+    "toggleDryRunTitle": "Переключить режим симуляции Dry-Run ({{state}})"
+  },
+  "telemetry": {
+    "collectingMetrics": "Сбор метрик телеметрии...",
+    "liveLoadPath": "График нагрузки в реальном времени"
   }
 }

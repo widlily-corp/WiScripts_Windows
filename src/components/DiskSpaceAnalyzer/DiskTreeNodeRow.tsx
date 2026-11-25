@@ -60,8 +60,10 @@ export const DiskTreeNodeRow: React.FC<DiskTreeNodeRowProps> = ({
       <div className="flex items-center gap-2 min-w-0 flex-1 pr-4">
         {isDirectory ? (
           <button
+            type="button"
             onClick={() => onToggle(node.path)}
-            className="p-0.5 rounded hover:bg-surface text-text-muted hover:text-text transition-colors flex-shrink-0"
+            aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+            className="p-0.5 rounded hover:bg-surface text-text-muted hover:text-text-primary transition-colors flex-shrink-0"
           >
             {isExpanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
@@ -90,22 +92,29 @@ export const DiskTreeNodeRow: React.FC<DiskTreeNodeRowProps> = ({
 
         {/* Name */}
         <div className="min-w-0 flex items-center gap-1.5 truncate">
-          <span
-            onClick={() => isDirectory && onNavigate(node.path)}
-            className={'font-medium truncate ' + (isDirectory ? 'cursor-pointer hover:text-brand hover:underline text-text' : 'text-text')}
-            title={node.path}
-          >
-            {node.name}
-          </span>
+          {isDirectory ? (
+            <button
+              type="button"
+              onClick={() => onNavigate(node.path)}
+              className="font-medium truncate text-left cursor-pointer hover:text-brand hover:underline text-text-primary"
+              title={node.path}
+            >
+              {node.name}
+            </button>
+          ) : (
+            <span className="font-medium truncate text-text-primary" title={node.path}>
+              {node.name}
+            </span>
+          )}
 
           {ext && !isDirectory && (
-            <span className="text-[10px] font-mono uppercase px-1 py-0.2 rounded bg-surface-subtle border border-border text-text-muted flex-shrink-0">
+            <span className="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-surface-subtle border border-border text-text-muted flex-shrink-0">
               .{ext}
             </span>
           )}
 
           {isProtected && (
-            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-status-danger/15 text-status-danger border border-status-danger/30 flex-shrink-0">
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-status-danger/15 text-status-danger border border-status-danger/30 flex-shrink-0">
               {t('diskAnalyzer.systemProtected', 'Protected')}
             </span>
           )}
@@ -129,7 +138,7 @@ export const DiskTreeNodeRow: React.FC<DiskTreeNodeRowProps> = ({
 
         {/* Size */}
         <div className="text-right w-24">
-          <div className="font-bold font-mono text-text">
+          <div className="font-bold font-mono text-text-primary">
             {formatBytes(node.sizeBytes)}
           </div>
           <div className="text-[10px] font-mono text-text-muted truncate">

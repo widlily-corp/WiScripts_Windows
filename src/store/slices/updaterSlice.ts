@@ -76,7 +76,7 @@ export interface UpdaterSlice {
 }
 
 export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = (set, get) => ({
-  appVersion: '1.8.0',
+  appVersion: '1.8.1',
   setAppVersion: (ver) => set({ appVersion: ver }),
   fetchAppVersion: async () => {
     try {
@@ -88,7 +88,7 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     } catch (err) {
       // Dev mode fallback
     }
-    const current = get().appVersion || '1.8.0';
+    const current = get().appVersion || '1.8.1';
     return current;
   },
 
@@ -108,13 +108,13 @@ export const createUpdaterSlice: StateCreator<AppState, [], [], UpdaterSlice> = 
     if (!import.meta.env.DEV) {
       return;
     }
-    const currentVer = get().appVersion || '1.8.0';
+    const currentVer = get().appVersion || '1.8.1';
     const info: UpdateInfo = {
-      version: mockInfo?.version || '1.8.1-dev',
+      version: mockInfo?.version || '1.8.2-dev',
       currentVersion: currentVer,
       body:
         mockInfo?.body ||
-        `# What's New in v${mockInfo?.version || '1.8.1-dev'}\n\n- Development preview release notes.`,
+        `# What's New in v${mockInfo?.version || '1.8.2-dev'}\n\n- Development preview release notes.`,
       date: mockInfo?.date || new Date().toISOString().split('T')[0],
     };
     set({

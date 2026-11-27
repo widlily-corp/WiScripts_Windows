@@ -1,10 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Battery, Power, Zap } from 'lucide-react';
-import { BatteryHealthPayload, PowerSchemeInfo } from '../../types/hardwareHealth';
+import { BatteryHealthAnalytics, PowerSchemeInfo } from '../../types/hardwareHealth';
 
 interface BatteryPowerTabProps {
-  batteryHealth: BatteryHealthPayload | null;
+  batteryHealth: BatteryHealthAnalytics | null;
   powerSchemes: PowerSchemeInfo[];
   isHardwareLoading: boolean;
   onSetActiveScheme: (guid: string) => void;

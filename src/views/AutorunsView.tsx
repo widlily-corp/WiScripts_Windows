@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -16,6 +16,7 @@ import { AutorunEntry, QuarantineResult, AutorunCategoryFilter } from '../types/
 import { useAppStore } from '../store/useAppStore';
 import { PaginationBar, usePagination } from '../components/common/VirtualList';
 import { QuarantineModal } from './Autoruns/QuarantineModal';
+import { getErrorMessage } from '../utils/errors';
 
 export function AutorunsView() {
   const { t } = useTranslation();
@@ -41,14 +42,15 @@ export function AutorunsView() {
         message: `AutoRuns scan completed: ${res.length} autostart locations cataloged`,
       });
     } catch (err) {
+      const errMsg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: `Failed to scan AutoRuns entries: ${String(err)}`,
+        message: `Failed to scan AutoRuns entries: ${errMsg}`,
       });
       addToast({
         type: 'error',
         title: t('autoruns.toast.scan_failed', 'AutoRuns Scan Failed'),
-        message: String(err),
+        message: errMsg,
       });
     } finally {
       setIsLoading(false);
@@ -82,14 +84,15 @@ export function AutorunsView() {
         message: `AutoRun entry '${entry.name}' (${entry.id}) toggled to enabled=${newStatus}`,
       });
     } catch (err) {
+      const errMsg = getErrorMessage(err);
       addToast({
         type: 'error',
         title: t('autoruns.toast.toggle_failed', 'Toggle Failed'),
-        message: String(err),
+        message: errMsg,
       });
       addLog({
         level: 'error',
-        message: `Failed to toggle AutoRun entry '${entry.name}': ${String(err)}`,
+        message: `Failed to toggle AutoRun entry '${entry.name}': ${errMsg}`,
       });
     } finally {
       setIsProcessing(false);
@@ -130,7 +133,7 @@ export function AutorunsView() {
       addToast({
         type: 'error',
         title: t('autoruns.toast.quarantine_failed', 'Quarantine Failed'),
-        message: String(err),
+        message: getErrorMessage(err),
       });
     } finally {
       setIsProcessing(false);

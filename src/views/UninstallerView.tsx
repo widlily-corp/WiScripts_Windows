@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n/config';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from '../components/AdminElevationBanner';
 import { PaginationBar, usePagination } from '../components/common/VirtualList';
 import { InstalledApp } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import {
   Trash2,
   RefreshCw,
@@ -204,7 +205,7 @@ export function UninstallerView() {
         try {
           await uninstallApp(app);
         } catch (err) {
-          const errMsg = String(err);
+          const errMsg = getErrorMessage(err);
           const isFileNotFound =
             errMsg.toLowerCase().includes('filenotfound') ||
             errMsg.toLowerCase().includes('not found') ||

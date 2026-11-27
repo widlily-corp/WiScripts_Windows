@@ -75,7 +75,7 @@ assert(fs.existsSync(manifestPath), `Manifest exists at ${manifestPath}`);
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const scripts = manifest.scripts || [];
-assert(scripts.length === 45, `Manifest contains exactly 45 scripts (Actual: ${scripts.length})`);
+assert(scripts.length === 46, `Manifest contains exactly 46 scripts (Actual: ${scripts.length})`);
 
 // Warm up V8 JIT compiler and regex caches to eliminate cold-start artifact
 analyzeScriptImpact('Write-Host "JIT Warmup"');
@@ -89,7 +89,7 @@ for (let i = 0; i < scripts.length; i++) {
   const scriptMeta = scripts[i];
   const scriptFilePath = path.join(rootDir, 'scripts_lib', scriptMeta.path);
   const exists = fs.existsSync(scriptFilePath);
-  assert(exists, `Script [${i + 1}/45] exists: ${scriptMeta.path}`);
+  assert(exists, `Script [${i + 1}/46] exists: ${scriptMeta.path}`);
   if (!exists) continue;
 
   const content = fs.readFileSync(scriptFilePath, 'utf8');
@@ -179,12 +179,12 @@ const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
 const maxLatency = Math.max(...latencies);
 const minLatency = Math.min(...latencies);
 
-console.log(`\nCorpus Latency Stats (45 scripts): Min=${minLatency.toFixed(3)}ms, Avg=${avgLatency.toFixed(3)}ms, Max=${maxLatency.toFixed(3)}ms`);
+console.log(`\nCorpus Latency Stats (46 scripts): Min=${minLatency.toFixed(3)}ms, Avg=${avgLatency.toFixed(3)}ms, Max=${maxLatency.toFixed(3)}ms`);
 console.log(`Total Mutations Identified across library: ${totalMutationsDetected}`);
-console.log(`Scripts with Dry-Run Support: ${scriptsWithDryRunDetected}/45`);
-console.log(`Scripts requiring Admin Elevation: ${scriptsWithAdminDetected}/45`);
+console.log(`Scripts with Dry-Run Support: ${scriptsWithDryRunDetected}/46`);
+console.log(`Scripts requiring Admin Elevation: ${scriptsWithAdminDetected}/46`);
 
-assert(maxLatency < 10, `All 45 scripts analyzed under 10ms threshold (Worst case: ${maxLatency.toFixed(3)}ms)`);
+assert(maxLatency < 10, `All 46 scripts analyzed under 10ms threshold (Worst case: ${maxLatency.toFixed(3)}ms)`);
 
 // -------------------------------------------------------------------------
 // SUITE 3: Adversarial Edge Cases & Syntactic Stress Testing

@@ -369,10 +369,24 @@ async function testScrollContainmentAndViewport() {
 
   await runTest('Custom Scrollbar CSS: Modern thin scrollbars & WebKit pseudo-elements', () => {
     assert.match(indexCss, /\.custom-scrollbar\s*\{[^}]*scrollbar-width:\s*thin;/);
-    assert.match(indexCss, /\.custom-scrollbar\s*\{[^}]*scrollbar-color:\s*#22252a\s+transparent;/i);
+    const hasThumbToken = /:root\s*\{[^}]*--scrollbar-thumb:\s*#22252a;/i.test(indexCss);
+    const hasHoverToken = /:root\s*\{[^}]*--scrollbar-thumb-hover:\s*#374151;/i.test(indexCss);
+    assert.ok(
+      /\.custom-scrollbar\s*\{[^}]*scrollbar-color:\s*#22252a\s+transparent;/i.test(indexCss) ||
+        (hasThumbToken && /\.custom-scrollbar\s*\{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb\)\s+transparent;/i.test(indexCss)),
+      'Custom scrollbar must use #22252a or var(--scrollbar-thumb)'
+    );
     assert.match(indexCss, /\.custom-scrollbar::-webkit-scrollbar\s*\{[^}]*width:\s*5px;/);
-    assert.match(indexCss, /\.custom-scrollbar::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*#22252a;/i);
-    assert.match(indexCss, /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*\{[^}]*background(?:-color)?:\s*#374151;/i);
+    assert.ok(
+      /\.custom-scrollbar::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*#22252a;/i.test(indexCss) ||
+        (hasThumbToken && /\.custom-scrollbar::-webkit-scrollbar-thumb\s*\{[^}]*background:\s*var\(--scrollbar-thumb\);/i.test(indexCss)),
+      'Webkit scrollbar thumb must use #22252a or var(--scrollbar-thumb)'
+    );
+    assert.ok(
+      /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*\{[^}]*background(?:-color)?:\s*#374151;/i.test(indexCss) ||
+        (hasHoverToken && /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*\{[^}]*background(?:-color)?:\s*var\(--scrollbar-thumb-hover\);/i.test(indexCss)),
+      'Webkit scrollbar thumb hover must use #374151 or var(--scrollbar-thumb-hover)'
+    );
   });
 
   await runTest('Viewport Geometry Simulation: 300px to 2160px screen height stress test', () => {

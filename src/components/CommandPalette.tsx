@@ -26,10 +26,8 @@ import {
   History,
   Settings,
   ShieldCheck,
-  CheckCircle2,
   Zap,
   Layers,
-  Play,
   FileText,
   CornerDownLeft,
   X,
@@ -112,7 +110,6 @@ export function CommandPalette() {
   const setDryRunMode = useAppStore((s) => s.setDryRunMode);
   const createRestorePoint = useAppStore((s) => s.createRestorePoint);
   const addToast = useAppStore((s) => s.addToast);
-  const addLog = useAppStore((s) => s.addLog);
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);

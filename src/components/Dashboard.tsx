@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { useMetricsPoller } from '../hooks/useMetricsPoller';
@@ -55,7 +55,7 @@ export function Dashboard() {
   const selectedGpuSensorId = useAppStore((s) => s.selectedGpuSensorId);
   const setSelectedCpuSensorId = useAppStore((s) => s.setSelectedCpuSensorId);
   const setSelectedGpuSensorId = useAppStore((s) => s.setSelectedGpuSensorId);
-  const metricsError = useAppStore((s) => (s as { metricsError?: string | null }).metricsError ?? null);
+  const metricsError = useAppStore((s) => s.metricsError);
 
   const { availableCpuSensors, availableGpuSensors } = useMemo(() => {
     const cpuSensors = sensorItems.filter((s) => s.sensorType === 'cpu');

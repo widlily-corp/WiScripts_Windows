@@ -255,8 +255,8 @@ fn test_r5_driver_backup_dry_run_command_recordings() {
     assert_eq!(
         history[0].command,
         format!(
-            "if (-not (Test-Path \"{}\")) {{ New-Item -ItemType Directory -Path \"{}\" -Force }}; Export-WindowsDriver -Online -Destination \"{}\"",
-            output_dir, output_dir, output_dir
+            "if (-not (Test-Path -LiteralPath '{dir}')) {{ New-Item -ItemType Directory -Path '{dir}' -Force | Out-Null }}; Export-WindowsDriver -Online -Destination '{dir}'",
+            dir = output_dir
         )
     );
 }
@@ -340,7 +340,7 @@ fn test_stress_driver_backup_paths_special_characters() {
     assert!(summary.success);
     assert!(summary.executed_actions[0]
         .command
-        .contains(&format!("\"{}\"", path_with_spaces)));
+        .contains(&format!("'{}'", path_with_spaces)));
 
     // 2. Path with Unicode / Cyrillic characters
     let cyrillic_path = "D:\\РезервныеКопии\\Драйверы_Системы";

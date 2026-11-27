@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
+import { getErrorMessage } from '../utils/errors';
 import {
   HardDrive,
-  Folder,
   Play,
   Loader2,
   ShieldCheck,
@@ -57,7 +57,7 @@ export function DriverBackupView() {
     } catch (err) {
       setLastExportResult({
         ok: false,
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       });
     } finally {
       setIsExporting(false);

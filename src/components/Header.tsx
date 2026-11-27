@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
 import { SystemInfo } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { ShieldCheck, ShieldAlert, RefreshCw, Cpu, HardDrive, Search } from 'lucide-react';
 
 const TAB_TITLES: Record<string, string> = {
@@ -57,7 +58,7 @@ export function Header() {
     } catch (err) {
       addLog({
         level: 'error',
-        message: t('header.logs.refresh_error', { err: String(err) }),
+        message: t('header.logs.refresh_error', { err: getErrorMessage(err) }),
       });
     } finally {
       setIsRefreshing(false);

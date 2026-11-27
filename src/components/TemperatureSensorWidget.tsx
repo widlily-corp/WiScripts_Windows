@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Cpu, HardDrive, Thermometer, ChevronDown } from 'lucide-react';
 import { ThermalStatus, TemperatureSensorInfo } from '../types';

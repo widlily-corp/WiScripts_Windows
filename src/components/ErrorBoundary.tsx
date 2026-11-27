@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertOctagon, RotateCcw, Bug } from 'lucide-react';
 import i18n from '../i18n/config';
 import { GitHubIssueModal } from './GitHubIssueModal';

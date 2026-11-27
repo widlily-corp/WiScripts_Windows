@@ -1,11 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Activity, Clock, Flame, Layers, Zap } from 'lucide-react';
-import { LatencyMetricsPayload } from '../../types';
+import { LatencyMetrics } from '../../types';
 import { SparklineAreaGraph } from '../SparklineAreaGraph';
 
 interface LatencyMonitorTabProps {
-  latencyMetrics: LatencyMetricsPayload | null;
+  latencyMetrics: LatencyMetrics | null;
   latencyHistory: number[];
   latencyStatusColor: string;
   latencyStatusBadge: React.ReactNode;

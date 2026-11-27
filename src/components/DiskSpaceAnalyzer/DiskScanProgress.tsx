@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, XCircle, HardDrive, Files, FolderTree, Clock, Gauge } from 'lucide-react';
+import { RefreshCw, XCircle, HardDrive, Files, FolderTree, Gauge } from 'lucide-react';
 import { DiskScanProgressPayload } from '../../types';
 import { formatBytes } from '../../utils';
 

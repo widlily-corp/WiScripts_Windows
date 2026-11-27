@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/useAppStore';

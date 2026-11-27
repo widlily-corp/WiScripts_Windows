@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * ViewSkeleton - Refined Minimal loading placeholder for lazy-loaded views.
  * Adheres to Titan Core aesthetic standards: semantic tokens, 1px borders,

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { Sparkles, Download, RefreshCw, X, Loader2, FileText } from 'lucide-react';

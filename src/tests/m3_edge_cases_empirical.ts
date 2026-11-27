@@ -1,4 +1,4 @@
-import { MetricSnapshot, ThermalStatus, ExecutionSummary } from '../types';
+import { MetricSnapshot, ThermalStatus } from '../types';
 
 // Setup minimal window mock with localStorage for Zustand persist middleware
 const mockInvoke = async (cmd: string, args: any): Promise<any> => {

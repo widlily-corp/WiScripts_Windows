@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, Trash2, ChevronDown, ChevronUp, Database, Server } from 'lucide-react';
 import { SystemStateSnapshot } from '../../types/stateEngine';

@@ -176,7 +176,11 @@ test('ScriptRunner Slice: clearOutputLogs immediately resets buffer to 0', () =>
 test('ScriptRunner Slice Source AST: MAX_SCRIPT_LOG_LINES = 2000 is hardcoded in scriptRunnerSlice.ts', () => {
   const code = fs.readFileSync(scriptRunnerSlicePath, 'utf8');
   assert.match(code, /const\s+MAX_SCRIPT_LOG_LINES\s*=\s*2000;/, 'MAX_SCRIPT_LOG_LINES must be declared as 2000');
-  assert.match(code, /outputLogs:\s*\[\.\.\.state\.outputLogs,\s*newEntry\]\.slice\(-MAX_SCRIPT_LOG_LINES\)/, 'addOutputLine must slice with -MAX_SCRIPT_LOG_LINES');
+  assert.match(
+    code,
+    /outputLogs:\s*\[\.\.\.(?:state\.outputLogs|logs),\s*newEntry\]\.slice\(-MAX_SCRIPT_LOG_LINES\)/,
+    'addOutputLine must slice with -MAX_SCRIPT_LOG_LINES'
+  );
 });
 
 // ============================================================================

@@ -153,6 +153,9 @@ fn test_scanner_50_level_deep_tree_mathematical_precision() {
             assert_eq!(node.dir_count, sum_dirs, "Node '{}' dir_count must equal sum of dirs", node.name);
 
             (node.size_bytes, node.file_count, node.dir_count)
+        } else if node.is_dir {
+            // Directories truncated at MAX_SERIALIZE_TREE_DEPTH omit serialized children while keeping aggregate counts.
+            (node.size_bytes, node.file_count, node.dir_count)
         } else {
             (node.size_bytes, 1, 0)
         }

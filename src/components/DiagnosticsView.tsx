@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
@@ -13,11 +13,6 @@ import {
   Search,
   Download,
   Trash2,
-  Filter,
-  CheckCircle2,
-  AlertOctagon,
-  Info,
-  Command,
   Wrench,
   Wifi,
   FileCheck,

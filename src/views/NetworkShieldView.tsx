@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useMemo, useId } from 'react';
+import { useEffect, useState, useMemo, useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getErrorMessage } from '../utils/errors';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -145,7 +146,7 @@ export function NetworkShieldView() {
       addToast({
         type: 'error',
         title: t('networkShield.modal.blockFailed', 'Firewall Block Failed'),
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       });
     }
   };
@@ -157,7 +158,7 @@ export function NetworkShieldView() {
       addToast({
         type: 'error',
         title: t('networkShield.modal.unblockFailed', 'Firewall Unblock Failed'),
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       });
     }
   };

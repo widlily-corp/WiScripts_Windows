@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../store/useAppStore';
@@ -16,7 +16,7 @@ import {
   ShieldAlert,
   FolderSearch,
 } from 'lucide-react';
-import { formatBytes } from '../utils';
+import { formatBytes, getErrorMessage } from '../utils';
 
 interface SystemCleanerContentProps {
   onNavigateToAnalyzer?: () => void;
@@ -64,14 +64,15 @@ export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerCont
         message: `System scan complete: ${res.totalFiles} files (${formatBytes(res.totalBytes)}) across ${res.categories.length} categories`,
       });
     } catch (err) {
+      const errMsg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: `Failed to scan system cleaner: ${String(err)}`,
+        message: `Failed to scan system cleaner: ${errMsg}`,
       });
       addToast({
         type: 'error',
         title: t('systemCleaner.scanErrorTitle'),
-        message: String(err),
+        message: errMsg,
       });
     } finally {
       setIsScanning(false);
@@ -154,14 +155,15 @@ export function SystemCleanerContent({ onNavigateToAnalyzer }: SystemCleanerCont
         await handleScan();
       }
     } catch (err) {
+      const errMsg = getErrorMessage(err);
       addLog({
         level: 'error',
-        message: `System cleaner failed: ${String(err)}`,
+        message: `System cleaner failed: ${errMsg}`,
       });
       addToast({
         type: 'error',
         title: t('systemCleaner.errorTitle'),
-        message: String(err),
+        message: errMsg,
       });
     } finally {
       setIsCleaning(false);

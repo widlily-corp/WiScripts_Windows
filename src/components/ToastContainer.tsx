@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { ToastNotification } from '../types';
 import { Info, CheckCircle2, AlertTriangle, AlertOctagon, X } from 'lucide-react';

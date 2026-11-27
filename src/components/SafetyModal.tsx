@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AlertTriangle, Terminal, X, ShieldAlert, ShieldCheck, History, RotateCcw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { getErrorMessage } from '../utils/errors';
 import { useAccessibleModal } from './common/useAccessibleModal';
 
 export interface PreflightSnapshotResult {
   snapshotId: string;
-  sequenceNumber: number;
+  sequenceNumber: number | null;
   timestamp: string;
   stateEngineSuccess: boolean;
   restorePointSuccess: boolean;
@@ -83,9 +84,13 @@ export function SafetyModal() {
           }
 
           if (snapshotRes.restorePointSuccess) {
+            const seqLabel =
+              snapshotRes.sequenceNumber !== null
+                ? ` (Sequence #${snapshotRes.sequenceNumber})`
+                : '';
             addLog({
               level: 'info',
-              message: `Windows VSS Restore Point checkpoint created (Sequence #${snapshotRes.sequenceNumber}).`,
+              message: `Windows VSS Restore Point checkpoint created${seqLabel}.`,
             });
           } else if (snapshotRes.restorePointWarning) {
             addLog({
@@ -96,7 +101,7 @@ export function SafetyModal() {
         } catch (snapErr) {
           addLog({
             level: 'warn',
-            message: `Pre-flight safety snapshot notice (non-fatal): ${String(snapErr)}`,
+            message: `Pre-flight safety snapshot notice (non-fatal): ${getErrorMessage(snapErr)}`,
           });
         }
       }
@@ -106,7 +111,7 @@ export function SafetyModal() {
       await action();
     } catch (err) {
       console.error('Safety modal execution error:', err);
-      const errMsg = typeof err === 'string' ? err : (err as Error)?.message || String(err);
+      const errMsg = getErrorMessage(err);
       addToast({
         type: 'error',
         title: t('safety_modal.error_title', 'Execution Error'),

@@ -84,19 +84,35 @@ const cssContent = fs.readFileSync(cssPath, 'utf8');
 
 test('index.css: .custom-scrollbar utility class provides standards-compliant scrollbar-width & color', () => {
   assert.match(cssContent, /\.custom-scrollbar\s*{[^}]*scrollbar-width:\s*thin;/, 'Must specify scrollbar-width: thin');
-  assert.match(cssContent, /\.custom-scrollbar\s*{[^}]*scrollbar-color:\s*#22252a\s+transparent;/i, 'Must specify scrollbar-color: #22252a transparent');
+  const usesLiteral = /\.custom-scrollbar\s*{[^}]*scrollbar-color:\s*#22252a\s+transparent;/i.test(cssContent);
+  const usesToken =
+    /:root\s*{[^}]*--scrollbar-thumb:\s*#22252a;/i.test(cssContent) &&
+    /\.custom-scrollbar\s*{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb\)\s+transparent;/i.test(cssContent);
+  assert.ok(usesLiteral || usesToken, 'Must specify scrollbar-color: #22252a (or var(--scrollbar-thumb)) transparent');
 });
 
 test('index.css: .custom-scrollbar utility class provides WebKit pseudo-elements (5px, #22252a thumb, #374151 hover)', () => {
   assert.match(cssContent, /\.custom-scrollbar::-webkit-scrollbar\s*{[^}]*width:\s*5px;/, 'Webkit scrollbar width must be 5px');
-  assert.match(cssContent, /\.custom-scrollbar::-webkit-scrollbar-thumb\s*{[^}]*background:\s*#22252a;/i, 'Webkit thumb background must be #22252a');
+  const thumbLiteral = /\.custom-scrollbar::-webkit-scrollbar-thumb\s*{[^}]*background:\s*#22252a;/i.test(cssContent);
+  const thumbToken =
+    /:root\s*{[^}]*--scrollbar-thumb:\s*#22252a;/i.test(cssContent) &&
+    /\.custom-scrollbar::-webkit-scrollbar-thumb\s*{[^}]*background:\s*var\(--scrollbar-thumb\);/i.test(cssContent);
+  assert.ok(thumbLiteral || thumbToken, 'Webkit thumb background must be #22252a or var(--scrollbar-thumb)');
   assert.match(cssContent, /\.custom-scrollbar::-webkit-scrollbar-thumb\s*{[^}]*border-radius:\s*4px;/, 'Webkit thumb border-radius must be 4px');
-  assert.match(cssContent, /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*{[^}]*background(?:-color)?:\s*#374151;/i, 'Webkit thumb hover must be #374151');
+  const hoverLiteral = /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*{[^}]*background(?:-color)?:\s*#374151;/i.test(cssContent);
+  const hoverToken =
+    /:root\s*{[^}]*--scrollbar-thumb-hover:\s*#374151;/i.test(cssContent) &&
+    /\.custom-scrollbar::-webkit-scrollbar-thumb:hover\s*{[^}]*background(?:-color)?:\s*var\(--scrollbar-thumb-hover\);/i.test(cssContent);
+  assert.ok(hoverLiteral || hoverToken, 'Webkit thumb hover must be #374151 or var(--scrollbar-thumb-hover)');
 });
 
 test('index.css: Global dark scrollbars defined in @layer base', () => {
   assert.match(cssContent, /\*::-webkit-scrollbar\s*{[^}]*width:\s*6px;/, 'Global webkit scrollbar width must be defined');
-  assert.match(cssContent, /\*::-webkit-scrollbar-thumb\s*{[^}]*background-color:\s*#22252a;/i, 'Global webkit thumb background must be #22252a');
+  const globalLiteral = /\*::-webkit-scrollbar-thumb\s*{[^}]*background-color:\s*#22252a;/i.test(cssContent);
+  const globalToken =
+    /:root\s*{[^}]*--scrollbar-thumb:\s*#22252a;/i.test(cssContent) &&
+    /\*::-webkit-scrollbar-thumb\s*{[^}]*background-color:\s*var\(--scrollbar-thumb\);/i.test(cssContent);
+  assert.ok(globalLiteral || globalToken, 'Global webkit thumb background must be #22252a or var(--scrollbar-thumb)');
 });
 
 // 3. Layout geometry simulation

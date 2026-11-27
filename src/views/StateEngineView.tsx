@@ -318,10 +318,10 @@ export function StateEngineView() {
         }
         confirmLabel={t('common.delete', 'Delete')}
         cancelLabel={t('common.cancel', 'Cancel')}
-        danger
-        isBusy={isDeleting}
+        variant="danger"
+        isConfirming={isDeleting}
         onConfirm={handleConfirmDeleteSnapshot}
-        onCancel={() => setPendingDeleteSnapshot(null)}
+        onClose={() => setPendingDeleteSnapshot(null)}
       />
     </div>
   );

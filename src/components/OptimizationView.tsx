@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
-import { OptimizationCategory, PresetType, ExecutionSummary } from '../types';
+import { OptimizationCategory, ExecutionSummary } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Sliders,
@@ -19,7 +20,6 @@ import {
   ChevronUp,
   Info,
   Play,
-  Filter,
   Loader2,
 } from 'lucide-react';
 
@@ -41,7 +41,6 @@ export function OptimizationView() {
   const setSelectedCategory = useAppStore((s) => s.setSelectedCategory);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const toggleOptimizationSelected = useAppStore((s) => s.toggleOptimizationSelected);
-  const selectAllOptimizations = useAppStore((s) => s.selectAllOptimizations);
   const deselectAllOptimizations = useAppStore((s) => s.deselectAllOptimizations);
   const applyPreset = useAppStore((s) => s.applyPreset);
   const dryRunMode = useAppStore((s) => s.dryRunMode);
@@ -137,7 +136,7 @@ export function OptimizationView() {
             });
           }
         } catch (err) {
-          const errMsg = typeof err === 'string' ? err : String(err);
+          const errMsg = getErrorMessage(err);
           addLog({
             level: 'error',
             message: `IPC execute_optimizations failed: ${errMsg}`,

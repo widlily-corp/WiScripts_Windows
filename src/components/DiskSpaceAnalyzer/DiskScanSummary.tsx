@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { HardDrive, Files, FolderTree, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { HardDrive, Files, FolderTree, CheckCircle2, AlertCircle } from 'lucide-react';
 import { DiskScanResult } from '../../types';
 import { formatBytes, formatTabularBytes } from '../../utils';
 

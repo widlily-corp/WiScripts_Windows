@@ -1,10 +1,10 @@
-import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { MasMethod, ExecutionSummary } from '../types';
-import { KeyRound, ShieldCheck, ShieldAlert, Sparkles, CheckCircle2, Info, Lock, Play, Loader2 } from 'lucide-react';
+import { getErrorMessage } from '../utils/errors';
+import { KeyRound, ShieldCheck, Sparkles, CheckCircle2, Info, Lock, Play, Loader2 } from 'lucide-react';
 
 export function MasView() {
   const { t } = useTranslation();
@@ -120,7 +120,7 @@ export function MasView() {
             });
           }
         } catch (err) {
-          const errMsg = typeof err === 'string' ? err : String(err);
+          const errMsg = getErrorMessage(err);
           addLog({
             level: 'error',
             message: `IPC execute_activation failed: ${errMsg}`,

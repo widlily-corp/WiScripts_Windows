@@ -1,8 +1,6 @@
 import {
-  CleanerCategoryItem,
   CleanerScanResult,
   CleanerCleanResult,
-  DuplicateFileItem,
   DuplicateGroup,
   LargeFileItem,
   StorageDeleteResult,

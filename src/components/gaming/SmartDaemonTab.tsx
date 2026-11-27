@@ -9,10 +9,10 @@ import {
   Shield,
   Search,
 } from 'lucide-react';
-import { GameDaemonStatus } from '../../types';
+import { DaemonStatus } from '../../types';
 
 interface SmartDaemonTabProps {
-  daemonStatus: GameDaemonStatus | null;
+  daemonStatus: DaemonStatus | null;
   isBoostActive: boolean;
   isGamingLoading: boolean;
   onOpenProcessModal: () => void;

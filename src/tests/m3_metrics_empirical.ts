@@ -33,7 +33,6 @@ async function runEmpiricalTests() {
   console.log('🧪 Running Empirical Verification for Milestone 3 Metrics & Hardware Probes...');
 
   // Test 1: Ring Buffer Capping (Max 30 samples)
-  const store = useAppStore.getState();
   for (let i = 1; i <= 50; i++) {
     const sample: MetricSnapshot = {
       timestamp: Date.now() + i * 1000,

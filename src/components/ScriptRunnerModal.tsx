@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sliders, RotateCcw, X, Play, Shield, ShieldCheck, ShieldAlert } from 'lucide-react';
 import type { ScriptManifestEntry, ScriptParameterValue } from '../types';

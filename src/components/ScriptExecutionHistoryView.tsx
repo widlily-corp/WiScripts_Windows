@@ -12,10 +12,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Terminal,
-  Code2,
-  Clock,
-  FileText,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { MAX_HISTORY_ENTRIES, ScriptExecutionRecord, ExecutionStatus } from '../store/slices/scriptRunnerSlice';

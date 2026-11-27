@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { invoke } from '@tauri-apps/api/core';
 import { ExecutionSummary } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import {
   Sparkles,
   Gamepad2,
@@ -86,7 +87,7 @@ export function PresetsView() {
       addToast({
         type: 'error',
         title: t('presetsView.applyErrorTitle', 'Profile Application Failed'),
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       });
     } finally {
       setActiveProfileId(null);
@@ -273,7 +274,7 @@ export function PresetsView() {
           addToast({
             type: 'error',
             title: t('presetsView.applyErrorTitle', 'Profile Application Failed'),
-            message: err instanceof Error ? err.message : String(err),
+            message: getErrorMessage(err),
           });
         } finally {
           setIsApplyingImport(false);

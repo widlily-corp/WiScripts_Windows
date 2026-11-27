@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Terminal, ShieldAlert, Timer, Square, ArrowDown, Download, Trash2 } from 'lucide-react';
 import { PaginationBar, usePagination } from '../common/VirtualList';
@@ -148,7 +148,7 @@ export function OutputTerminalPanel({
               </p>
             </div>
           ) : (
-            pagination.pageItems.map((item) => (
+            pagination.pagedItems.map((item) => (
               <div
                 key={item.id}
                 className={`leading-relaxed whitespace-pre-wrap break-all ${
@@ -169,8 +169,7 @@ export function OutputTerminalPanel({
             page={pagination.page}
             totalPages={pagination.totalPages}
             totalItems={pagination.totalItems}
-            startIndex={pagination.startIndex}
-            endIndex={pagination.endIndex}
+            pageSize={pagination.pageSize}
             onPageChange={pagination.setPage}
           />
         )}

@@ -1,5 +1,5 @@
 import { useAppStore } from '../store/useAppStore';
-import { parseMarkdownBlocks, parseInline } from '../components/MarkdownRenderer';
+import { parseMarkdownBlocks } from '../components/MarkdownRenderer';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {

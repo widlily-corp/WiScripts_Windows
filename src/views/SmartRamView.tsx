@@ -5,7 +5,6 @@ import {
   Sparkles,
   Trash2,
   Sliders,
-  Settings,
   Plus,
   X,
   RefreshCw,

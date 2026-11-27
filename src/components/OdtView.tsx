@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
 import { ExecutionSummary } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { FileCode, Play, Copy, Check, ShieldAlert, Package, Layers, SlidersHorizontal, Loader2, CheckSquare, Square } from 'lucide-react';
 
 const PRODUCT_OPTIONS = [
@@ -80,7 +81,7 @@ export function OdtView() {
       addToast({
         type: 'error',
         title: t('common.clipboardError', 'Clipboard Copy Failed'),
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       });
     }
   };
@@ -166,7 +167,7 @@ export function OdtView() {
             });
           }
         } catch (err) {
-          const errMsg = typeof err === 'string' ? err : String(err);
+          const errMsg = getErrorMessage(err);
           addLog({
             level: 'error',
             message: `IPC execute_odt_install failed: ${errMsg}`,
@@ -238,7 +239,7 @@ export function OdtView() {
             });
           }
         } catch (err) {
-          const errMsg = typeof err === 'string' ? err : String(err);
+          const errMsg = getErrorMessage(err);
           addLog({
             level: 'error',
             message: `IPC execute_odt_regional_bypass failed: ${errMsg}`,

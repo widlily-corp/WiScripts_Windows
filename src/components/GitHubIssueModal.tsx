@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { GitHubIssueCategory, GitHubIssuePayload } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { useAccessibleModal } from './common/useAccessibleModal';
 import { Bug, Sparkles, HelpCircle, X, Send, Key, FileText, Cpu, ExternalLink, Loader2 } from 'lucide-react';
 
@@ -96,8 +97,7 @@ export function GitHubIssueModal({
         setErrorMessage(res.error || t('github_modal.toast_error_msg'));
       }
     } catch (err) {
-      const msg = typeof err === 'string' ? err : (err as Error)?.message || String(err);
-      setErrorMessage(msg);
+      setErrorMessage(getErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }

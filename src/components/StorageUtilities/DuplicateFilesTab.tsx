@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
 import {
@@ -91,7 +90,7 @@ export function DuplicateFilesTab({
         )}
       </div>
 
-      {pagination.pageItems.map((group, gIdx) => {
+      {pagination.pagedItems.map((group, gIdx) => {
         const isExpanded = expandedGroups.has(group.hash);
         const potentialSavings = group.sizeBytes * (group.files.length - 1);
 
@@ -193,8 +192,7 @@ export function DuplicateFilesTab({
         page={pagination.page}
         totalPages={pagination.totalPages}
         totalItems={pagination.totalItems}
-        startIndex={pagination.startIndex}
-        endIndex={pagination.endIndex}
+        pageSize={pagination.pageSize}
         onPageChange={pagination.setPage}
       />
     </div>

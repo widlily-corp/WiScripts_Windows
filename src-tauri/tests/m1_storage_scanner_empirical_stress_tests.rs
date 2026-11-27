@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::tempdir;
+use wiscripts_windows_lib::storage::analyzer::MAX_SERIALIZE_TREE_DEPTH;
 use wiscripts_windows_lib::storage::{
     calculate_target_size, cancel_scan, check_path_protection_status,
     delete_filesystem_items, is_system_protected_path,
@@ -58,11 +59,11 @@ fn test_stress_deep_nested_directories_over_25_levels() {
     assert_eq!(result.total_bytes, total_expected_bytes);
     assert!(!result.is_cancelled);
 
-    // Verify tree traversal all the way to depth 30
+    // Verify tree traversal up to MAX_SERIALIZE_TREE_DEPTH (depth 6), where children are intentionally truncated
     let mut current_tree_node = &result.tree;
-    for depth in 1..=target_depth {
+    for depth in 1..=MAX_SERIALIZE_TREE_DEPTH {
         assert!(current_tree_node.is_dir);
-        let children = current_tree_node.children.as_ref().expect("directory node must have children");
+        let children = current_tree_node.children.as_ref().expect("directory node below serialization depth limit must have children");
         let next_dir_name = format!("d_{}", depth);
         let child_opt = children.iter().find(|c| c.name == next_dir_name && c.is_dir);
         assert!(
@@ -72,6 +73,16 @@ fn test_stress_deep_nested_directories_over_25_levels() {
         );
         current_tree_node = child_opt.unwrap();
     }
+    assert!(
+        current_tree_node.children.is_none(),
+        "Directory at MAX_SERIALIZE_TREE_DEPTH ({}) must omit serialized children",
+        MAX_SERIALIZE_TREE_DEPTH
+    );
+    assert_eq!(
+        current_tree_node.dir_count,
+        (target_depth - MAX_SERIALIZE_TREE_DEPTH) as u64,
+        "Truncated node must still report full nested dir_count"
+    );
 
     // Top folders must contain the deep directories ordered by accumulated subtree size
     assert!(!result.top_folders.is_empty());

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShieldCheck, Trash2, Volume2 } from 'lucide-react';
 import { ResourceGovernorRule } from '../../types/governor';

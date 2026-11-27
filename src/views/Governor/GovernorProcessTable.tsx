@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Activity, Search, RefreshCw } from 'lucide-react';
 import { ManagedProcessInfo } from '../../types/governor';
@@ -81,7 +80,7 @@ export function GovernorProcessTable({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
-                {pagination.pageItems.map((proc) => {
+                {pagination.pagedItems.map((proc) => {
                   const hasRule = activeRuleNames.has(proc.name.toLowerCase());
                   return (
                     <tr key={proc.pid} className="hover:bg-surface-hover/50">
@@ -151,8 +150,7 @@ export function GovernorProcessTable({
             page={pagination.page}
             totalPages={pagination.totalPages}
             totalItems={pagination.totalItems}
-            startIndex={pagination.startIndex}
-            endIndex={pagination.endIndex}
+            pageSize={pagination.pageSize}
             onPageChange={pagination.setPage}
           />
         </div>

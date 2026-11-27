@@ -23,10 +23,7 @@ import { GovernorProcessTable } from './Governor/GovernorProcessTable';
 export function GovernorView() {
   const { t } = useTranslation();
   const addToast = useAppStore((s) => s.addToast);
-  const latestCoresCount = useAppStore(
-    (s) => s.metricsHistory[s.metricsHistory.length - 1]?.cpuCores?.length ?? 0
-  );
-  const coreCount = useMemo(() => getLogicalCoreCount(latestCoresCount), [latestCoresCount]);
+  const coreCount = useMemo(() => getLogicalCoreCount(0), []);
 
   const [status, setStatus] = useState<GovernorStatus | null>(null);
   const [activeRules, setActiveRules] = useState<ResourceGovernorRule[]>([]);

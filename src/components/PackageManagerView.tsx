@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
-import { WingetPackage, UwpAppInfo } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import {
   Package,
   Search,
@@ -10,11 +10,9 @@ import {
   RefreshCw,
   Trash2,
   Loader2,
-  CheckCircle2,
   Box,
   AppWindow,
   ArrowUpCircle,
-  ShieldCheck,
 } from 'lucide-react';
 
 const QUICK_PRESETS = [
@@ -57,7 +55,7 @@ export function PackageManagerView() {
     try {
       await fetchUwpApps();
     } catch (err) {
-      setUwpError(err instanceof Error ? err.message : String(err));
+      setUwpError(getErrorMessage(err));
     }
   };
 

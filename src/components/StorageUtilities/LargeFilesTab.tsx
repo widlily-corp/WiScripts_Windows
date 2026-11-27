@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { HardDrive, RefreshCw, CheckSquare, Square } from 'lucide-react';
 import { LargeFileItem } from '../../types';
@@ -69,7 +68,7 @@ export function LargeFilesTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle/50">
-            {pagination.pageItems.map((file, idx) => {
+            {pagination.pagedItems.map((file, idx) => {
               const isSelected = selectedPaths.has(file.path);
               return (
                 <tr
@@ -125,8 +124,7 @@ export function LargeFilesTab({
         page={pagination.page}
         totalPages={pagination.totalPages}
         totalItems={pagination.totalItems}
-        startIndex={pagination.startIndex}
-        endIndex={pagination.endIndex}
+        pageSize={pagination.pageSize}
         onPageChange={pagination.setPage}
       />
     </div>

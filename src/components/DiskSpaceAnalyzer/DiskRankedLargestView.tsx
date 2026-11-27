@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Folder, File, ExternalLink, Copy, Trash2, CornerDownRight, Lock } from 'lucide-react';
-import { RankedFsItem, FsTreeNode } from '../../types';
+import { RankedFsItem } from '../../types';
 import { formatBytes, formatTabularBytes, isSystemProtectedPath } from '../../utils';
 
 interface DiskRankedLargestViewProps {

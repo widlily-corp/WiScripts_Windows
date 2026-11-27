@@ -14,8 +14,6 @@ async function runEmpiricalTests() {
   console.log(' EMPIRICAL TEST SUITE: Milestone 3 Views & State');
   console.log('====================================================\n');
 
-  const store = useAppStore.getState();
-
   // Test 1: Navigation & Active Tab State
   console.log('[Test 1] Navigation & Tab Switching');
   const tabs = [

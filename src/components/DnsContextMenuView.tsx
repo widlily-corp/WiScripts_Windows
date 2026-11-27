@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
 import { useAppStore } from '../store/useAppStore';
@@ -6,13 +6,10 @@ import { AdminElevationBanner } from './AdminElevationBanner';
 import {
   Globe,
   MousePointer,
-  ShieldCheck,
-  CheckCircle2,
   RefreshCw,
   Loader2,
   Play,
   Network,
-  Sliders,
   Check,
 } from 'lucide-react';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import {
@@ -16,7 +16,6 @@ import {
   Download,
   FileArchive,
   Bug,
-  Send,
 } from 'lucide-react';
 import { GitHubIssueModal } from './GitHubIssueModal';
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { RollbackResult } from '../../types/stateEngine';

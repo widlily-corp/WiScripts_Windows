@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { AdminElevationBanner } from './AdminElevationBanner';
-import { AudioDevice, AppAudioSession } from '../types';
+import { AppAudioSession } from '../types';
 import {
   Volume2,
   VolumeX,
